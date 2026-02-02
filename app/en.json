@@ -1,0 +1,18 @@
+{
+  "app_name": {
+    "defaultMessage": "Vimciety",
+    "description": "The official name of the application."
+  },
+  "app_description": {
+    "defaultMessage": "Create custom banners and background themes for your message board.",
+    "description": "A brief summary of what the app does for the user."
+  },
+  "ui_labels": {
+    "defaultMessage": "Follow, Unfollow, Followers, Following, Likes, Comments",
+    "description": "Interface labels for social interactions and statistics."
+  },
+  "placeholders": {
+    "defaultMessage": "Welcome to my custom homepage!",
+    "description": "Default text shown on a user's profile."
+  }
+}
