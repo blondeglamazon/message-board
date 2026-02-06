@@ -53,7 +53,7 @@ function MessageBoardContent() {
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
         setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
         
-        // --- NOTIFICATION CHECK ---
+        // Notification Check
         checkNotifications(user.id)
       }
 
@@ -91,7 +91,6 @@ function MessageBoardContent() {
     }
     initData()
 
-    // Realtime subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -102,33 +101,27 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed]) 
 
-  // --- NEW: Notification Logic ---
   async function checkNotifications(userId: string) {
-      // Get the last time the user clicked the notification star
       const lastCheck = localStorage.getItem('lastNotificationCheck') || new Date(0).toISOString()
       
-      // 1. Check for new Follows
       const { data: newFollows } = await supabase
         .from('follows')
         .select('created_at')
         .eq('following_id', userId)
         .gt('created_at', lastCheck)
         
-      // 2. Check for new Comments on MY posts
-      // We use !inner to filter comments where the related post belongs to ME
       const { data: newComments } = await supabase
         .from('comments')
         .select('created_at, posts!inner(user_id)')
         .eq('posts.user_id', userId)
-        .neq('user_id', userId) // Don't notify for my own comments
+        .neq('user_id', userId) 
         .gt('created_at', lastCheck)
 
-      // 3. Check for new Likes on MY posts
       const { data: newLikes } = await supabase
         .from('likes')
         .select('created_at, posts!inner(user_id)')
         .eq('posts.user_id', userId)
-        .neq('user_id', userId) // Don't notify for my own likes
+        .neq('user_id', userId) 
         .gt('created_at', lastCheck)
 
       if ((newFollows && newFollows.length > 0) || 
@@ -140,7 +133,6 @@ function MessageBoardContent() {
 
   const handleNotificationClick = () => {
       setHasNewNotifications(false)
-      // Save current time as the new "Last Checked" time
       localStorage.setItem('lastNotificationCheck', new Date().toISOString())
       alert("Notifications cleared! (This would open a notifications page in the future)")
   }
@@ -330,7 +322,7 @@ function MessageBoardContent() {
   };
 
   return (
-    // MAIN LAYOUT CONTAINER (Flexbox for Sidebar + Feed)
+    // MAIN LAYOUT CONTAINER
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: 'white', fontFamily: 'sans-serif' }}>
       
       {/* --- LEFT SIDEBAR --- */}
@@ -341,6 +333,16 @@ function MessageBoardContent() {
             <span>🏠</span> Home
         </Link>
         
+        {/* --- NEW: Following & Friends Buttons --- */}
+        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+            <span>👣</span> Following
+        </button>
+        
+        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+            <span>👥</span> Friends
+        </button>
+        {/* -------------------------------------- */}
+
         <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
             <span>🔍</span> Search
         </button>
@@ -353,13 +355,13 @@ function MessageBoardContent() {
             <span>👤</span> Profile
         </Link>
 
-        {/* --- NOTIFICATION STAR --- */}
+        {/* Notification Star */}
         {user && (
             <button 
                 onClick={handleNotificationClick} 
                 style={{ 
                     background: 'none', border: 'none', 
-                    color: hasNewNotifications ? '#ef4444' : 'white', // RED if new, White if read
+                    color: hasNewNotifications ? '#ef4444' : 'white', 
                     fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 
                 }}
             >
@@ -367,7 +369,7 @@ function MessageBoardContent() {
             </button>
         )}
 
-        <div style={{ flex: 1 }}></div> {/* Spacer to push Sign Out down */}
+        <div style={{ flex: 1 }}></div>
 
         {user ? (
             <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ background: '#333', border: 'none', color: 'white', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -380,10 +382,8 @@ function MessageBoardContent() {
         )}
       </nav>
 
-
       {/* --- RIGHT FEED CONTENT --- */}
       <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
-         {/* Feed Header info */}
          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h2 style={{ margin: 0 }}>{currentFeed === 'global' ? 'Global Feed' : currentFeed.toUpperCase()}</h2>
             {urlSearchQuery && <span style={{ backgroundColor: '#333', padding: '4px 8px', borderRadius: '4px' }}>Searching: "{urlSearchQuery}"</span>}
