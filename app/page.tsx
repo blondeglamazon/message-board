@@ -22,14 +22,12 @@ export default function MessageBoard() {
     getUser()
 
     async function fetchMessages() {
-      // Select media_url and post_type so we can show images
       const { data, error } = await supabase
         .from('posts')
         .select('id, content, created_at, email, user_id, media_url, post_type')
         .order('created_at', { ascending: false })
       
-      if (error) console.error('Error fetching posts:', error)
-      else if (data) setMessages(data)
+      if (data) setMessages(data)
     }
     fetchMessages()
 
@@ -48,14 +46,14 @@ export default function MessageBoard() {
       alert("You must be logged in to post!")
       return
     }
-    if (!newMessage.trim() && !mediaFile) return // Require at least text OR image
+    if (!newMessage.trim() && !mediaFile) return
 
     try {
       setUploading(true)
       let publicUrl = null
       let type = 'text'
 
-      // 1. Upload Image if selected
+      // 1. Upload Image logic
       if (mediaFile) {
         const fileExt = mediaFile.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`
@@ -67,20 +65,19 @@ export default function MessageBoard() {
 
         if (uploadError) throw uploadError
 
-        // 2. Get the Public URL
         const { data } = supabase.storage.from('uploads').getPublicUrl(filePath)
         publicUrl = data.publicUrl
         type = 'image'
       }
 
-      // 3. Save Post to Database
+      // 2. Save Post
       const { error } = await supabase.from('posts').insert([
         { 
           content: newMessage, 
           email: user.email, 
           user_id: user.id,
-          media_url: publicUrl, // Save the image link
-          post_type: type       // 'image' or 'text'
+          media_url: publicUrl,
+          post_type: type
         }
       ])
 
@@ -95,6 +92,47 @@ export default function MessageBoard() {
       setUploading(false)
     }
   }
+
+  // Helper function to detect Links and YouTube Videos
+  const renderContent = (text: string) => {
+    if (!text) return null;
+
+    // Regular Expression to find URLs
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        // CHECK 1: Is it a YouTube Link?
+        const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+        if (youtubeMatch) {
+          return (
+            <div key={index} style={{ margin: '15px 0' }}>
+              <iframe 
+                width="100%" 
+                height="300" 
+                src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} 
+                title="YouTube video player" 
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowFullScreen
+                style={{ borderRadius: '12px' }}
+              ></iframe>
+            </div>
+          );
+        }
+
+        // CHECK 2: Is it a regular link? (Make it clickable)
+        return (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>
+            {part}
+          </a>
+        );
+      }
+      // CHECK 3: Just regular text
+      return <span key={index}>{part}</span>;
+    });
+  };
 
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
@@ -131,7 +169,7 @@ export default function MessageBoard() {
             width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', 
             border: 'none', minHeight: '80px', fontSize: '16px', marginBottom: '15px'
           }}
-          placeholder="Write a message..."
+          placeholder="Write a message or paste a YouTube link..."
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
         />
@@ -168,9 +206,12 @@ export default function MessageBoard() {
               <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
             </div>
             
-            <p style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>{msg.content}</p>
+            {/* The Magic Function: Renders text, links, and YouTube videos */}
+            <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
+              {renderContent(msg.content)}
+            </div>
             
-            {/* Show Image if it exists */}
+            {/* Show Uploaded Image if it exists */}
             {msg.post_type === 'image' && msg.media_url && (
               <img 
                 src={msg.media_url} 
