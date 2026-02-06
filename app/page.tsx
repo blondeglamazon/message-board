@@ -1,189 +1,123 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { supabase } from "./lib/supabaseClient";
+import { useState, useEffect } from 'react'
+import { supabase } from '@/app/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
-/* ---------- TYPES ---------- */
-type Post = {
-  username: string;
-  message: string;
-  time: string;
-};
+export default function MessageBoard() {
+  const [messages, setMessages] = useState<any[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [user, setUser] = useState<any>(null)
+  const router = useRouter()
 
-type User = {
-  id: string;
-  email: string;
-};
-
-export default function Page() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [message, setMessage] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  /* 🔑 AUTH SESSION LISTENER */
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) {
-        setCurrentUser({ id: data.session.user.id, email: data.session.user.email! });
-      }
-    });
+    async function getInitialData() {
+      // 1. Get current user session
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setCurrentUser(session?.user ? { id: session.user.id, email: session.user.email! } : null);
-    });
+      // 2. Fetch messages from Supabase
+      const { data } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (data) setMessages(data)
+    }
 
-    return () => subscription.unsubscribe();
-  }, []);
+    getInitialData()
 
-  /* 📥 FETCH & LISTEN TO POSTS (REALTIME) */
-  useEffect(() => {
-    const fetchPosts = async () => {
-      const { data, error } = await supabase
-        .from("posts")
-        .select(`content, created_at, author_id, profiles(email)`)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching:", error.message);
-      } else if (data) {
-        const formatted = data.map((p: any) => ({
-          username: p.profiles?.email || "User",
-          message: p.content,
-          time: new Date(p.created_at).toLocaleTimeString(),
-        }));
-        setPosts(formatted);
-      }
-    };
-
-    fetchPosts();
-
+    // 3. Set up real-time subscription for new messages
     const channel = supabase
-      .channel('realtime-posts')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, 
-      (payload) => {
-        const newPost = {
-          username: "User", // Will refresh on reload to show real email
-          message: payload.new.content,
-          time: new Date(payload.new.created_at).toLocaleTimeString(),
-        };
-        setPosts((prev) => [newPost, ...prev]);
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
+        setMessages((prev) => [payload.new, ...prev])
       })
-      .subscribe();
+      .subscribe()
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
-  /* 🛡️ ACTIONS */
-  const handleSignUp = async () => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) alert(error.message);
-    else alert("Check your email for a confirmation link!");
-  };
+  async function handlePost() {
+    if (!newMessage.trim() || !user) return
 
-  const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert(error.message);
-  };
+    const { error } = await supabase.from('posts').insert([
+      { content: newMessage, email: user.email, user_id: user.id }
+    ])
 
-  const handlePost = async () => {
-    if (!currentUser || !message.trim()) return;
-    const { error } = await supabase
-      .from("posts")
-      .insert([{ content: message, author_id: currentUser.id }]);
-    if (error) alert(error.message);
-    else setMessage("");
-  };
+    if (!error) setNewMessage('')
+  }
 
-  /* 🎨 UI RENDER */
   return (
-    <main style={{ maxWidth: 600, margin: "40px auto", fontFamily: "sans-serif", padding: "20px" }}>
-      <h1>🧵 Message Board</h1>
+    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+      <header style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '30px' 
+      }}>
+        {/* Updated Title to VIMciety with dark text for visibility */}
+        <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
+      </header>
 
-      {!currentUser ? (
-        <div style={{ 
-          border: "2px solid #007bff", 
-          padding: "20px", 
-          borderRadius: "8px", 
-          marginBottom: "20px", 
-          backgroundColor: "#fff",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.1)" 
-        }}>
-          <h3 style={{ marginTop: 0, color: "#333" }}>Login or Sign Up</h3>
-          
-          <input 
-            placeholder="Email" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
-            style={{ 
-              display: "block", 
-              marginBottom: "10px", 
-              width: "100%", 
-              padding: "10px", 
-              border: "1px solid #ccc", 
-              borderRadius: "4px",
-              boxSizing: "border-box" 
-            }} 
-          />
-          
-          <input 
-            type="password" 
-            placeholder="Password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            style={{ 
-              display: "block", 
-              marginBottom: "20px", 
-              width: "100%", 
-              padding: "10px", 
-              border: "1px solid #ccc", 
-              borderRadius: "4px",
-              boxSizing: "border-box" 
-            }} 
-          />
-          
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button 
-              onClick={handleLogin} 
-              style={{ flex: 1, padding: "10px", cursor: "pointer", backgroundColor: "#f0f0f0", border: "1px solid #ccc", borderRadius: "4px" }}
-            >
-              Login
-            </button>
-            <button 
-              onClick={handleSignUp} 
-              style={{ flex: 1, padding: "10px", cursor: "pointer", backgroundColor: "#f0f0f0", border: "1px solid #ccc", borderRadius: "4px" }}
-            >
-              Sign Up
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ background: "#e8f5ff", padding: "15px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #b3d7ff" }}>
-          <span>✅ Logged in as: <strong>{currentUser.email}</strong></span>
-          <button onClick={() => supabase.auth.signOut()} style={{ marginLeft: "15px", padding: "5px 10px", cursor: "pointer" }}>Logout</button>
-        </div>
-      )}
-
-      <div style={{ marginBottom: "20px" }}>
+      {/* Input Area */}
+      <div style={{ marginBottom: '40px' }}>
         <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          style={{ 
+            width: '100%', 
+            padding: '15px', 
+            borderRadius: '10px', 
+            backgroundColor: '#1a1a1a', 
+            color: 'white', 
+            border: '1px solid #333', 
+            minHeight: '100px',
+            fontSize: '16px' 
+          }}
           placeholder="Write a message..."
-          style={{ width: "100%", height: "80px", padding: "10px", borderRadius: "4px", border: "1px solid #ccc" }}
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
         />
-        <button onClick={handlePost} style={{ marginTop: "10px", width: "100%", padding: "10px", background: "#007bff", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}>
-          Post
+        <button 
+          onClick={handlePost}
+          style={{ 
+            width: '100%', 
+            padding: '12px', 
+            backgroundColor: '#6366f1', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            marginTop: '10px',
+            fontWeight: 'bold',
+            cursor: 'pointer' 
+          }}
+        >
+          Post Message
         </button>
       </div>
 
-      {posts.map((post, index) => (
-        <div key={index} style={{ background: "#f9f9f9", padding: "15px", borderRadius: "8px", marginBottom: "10px", border: "1px solid #eee" }}>
-          <strong>{post.username}</strong>
-          <div style={{ margin: "5px 0" }}>{post.message}</div>
-          <small style={{ color: "#888" }}>{post.time}</small>
-        </div>
-      ))}
-    </main>
-  );
+      {/* Messages List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        {messages.map((msg) => (
+          <div 
+            key={msg.id} 
+            style={{ 
+              backgroundColor: '#1a1a1a', 
+              padding: '20px', 
+              borderRadius: '12px', 
+              border: '1px solid #333',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email}</span>
+              <span style={{ color: '#888', fontSize: '12px' }}>
+                {new Date(msg.created_at).toLocaleTimeString()}
+              </span>
+            </div>
+            <p style={{ margin: 0, color: 'white', lineHeight: '1.5' }}>{msg.content}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
