@@ -153,7 +153,7 @@ function MessageBoardContent() {
 
         // MODERATION HOOK (If you added the API)
         if (type === 'image' || type === 'video') {
-            const response = await fetch('/api/moderate', {
+            const response = await fetch('/api/moderator', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: publicUrl, type: type })
             });
