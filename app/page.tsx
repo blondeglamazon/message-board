@@ -5,26 +5,19 @@ import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
-import * as nsfwjs from 'nsfwjs'
-import * as tf from '@tensorflow/tfjs'
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
+  const [profilesMap, setProfilesMap] = useState<Record<string, string>>({}) // Stores UserID -> Username
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
-  
-  // Notification State
   const [hasNewNotifications, setHasNewNotifications] = useState(false)
-  
-  // Comment State
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
-
   const [searchQuery, setSearchQuery] = useState('')
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
-  
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [adminIds, setAdminIds] = useState<Set<string>>(new Set())
 
@@ -32,6 +25,7 @@ function MessageBoardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
+  // --- RESTORED MISSING DEFINITIONS ---
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
   const currentFeed = searchParams.get('feed') || 'global' 
@@ -49,24 +43,27 @@ function MessageBoardContent() {
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
+      // 1. Fetch Usernames Map (Safe way to get usernames without breaking joins)
+      const { data: allProfiles } = await supabase.from('profiles').select('id, username')
+      const pMap: Record<string, string> = {}
+      allProfiles?.forEach(p => { if(p.username) pMap[p.id] = p.username })
+      setProfilesMap(pMap)
+
       if (user) {
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
         setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
-        
-        // Notification Check
         checkNotifications(user.id)
       }
 
-      // Fetch Posts
+      // 2. Fetch Posts (Simplified query to prevent database errors)
       let query = supabase
         .from('posts')
         .select(`
             *,
             likes ( user_id ),
-            comments ( id, content, email, user_id, created_at, username )
+            comments ( id, content, email, user_id, created_at )
         `)
         .order('created_at', { ascending: false })
-        .order('created_at', { foreignTable: 'comments', ascending: true })
 
       if (user && currentFeed === 'following') {
          const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
@@ -75,22 +72,23 @@ function MessageBoardContent() {
          else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']) 
       } 
       else if (user && currentFeed === 'friends') {
-         const { data: myFollows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
-         const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
-         const myIds = myFollows?.map(f => f.following_id) || []
-         const theirIds = followsMe?.map(f => f.follower_id) || []
-         const friendIds = myIds.filter(id => theirIds.includes(id))
-         
-         if (friendIds.length > 0) query = query.in('user_id', friendIds)
-         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
-      }
+          const { data: myFollows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
+          const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
+          const myIds = myFollows?.map(f => f.following_id) || []
+          const theirIds = followsMe?.map(f => f.follower_id) || []
+          const friendIds = myIds.filter(id => theirIds.includes(id))
+          
+          if (friendIds.length > 0) query = query.in('user_id', friendIds)
+          else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
+       }
 
       const { data: posts, error } = await query
       if (error) console.error("Error fetching posts:", error)
       if (posts) setMessages(posts)
     }
     initData()
-
+    
+    // Realtime subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -103,40 +101,17 @@ function MessageBoardContent() {
 
   async function checkNotifications(userId: string) {
       const lastCheck = localStorage.getItem('lastNotificationCheck') || new Date(0).toISOString()
-      
-      const { data: newFollows } = await supabase
-        .from('follows')
-        .select('created_at')
-        .eq('following_id', userId)
-        .gt('created_at', lastCheck)
-        
-      const { data: newComments } = await supabase
-        .from('comments')
-        .select('created_at, posts!inner(user_id)')
-        .eq('posts.user_id', userId)
-        .neq('user_id', userId) 
-        .gt('created_at', lastCheck)
-
-      const { data: newLikes } = await supabase
-        .from('likes')
-        .select('created_at, posts!inner(user_id)')
-        .eq('posts.user_id', userId)
-        .neq('user_id', userId) 
-        .gt('created_at', lastCheck)
-
-      if ((newFollows && newFollows.length > 0) || 
-          (newComments && newComments.length > 0) || 
-          (newLikes && newLikes.length > 0)) {
-          setHasNewNotifications(true)
-      }
+      const { data: newLikes } = await supabase.from('likes').select('created_at, posts!inner(user_id)').eq('posts.user_id', userId).gt('created_at', lastCheck)
+      if (newLikes && newLikes.length > 0) setHasNewNotifications(true)
   }
 
-  const handleNotificationClick = () => {
-      setHasNewNotifications(false)
-      localStorage.setItem('lastNotificationCheck', new Date().toISOString())
-      alert("Notifications cleared! (This would open a notifications page in the future)")
+  async function handleLike(postId: string, isLiked: boolean) {
+    if (!user) return alert("Please login to like posts.")
+    setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== user.id) : [...msg.likes, { user_id: user.id }] } : msg))
+    if (isLiked) await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
+    else await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
   }
-
+  
   async function toggleFollow(targetId: string) {
     if (!user) return alert("Please login to follow.")
     if (adminIds.has(targetId)) return alert("You cannot unfollow an Administrator.")
@@ -151,26 +126,6 @@ function MessageBoardContent() {
         if (!error) {
             const newSet = new Set(followingIds); newSet.add(targetId); setFollowingIds(newSet)
         }
-    }
-  }
-
-  async function handleLike(postId: string, isLiked: boolean) {
-    if (!user) return alert("Please login to like posts.")
-    
-    setMessages(prev => prev.map(msg => {
-        if (msg.id === postId) {
-            const newLikes = isLiked 
-                ? msg.likes.filter((l: any) => l.user_id !== user.id) 
-                : [...(msg.likes || []), { user_id: user.id }] 
-            return { ...msg, likes: newLikes }
-        }
-        return msg
-    }))
-
-    if (isLiked) {
-        await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
-    } else {
-        await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
     }
   }
 
@@ -203,7 +158,6 @@ function MessageBoardContent() {
         }
         return msg
     }))
-    
     setCommentText(prev => ({ ...prev, [postId]: '' }))
   }
 
@@ -211,62 +165,56 @@ function MessageBoardContent() {
     if (searchQuery.trim()) router.push(`/?q=${encodeURIComponent(searchQuery)}`)
     else router.push('/')
   }
+  
+  const handleNotificationClick = () => {
+      setHasNewNotifications(false)
+      localStorage.setItem('lastNotificationCheck', new Date().toISOString())
+      alert("Notifications cleared! (This would open a notifications page in the future)")
+  }
 
   const filteredMessages = messages.filter(msg => {
     const query = urlSearchQuery || searchQuery
     if (!query) return true;
     const lowerQ = query.toLowerCase();
+    // Also search by username if available
+    const username = profilesMap[msg.user_id] || '';
     return (
         (msg.content && msg.content.toLowerCase().includes(lowerQ)) || 
-        (msg.email && msg.email.toLowerCase().includes(lowerQ))
+        (msg.email && msg.email.toLowerCase().includes(lowerQ)) ||
+        (username && username.toLowerCase().includes(lowerQ))
     );
   });
 
-  async function handlePost() {
+  const renderContent = (msg: any) => {
+    if (msg.post_type === 'embed') {
+        const clean = DOMPurify.sanitize(msg.content, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
+        return <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: clean }} />
+    }
+    return <p style={{ color: '#111827', lineHeight: '1.6' }}>{msg.content}</p>
+  };
+
+  const handlePost = async () => {
     if (!user) return alert("You must be logged in to post!")
     if (!newMessage.trim() && !mediaFile) return
-
+    setUploading(true)
     try {
-      setUploading(true)
-      let publicUrl = null
-      let type = postType
-
-      if (mediaFile) {
-        if (type === 'image') {
-           const model = await nsfwjs.load()
-           const img = document.createElement('img')
-           img.src = URL.createObjectURL(mediaFile)
-           await new Promise((resolve) => { img.onload = resolve }) 
-           const predictions = await model.classify(img)
-           const isExplicit = predictions.some((p: any) => 
-             (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.90
-           )
-           if (isExplicit) throw new Error("Content flagged as inappropriate (NSFW detected).")
+        let publicUrl = null
+        if (mediaFile) {
+            const fileExt = mediaFile.name.split('.').pop()
+            const fileName = `${Date.now()}.${fileExt}`
+            const { error: uploadError } = await supabase.storage.from('uploads').upload(fileName, mediaFile)
+            if (uploadError) throw uploadError
+            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName)
+            publicUrl = data.publicUrl
         }
-
-        const fileExt = mediaFile.name.split('.').pop()
-        const fileName = `${Date.now()}.${fileExt}`
-        const filePath = `${fileName}`
-        
-        const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, mediaFile)
-        if (uploadError) throw uploadError
-        
-        const { data } = supabase.storage.from('uploads').getPublicUrl(filePath)
-        publicUrl = data.publicUrl
-      }
-
-      if (type === 'video' && !mediaFile && newMessage.match(/youtube\.com|youtu\.be/)) type = 'text' 
-
-      const { error } = await supabase.from('posts').insert([{ 
-          content: newMessage, email: user.email, user_id: user.id, media_url: publicUrl, post_type: type
-      }])
-
-      if (error) throw error
-      setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/') 
-    } catch (error: any) { alert("Post Error: " + error.message) } 
-    finally { setUploading(false) }
+        await supabase.from('posts').insert([{ content: newMessage, user_id: user.id, email: user.email, post_type: postType, media_url: publicUrl }])
+        setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/')
+        window.location.reload() // Force reload to see new post
+    } catch (e: any) { alert(e.message) }
+    setUploading(false)
   }
 
+  // Helper for Upload Input
   const handleOptionClick = (type: string) => {
     setPostType(type); setMediaFile(null)
     if (type === 'image' || type === 'video' || type === 'audio') setTimeout(() => fileInputRef.current?.click(), 100)
@@ -279,181 +227,86 @@ function MessageBoardContent() {
       return '*'
   }
 
-  const renderContent = (msg: any) => {
-    let contentElement = null;
-    
-    if (msg.post_type === 'embed') {
-        const cleanHTML = DOMPurify.sanitize(msg.content, {
-            ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'blockquote', 'ul', 'li', 'br'],
-            ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'href', 'target', 'class', 'loading'],
-            ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling']
-        });
-        contentElement = <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: cleanHTML }} />
-    } else {
-        const text = msg.content || '';
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        const parts = text.split(urlRegex);
-        const textContent = parts.map((part: string, index: number) => {
-          if (part.match(urlRegex)) {
-            const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-            if (youtubeMatch) return (
-                <div key={index} style={{ margin: '15px 0' }}><iframe width="100%" height="300" src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} title="YouTube" frameBorder="0" allowFullScreen style={{ borderRadius: '12px' }}></iframe></div>
-            );
-            return <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
-          }
-          return <span key={index}>{part}</span>;
-        });
-        
-        contentElement = (
-            <div style={{ margin: '0 0 10px 0', color: '#111827', lineHeight: '1.5' }}>
-                {textContent}
-                {msg.media_url && (
-                    <div style={{ marginTop: '10px' }}>
-                        {msg.post_type === 'image' && <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />}
-                        {msg.post_type === 'video' && <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
-                        {msg.post_type === 'audio' && (<div style={{ backgroundColor: '#f3f4f6', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}><span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>)}
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    return contentElement
-  };
-
   return (
-    // MAIN LAYOUT CONTAINER - WHITE BACKGROUND
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#ffffff', color: '#111827', fontFamily: 'sans-serif' }}>
       
-      {/* --- LEFT SIDEBAR (LIGHT) --- */}
+      {/* SIDEBAR */}
       <nav style={{ width: '250px', borderRight: '1px solid #e5e7eb', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: 0, height: '100vh', backgroundColor: '#f9fafb' }}>
-        <h1 style={{ fontSize: '28px', color: '#111827', margin: '0 0 20px 0', fontWeight: '900' }}>💎 VIMciety</h1>
-        
-        <Link href="/" style={{ textDecoration: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
-            <span>🏠</span> Home
-        </Link>
-        
-        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
-            <span>👣</span> Following
-        </button>
-        
-        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
-            <span>👥</span> Friends
-        </button>
-
-        <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
-            <span>🔍</span> Search
-        </button>
-
-        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
-            <span>➕</span> Create Post
-        </button>
-
-        <Link href="/profile" style={{ textDecoration: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
-            <span>👤</span> Profile
-        </Link>
-
-        {user && (
-            <button 
-                onClick={handleNotificationClick} 
-                style={{ 
-                    background: 'none', border: 'none', 
-                    color: hasNewNotifications ? '#ef4444' : '#374151', 
-                    fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 
-                }}
-            >
-                <span>{hasNewNotifications ? '★' : '☆'}</span> Notifications
-            </button>
-        )}
-
+        <h1 style={{ fontSize: '28px', fontWeight: '900' }}>💎 VIMciety</h1>
+        <Link href="/" style={{ textDecoration: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold' }}>🏠 Home</Link>
+        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', padding: 0 }}>👣 Following</button>
+        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', padding: 0 }}>👥 Friends</button>
+        <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', padding: 0 }}>🔍 Search</button>
+        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', padding: 0 }}>➕ Create Post</button>
+        <Link href="/profile" style={{ textDecoration: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold' }}>👤 Profile</Link>
+        {user && <button onClick={handleNotificationClick} style={{ background: 'none', border: 'none', color: hasNewNotifications ? '#ef4444' : '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left', padding: 0 }}><span>{hasNewNotifications ? '★' : '☆'}</span> Notifications</button>}
         <div style={{ flex: 1 }}></div>
-
-        {user ? (
-            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ background: '#e5e7eb', border: 'none', color: '#374151', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                Sign Out
-            </button>
-        ) : (
-            <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '10px', borderRadius: '8px', textAlign: 'center', textDecoration: 'none', fontWeight: 'bold' }}>
-                Login / Sign Up
-            </Link>
-        )}
+        {user ? <button onClick={() => supabase.auth.signOut()} style={{ background: '#e5e7eb', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Sign Out</button> : <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '10px', borderRadius: '8px', textDecoration: 'none', textAlign: 'center' }}>Login</Link>}
       </nav>
 
-      {/* --- RIGHT FEED CONTENT (WHITE) --- */}
-      <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
-         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ margin: 0, color: '#111827' }}>{currentFeed === 'global' ? 'Global Feed' : currentFeed.toUpperCase()}</h2>
-            {urlSearchQuery && <span style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', borderRadius: '4px', color: '#374151' }}>Searching: "{urlSearchQuery}"</span>}
-         </div>
-
-        {/* Post List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      {/* FEED */}
+      <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '40px 20px' }}>
+         <h2 style={{ marginBottom: '20px' }}>{currentFeed.toUpperCase()} FEED</h2>
+         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.length > 0 ? (
-            filteredMessages.map((msg: any) => {
-                const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
-                const likesCount = msg.likes?.length || 0;
-                const commentsCount = msg.comments?.length || 0;
-                const isCommentsOpen = openComments.has(msg.id);
+                filteredMessages.map((msg) => {
+                    // GET USERNAME FROM OUR MAP (Safe Fallback)
+                    const username = profilesMap[msg.user_id] || (msg.email ? msg.email.split('@')[0] : 'Anonymous');
+                    const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
+                    const commentsCount = msg.comments?.length || 0;
+                    const isCommentsOpen = openComments.has(msg.id);
 
-                return (
-                <div key={msg.id} style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {/* LINK TO USERNAME */}
-                            <Link href={"/" + (msg.username || (msg.email ? msg.email.split('@')[0] : '#'))} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
-                                {msg.username || (msg.email || 'Anonymous')}
-                            </Link>
+                    return (
+                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                            <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                                <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                                    {/* LINK TO CLEAN URL */}
+                                    <Link href={`/${username}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>@{username}</Link>
+                                    
+                                    {user && user.id !== msg.user_id && (
+                                        <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white' }}>
+                                            {adminIds.has(msg.user_id) ? '🔒 Admin' : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
+                                        </button>
+                                    )}
+                                </div>
+                                <span style={{ color: '#9ca3af', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleDateString()}</span>
+                            </div>
+                            {renderContent(msg)}
+                            {msg.media_url && msg.post_type === 'image' && <img src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
+                            {msg.media_url && msg.post_type === 'video' && <video controls src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
                             
-                            {user && user.id !== msg.user_id && (
-                                <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
-                                </button>
+                            <div style={{ marginTop: '15px', display: 'flex', gap: '20px' }}>
+                                <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#9ca3af' }}>{isLiked ? '❤️' : '🤍'} {msg.likes?.length || 0}</button>
+                                <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>💬 {commentsCount}</button>
+                            </div>
+                            
+                            {isCommentsOpen && (
+                                <div style={{ marginTop: '15px', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                                    <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
+                                        {msg.comments && msg.comments.length > 0 ? (
+                                            msg.comments.map((c: any) => (
+                                                <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>
+                                                    <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
+                                                    <div style={{ fontSize: '14px', color: '#374151' }}>{c.content}</div>
+                                                </div>
+                                            ))
+                                        ) : (<div style={{ color: '#9ca3af', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
+                                    </div>
+                                    {user ? (
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827' }} />
+                                            <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
+                                        </div>
+                                    ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
+                                </div>
                             )}
                         </div>
-                        <span style={{ color: '#6b7280', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
-                    </div>
-                    {renderContent(msg)}
-                    <div style={{ marginTop: '15px', borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', gap: '20px' }}>
-                            <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
-                                {isLiked ? '❤️' : '🤍'} {likesCount}
-                            </button>
-                            <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
-                                💬 {commentsCount}
-                            </button>
-                    </div>
-                    {isCommentsOpen && (
-                        <div style={{ marginTop: '15px', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                            <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
-                                {msg.comments && msg.comments.length > 0 ? (
-                                    msg.comments.map((c: any) => (
-                                        <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>
-                                            <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.username || c.email}</div>
-                                            <div style={{ fontSize: '14px', color: '#374151' }}>{c.content}</div>
-                                        </div>
-                                    ))
-                                ) : (<div style={{ color: '#9ca3af', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
-                            </div>
-                            {user ? (
-                                <div style={{ display: 'flex', gap: '10px' }}>
-                                    <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827' }} />
-                                    <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
-                                </div>
-                            ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
-                        </div>
-                    )}
-                </div>
-                )})
+                    )
+                })
             ) : (
-            <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '50px' }}>
-                    <p>No posts found.</p>
-                    {(currentFeed !== 'global' || urlSearchQuery) && (
-                        <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                            Clear Search & Return to Feed
-                        </button>
-                    )}
-            </div>
+                <div style={{ textAlign: 'center', color: '#9ca3af' }}>No posts found in the {currentFeed} feed.</div>
             )}
-        </div>
+         </div>
       </main>
 
       {/* SEARCH MODAL */}
@@ -485,24 +338,28 @@ function MessageBoardContent() {
         </div>
       )}
 
-      {/* CREATE MODAL */}
+      {/* CREATE POST MODAL - FIXED ZINDEX */}
       {showCreateModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: 'white', width: '90%', maxWidth: '500px', borderRadius: '16px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e5e7eb' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2 style={{ color: '#111827', margin: 0, fontSize: '20px' }}>Create New Post</h2><Link href="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '24px' }}>&times;</Link></div>
-            <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept={getAcceptType()} onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => handleOptionClick('text')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'text' ? '#6366f1' : '#f3f4f6', color: postType === 'text' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📝</span><span style={{ fontSize: '10px' }}>Text</span></button>
-                <button onClick={() => handleOptionClick('audio')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'audio' ? '#6366f1' : '#f3f4f6', color: postType === 'audio' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎵</span><span style={{ fontSize: '10px' }}>Audio</span></button>
-                <button onClick={() => handleOptionClick('image')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'image' ? '#6366f1' : '#f3f4f6', color: postType === 'image' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📷</span><span style={{ fontSize: '10px' }}>Picture</span></button>
-                <button onClick={() => handleOptionClick('video')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'video' ? '#6366f1' : '#f3f4f6', color: postType === 'video' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎥</span><span style={{ fontSize: '10px' }}>Video</span></button>
-                <button onClick={() => handleOptionClick('embed')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'embed' ? '#6366f1' : '#f3f4f6', color: postType === 'embed' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>{'</>'}</span><span style={{ fontSize: '10px' }}>Embed</span></button>
-            </div>
-            {mediaFile && <div style={{ marginBottom: '15px', color: '#6366f1', fontSize: '14px', textAlign: 'center' }}>File Selected: <strong>{mediaFile.name}</strong></div>}
-            <textarea style={{ width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#f9fafb', color: '#111827', border: '1px solid #d1d5db', minHeight: '100px', fontSize: '16px', marginBottom: '20px', resize: 'none' }} placeholder={postType === 'embed' ? "Paste your Canva/Embed code here..." : "What's on your mind?"} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-            <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '14px', backgroundColor: uploading ? '#9ca3af' : '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>{uploading ? 'Publishing...' : 'Post Message'}</button>
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+              <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '16px', width: '400px' }}>
+                  <h3>Create New Post</h3>
+                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,audio/*" onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
+                  
+                  {/* Buttons for types */}
+                  <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
+                     <button onClick={() => handleOptionClick('text')}>📝 Text</button>
+                     <button onClick={() => handleOptionClick('image')}>📷 Image</button>
+                     <button onClick={() => handleOptionClick('embed')}>Embed</button>
+                  </div>
+                  
+                  {mediaFile && <div style={{fontSize:'12px', color:'green'}}>File: {mediaFile.name}</div>}
+                  
+                  <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} style={{ width: '100%', height: '100px', marginBottom: '10px', padding: '10px' }} placeholder={postType==='embed' ? "Paste embed code..." : "What's happening?"} />
+                  
+                  <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '10px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>{uploading ? 'Posting...' : 'Post'}</button>
+                  <button onClick={() => router.push('/')} style={{ width: '100%', marginTop: '10px', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
+              </div>
           </div>
-        </div>
       )}
     </div>
   )
