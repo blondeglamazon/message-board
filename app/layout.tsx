@@ -13,17 +13,20 @@ export default function RootLayout({
         padding: 0, 
         display: "flex", 
         fontFamily: "sans-serif",
-        backgroundColor: "#000",
-        color: "white"
+        backgroundColor: "#000000", // Dark background
+        color: "#FFFFFF",           // Ensures global text defaults to white
       }}>
-        {/* The Sidebar now automatically detects the user session */}
+        {/* The Sidebar component manages dynamic user routing */}
         <Sidebar />
         
+        {/* Main content area */}
         <main style={{ 
           marginLeft: "75px", 
           flex: 1, 
           padding: "20px", 
-          minHeight: "100vh" 
+          minHeight: "100vh",
+          // This line forces all child text elements (like posts) to be visible
+          colorScheme: "dark" 
         }}>
           {children}
         </main>
