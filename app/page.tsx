@@ -96,14 +96,11 @@ export default function MessageBoard() {
   // Helper function to detect Links and YouTube Videos
   const renderContent = (text: string) => {
     if (!text) return null;
-
-    // Regular Expression to find URLs
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
 
     return parts.map((part, index) => {
       if (part.match(urlRegex)) {
-        // CHECK 1: Is it a YouTube Link?
         const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
         if (youtubeMatch) {
           return (
@@ -121,15 +118,12 @@ export default function MessageBoard() {
             </div>
           );
         }
-
-        // CHECK 2: Is it a regular link? (Make it clickable)
         return (
           <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>
             {part}
           </a>
         );
       }
-      // CHECK 3: Just regular text
       return <span key={index}>{part}</span>;
     });
   };
@@ -162,8 +156,8 @@ export default function MessageBoard() {
         )}
       </header>
 
-      {/* Input Area */}
-      <div style={{ marginBottom: '40px', backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px' }}>
+      {/* Input Area - ADDED ID HERE FOR SIDEBAR SCROLLING */}
+      <div id="create-post" style={{ marginBottom: '40px', backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px' }}>
         <textarea
           style={{ 
             width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', 
@@ -206,12 +200,10 @@ export default function MessageBoard() {
               <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
             </div>
             
-            {/* The Magic Function: Renders text, links, and YouTube videos */}
             <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
               {renderContent(msg.content)}
             </div>
             
-            {/* Show Uploaded Image if it exists */}
             {msg.post_type === 'image' && msg.media_url && (
               <img 
                 src={msg.media_url} 

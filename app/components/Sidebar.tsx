@@ -57,8 +57,8 @@ export default function Sidebar() {
         </div>
       </Link>
 
-      {/* Create Post Icon (Plus) */}
-      <Link href="/">
+      {/* Create Post Icon (Plus) - NOW LINKS TO ANCHOR */}
+      <Link href="/#create-post">
         <div style={{ 
           cursor: 'pointer', 
           color: '#6366f1', 
