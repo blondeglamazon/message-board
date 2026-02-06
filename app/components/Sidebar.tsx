@@ -9,31 +9,52 @@ export default function Sidebar() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    async function getUserData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
-      
-      if (user) {
+    // Helper to fetch profile data
+    const fetchProfile = async (currentUser: any) => {
+      setUser(currentUser)
+      if (currentUser) {
         const { data } = await supabase
           .from('profiles')
           .select('avatar_url')
-          .eq('id', user.id)
+          .eq('id', currentUser.id)
           .single()
         
         if (data?.avatar_url) setAvatarUrl(data.avatar_url)
+      } else {
+        setAvatarUrl(null)
       }
     }
-    getUserData()
+
+    // 1. Initial Check
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser()
+      fetchProfile(user)
+    }
+    init()
+
+    // 2. Real-time Listener (The Fix)
+    // This makes the sidebar update instantly when you log in/out
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      fetchProfile(session?.user || null)
+    })
+
+    return () => { authListener.subscription.unsubscribe() }
   }, [])
 
-  // Smart Links: Default to Home ('/') if not logged in
+  // Smart Links
   const profileLink = user ? '/profile' : '/'
   const followingLink = user ? '/?feed=following' : '/'
   const friendsLink = user ? '/?feed=friends' : '/'
 
+  // Determine what to show in the big circle
   const renderMainButtonContent = () => {
+    // 1. Logged Out -> Show V Logo
     if (!user) return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>V</span>
+    
+    // 2. Logged In + Photo -> Show Avatar
     if (avatarUrl) return <img src={avatarUrl} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+    
+    // 3. Logged In + No Photo -> Show Initial
     const initial = user.email?.charAt(0).toUpperCase() || 'U'
     return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>{initial}</span>
   }
@@ -46,14 +67,15 @@ export default function Sidebar() {
       borderRight: '1px solid #e5e7eb', zIndex: 50
     }}>
       
-      {/* 1. PROFILE / BRAND */}
+      {/* 1. MAIN PROFILE / HOME BUTTON */}
       <Link href={profileLink} style={{ textDecoration: 'none' }}>
         <div style={{
           width: '40px', height: '40px', borderRadius: '50%',
           backgroundColor: user ? '#e0e7ff' : '#6366f1',
           color: user ? '#6366f1' : 'white',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: user ? '2px solid #6366f1' : 'none', overflow: 'hidden'
+          border: user ? '2px solid #6366f1' : 'none', overflow: 'hidden',
+          transition: 'all 0.2s ease'
         }}>
           {renderMainButtonContent()}
         </div>
