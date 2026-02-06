@@ -10,14 +10,17 @@ function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
+  
+  // Search State
   const [searchQuery, setSearchQuery] = useState('')
+  
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
   
   // Follow System State
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
-  const [adminIds, setAdminIds] = useState<Set<string>>(new Set()) // Track who is an admin
+  const [adminIds, setAdminIds] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -26,34 +29,31 @@ function MessageBoardContent() {
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
   const currentFeed = searchParams.get('feed') || 'global' 
+  
+  // Load initial search from URL if present
+  const urlSearchQuery = searchParams.get('q') || ''
+
+  useEffect(() => {
+    // Sync local state with URL query on load
+    if (urlSearchQuery) setSearchQuery(urlSearchQuery)
+  }, [urlSearchQuery])
 
   useEffect(() => {
     async function initData() {
-      // 1. Get User
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
-      // 2. Fetch List of Admins (to lock their buttons)
-      const { data: admins } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('role', 'admin')
-      
-      const adminSet = new Set(admins?.map(a => a.id) || [])
-      setAdminIds(adminSet)
+      // Fetch Admins
+      const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
+      setAdminIds(new Set(admins?.map(a => a.id) || []))
 
       if (user) {
-        // 3. Fetch who I follow
-        const { data: follows } = await supabase
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id)
-        
-        const myFollows = new Set(follows?.map(f => f.following_id) || [])
-        setFollowingIds(myFollows)
+        // Fetch Follows
+        const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
+        setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
       }
 
-      // 4. Fetch Posts based on Feed Type
+      // Fetch Posts
       let query = supabase
         .from('posts')
         .select('id, content, created_at, email, user_id, media_url, post_type')
@@ -91,14 +91,9 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed]) 
 
-  // Handle Follow/Unfollow
   async function toggleFollow(targetId: string) {
     if (!user) return alert("Please login to follow.")
-    
-    // SAFETY CHECK: Prevent unfollowing Admins
-    if (adminIds.has(targetId)) {
-        return alert("You cannot unfollow an Administrator.")
-    }
+    if (adminIds.has(targetId)) return alert("You cannot unfollow an Administrator.")
     
     if (followingIds.has(targetId)) {
         const { error } = await supabase.from('follows').delete().match({ follower_id: user.id, following_id: targetId })
@@ -113,9 +108,27 @@ function MessageBoardContent() {
     }
   }
 
+  // --- UPDATED SEARCH LOGIC ---
+  const handleSearchSubmit = () => {
+    // When "Done" is clicked, push the query to the URL so it persists
+    if (searchQuery.trim()) {
+      router.push(`/?q=${encodeURIComponent(searchQuery)}`)
+    } else {
+      router.push('/')
+    }
+  }
+
   const filteredMessages = messages.filter(msg => {
-    if (!searchQuery) return true;
-    return msg.content?.toLowerCase().includes(searchQuery.toLowerCase());
+    // 1. If we have a URL query (?q=...), use that. Otherwise use local input.
+    const query = urlSearchQuery || searchQuery
+    if (!query) return true;
+    
+    const lowerQ = query.toLowerCase();
+    // 2. Search both CONTENT and EMAIL (Username)
+    return (
+        (msg.content && msg.content.toLowerCase().includes(lowerQ)) || 
+        (msg.email && msg.email.toLowerCase().includes(lowerQ))
+    );
   });
 
   async function handlePost() {
@@ -131,10 +144,25 @@ function MessageBoardContent() {
         const fileExt = mediaFile.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`
         const filePath = `${fileName}`
+        
         const { error: uploadError } = await supabase.storage.from('uploads').upload(filePath, mediaFile)
         if (uploadError) throw uploadError
+        
         const { data } = supabase.storage.from('uploads').getPublicUrl(filePath)
         publicUrl = data.publicUrl
+
+        // MODERATION HOOK (If you added the API)
+        if (type === 'image' || type === 'video') {
+            const response = await fetch('/api/moderate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: publicUrl, type: type })
+            });
+            const result = await response.json();
+            if (!response.ok || !result.safe) {
+                await supabase.storage.from('uploads').remove([filePath]);
+                throw new Error(result.reason || "Content flagged as inappropriate.");
+            }
+        }
       }
 
       if (type === 'video' && !mediaFile && newMessage.match(/youtube\.com|youtu\.be/)) type = 'text' 
@@ -145,7 +173,7 @@ function MessageBoardContent() {
 
       if (error) throw error
       setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/') 
-    } catch (error: any) { alert("Error posting: " + error.message) } 
+    } catch (error: any) { alert("Post Error: " + error.message) } 
     finally { setUploading(false) }
   }
 
@@ -211,6 +239,13 @@ function MessageBoardContent() {
                     {currentFeed}
                 </span>
             )}
+            {/* Show active search pill */}
+            {urlSearchQuery && (
+                 <span style={{ backgroundColor: '#111827', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    🔍 "{urlSearchQuery}" 
+                    <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 0 }}>&times;</button>
+                </span>
+            )}
         </div>
         
         {user ? (
@@ -236,11 +271,10 @@ function MessageBoardContent() {
                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email || 'Anonymous'}</span>
                     
-                    {/* FOLLOW BUTTON LOGIC */}
                     {user && user.id !== msg.user_id && (
                         <button 
                             onClick={() => toggleFollow(msg.user_id)}
-                            disabled={adminIds.has(msg.user_id)} // DISABLE IF ADMIN
+                            disabled={adminIds.has(msg.user_id)} 
                             style={{ 
                                 padding: '2px 8px', fontSize: '10px', borderRadius: '4px', 
                                 cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', 
@@ -250,12 +284,7 @@ function MessageBoardContent() {
                                 display: 'flex', alignItems: 'center', gap: '4px'
                             }}
                         >
-                            {/* TEXT LOGIC */}
-                            {adminIds.has(msg.user_id) ? (
-                                <><span>🔒</span> Admin</>
-                            ) : (
-                                followingIds.has(msg.user_id) ? 'Following' : '+ Follow'
-                            )}
+                            {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
                         </button>
                     )}
                  </div>
@@ -266,8 +295,12 @@ function MessageBoardContent() {
            ))
         ) : (
            <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
-                <p>No posts found in this feed.</p>
-                {currentFeed !== 'global' && <Link href="/" style={{ color: '#6366f1' }}>Return to Global Feed</Link>}
+                <p>No posts found.</p>
+                {(currentFeed !== 'global' || urlSearchQuery) && (
+                    <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                        Clear Search & Return to Feed
+                    </button>
+                )}
            </div>
         )}
       </div>
@@ -280,8 +313,23 @@ function MessageBoardContent() {
                <h2 style={{ margin: 0, fontSize: '18px', color: '#111827' }}>Search Posts</h2>
                <Link href="/" style={{ textDecoration: 'none', fontSize: '24px', color: '#666' }}>&times;</Link>
              </div>
-             <input type="text" placeholder="Type word to search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus style={{ width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '10px' }} />
-             <div style={{ textAlign: 'right' }}><Link href="/" style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', textDecoration: 'none', fontSize: '14px' }}>Done</Link></div>
+             <input 
+                type="text" 
+                placeholder="Search text or @username..." 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                autoFocus 
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+                style={{ width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '10px' }} 
+             />
+             <div style={{ textAlign: 'right' }}>
+                 <button 
+                    onClick={handleSearchSubmit} 
+                    style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', fontSize: '14px', cursor: 'pointer' }}
+                 >
+                    Search
+                 </button>
+             </div>
            </div>
         </div>
       )}
