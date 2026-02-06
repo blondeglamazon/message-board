@@ -195,7 +195,7 @@ function MessageBoardContent() {
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
       
-      {/* Header */}
+      {/* HEADER */}
       <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
@@ -206,8 +206,19 @@ function MessageBoardContent() {
                 </span>
             )}
         </div>
-        {user && (
-          <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ backgroundColor: '#e5e7eb', color: '#374151', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>Sign Out</button>
+        
+        {/* LOGIN / LOGOUT BUTTON */}
+        {user ? (
+          <button 
+            onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
+            style={{ backgroundColor: '#e5e7eb', color: '#374151', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+          >
+            Sign Out
+          </button>
+        ) : (
+          <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}>
+            Login / Sign Up
+          </Link>
         )}
       </header>
 
