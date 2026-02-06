@@ -1,35 +1,26 @@
-import React from "react";
-import Sidebar from "./components/Sidebar";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+
+const inter = Inter({ subsets: ['latin'] })
+
+export const metadata: Metadata = {
+  title: 'VIMciety',
+  description: 'A message board for visionaries.',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">
-      <body style={{ 
-        margin: 0, 
-        padding: 0, 
-        display: "flex", 
-        fontFamily: "sans-serif",
-        // This is the new light baby blue background
-        backgroundColor: "#E0F2FE", 
-        minHeight: "100vh"
-      }}>
-        {/* The Sidebar component */}
-        <Sidebar />
-        
-        <main style={{ 
-          marginLeft: "75px", 
-          flex: 1, 
-          padding: "20px",
-          // Ensures content is visible against the light background
-          color: "#111827" 
-        }}>
-          {children}
-        </main>
+      <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#000' }}>
+        {/* We removed the <SideNav> component from here */}
+        {/* Now it will only render the page content (which includes your new Black Sidebar) */}
+        {children}
       </body>
     </html>
-  );
+  )
 }
