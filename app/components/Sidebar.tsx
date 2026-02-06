@@ -57,7 +57,7 @@ export default function Sidebar() {
         </div>
       </Link>
 
-      {/* Create Post Icon (Plus) - NOW LINKS TO ANCHOR */}
+      {/* Create Post Icon (Plus) - Fixed to scroll to the input box */}
       <Link href="/#create-post">
         <div style={{ 
           cursor: 'pointer', 
