@@ -17,6 +17,7 @@ function MessageBoardContent() {
   
   // Follow System State
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+  const [adminIds, setAdminIds] = useState<Set<string>>(new Set()) // Track who is an admin
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -24,7 +25,7 @@ function MessageBoardContent() {
   
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
-  const currentFeed = searchParams.get('feed') || 'global' // 'global', 'following', 'friends'
+  const currentFeed = searchParams.get('feed') || 'global' 
 
   useEffect(() => {
     async function initData() {
@@ -32,8 +33,17 @@ function MessageBoardContent() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
+      // 2. Fetch List of Admins (to lock their buttons)
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'admin')
+      
+      const adminSet = new Set(admins?.map(a => a.id) || [])
+      setAdminIds(adminSet)
+
       if (user) {
-        // 2. Fetch who I follow
+        // 3. Fetch who I follow
         const { data: follows } = await supabase
           .from('follows')
           .select('following_id')
@@ -43,28 +53,23 @@ function MessageBoardContent() {
         setFollowingIds(myFollows)
       }
 
-      // 3. Fetch Posts based on Feed Type
+      // 4. Fetch Posts based on Feed Type
       let query = supabase
         .from('posts')
         .select('id, content, created_at, email, user_id, media_url, post_type')
         .order('created_at', { ascending: false })
 
       if (user && currentFeed === 'following') {
-         // Get IDs I follow
          const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
          const ids = follows?.map(f => f.following_id) || []
          if (ids.length > 0) query = query.in('user_id', ids)
-         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']) // Return empty if following no one
+         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']) 
       } 
       else if (user && currentFeed === 'friends') {
-         // Get IDs I follow AND who follow me
          const { data: myFollows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
          const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
-         
          const myIds = myFollows?.map(f => f.following_id) || []
          const theirIds = followsMe?.map(f => f.follower_id) || []
-         
-         // Intersection: Friends
          const friendIds = myIds.filter(id => theirIds.includes(id))
          
          if (friendIds.length > 0) query = query.in('user_id', friendIds)
@@ -76,7 +81,6 @@ function MessageBoardContent() {
     }
     initData()
 
-    // Realtime Listener
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -85,20 +89,23 @@ function MessageBoardContent() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [currentFeed]) // Re-run when feed changes
+  }, [currentFeed]) 
 
   // Handle Follow/Unfollow
   async function toggleFollow(targetId: string) {
     if (!user) return alert("Please login to follow.")
     
+    // SAFETY CHECK: Prevent unfollowing Admins
+    if (adminIds.has(targetId)) {
+        return alert("You cannot unfollow an Administrator.")
+    }
+    
     if (followingIds.has(targetId)) {
-        // Unfollow
         const { error } = await supabase.from('follows').delete().match({ follower_id: user.id, following_id: targetId })
         if (!error) {
             const newSet = new Set(followingIds); newSet.delete(targetId); setFollowingIds(newSet)
         }
     } else {
-        // Follow
         const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: targetId })
         if (!error) {
             const newSet = new Set(followingIds); newSet.add(targetId); setFollowingIds(newSet)
@@ -199,7 +206,6 @@ function MessageBoardContent() {
       <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
-            {/* Feed Badge */}
             {currentFeed !== 'global' && (
                 <span style={{ backgroundColor: '#6366f1', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>
                     {currentFeed}
@@ -207,7 +213,6 @@ function MessageBoardContent() {
             )}
         </div>
         
-        {/* LOGIN / LOGOUT BUTTON */}
         {user ? (
           <button 
             onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
@@ -231,18 +236,26 @@ function MessageBoardContent() {
                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email || 'Anonymous'}</span>
                     
-                    {/* FOLLOW BUTTON (Only show if logged in and not my own post) */}
+                    {/* FOLLOW BUTTON LOGIC */}
                     {user && user.id !== msg.user_id && (
                         <button 
                             onClick={() => toggleFollow(msg.user_id)}
+                            disabled={adminIds.has(msg.user_id)} // DISABLE IF ADMIN
                             style={{ 
-                                padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: 'pointer', 
-                                border: followingIds.has(msg.user_id) ? '1px solid #4b5563' : '1px solid #6366f1',
-                                backgroundColor: followingIds.has(msg.user_id) ? 'transparent' : '#6366f1',
-                                color: followingIds.has(msg.user_id) ? '#9ca3af' : 'white'
+                                padding: '2px 8px', fontSize: '10px', borderRadius: '4px', 
+                                cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', 
+                                border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #4b5563' : '1px solid #6366f1',
+                                backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1',
+                                color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#9ca3af' : 'white',
+                                display: 'flex', alignItems: 'center', gap: '4px'
                             }}
                         >
-                            {followingIds.has(msg.user_id) ? 'Following' : '+ Follow'}
+                            {/* TEXT LOGIC */}
+                            {adminIds.has(msg.user_id) ? (
+                                <><span>🔒</span> Admin</>
+                            ) : (
+                                followingIds.has(msg.user_id) ? 'Following' : '+ Follow'
+                            )}
                         </button>
                     )}
                  </div>
