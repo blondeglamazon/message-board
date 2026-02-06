@@ -5,11 +5,14 @@ import { supabase } from '@/app/lib/supabaseClient'
 import Link from 'next/link'
 
 export default function Sidebar() {
+  const [user, setUser] = useState<any>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    async function getProfile() {
+    async function getUserData() {
       const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      
       if (user) {
         // Fetch the profile to get the avatar_url
         const { data } = await supabase
@@ -23,8 +26,33 @@ export default function Sidebar() {
         }
       }
     }
-    getProfile()
+    getUserData()
   }, [])
+
+  // LOGIC: Where should the main button go?
+  // If logged in -> Go to Profile. If logged out -> Go to Home.
+  const mainButtonLink = user ? '/profile' : '/'
+
+  // LOGIC: What should the main button look like?
+  const renderMainButtonContent = () => {
+    if (!user) {
+      // 1. Logged Out: Show "V" Logo
+      return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>V</span>
+    }
+    if (avatarUrl) {
+      // 2. Logged In & Has Photo: Show Photo
+      return (
+        <img 
+          src={avatarUrl} 
+          alt="Profile" 
+          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+        />
+      )
+    }
+    // 3. Logged In & No Photo: Show First Letter of Email
+    const initial = user.email?.charAt(0).toUpperCase() || 'U'
+    return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>{initial}</span>
+  }
 
   return (
     <div style={{
@@ -33,14 +61,18 @@ export default function Sidebar() {
       alignItems: 'center', paddingTop: '20px', gap: '30px',
       borderRight: '1px solid #e5e7eb', zIndex: 50
     }}>
-      {/* Brand / Home Link */}
-      <Link href="/" style={{ textDecoration: 'none' }}>
+      
+      {/* --- SMART PROFILE / BRAND BUTTON --- */}
+      <Link href={mainButtonLink} style={{ textDecoration: 'none' }}>
         <div style={{
           width: '40px', height: '40px', borderRadius: '50%',
-          backgroundColor: '#6366f1', color: 'white', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '20px'
+          backgroundColor: user ? '#e0e7ff' : '#6366f1', // Light purple if user, Dark purple if logo
+          color: user ? '#6366f1' : 'white',             // Colored text if user, White text if logo
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: user ? '2px solid #6366f1' : 'none',
+          overflow: 'hidden'
         }}>
-          V
+          {renderMainButtonContent()}
         </div>
       </Link>
 
@@ -64,7 +96,7 @@ export default function Sidebar() {
         </div>
       </Link>
 
-      {/* Create Post Icon */}
+      {/* Create Post Icon (Plus) */}
       <Link href="/?create=true">
         <div style={{ 
           cursor: 'pointer', color: '#6366f1', border: '2px solid #6366f1', borderRadius: '8px', 
@@ -76,26 +108,6 @@ export default function Sidebar() {
            </svg>
         </div>
       </Link>
-
-      {/* USER PROFILE AVATAR (At Bottom) */}
-      <div style={{ marginTop: 'auto', marginBottom: '30px' }}>
-        <Link href="/profile">
-          {avatarUrl ? (
-            <img 
-              src={avatarUrl} 
-              alt="Profile" 
-              style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e7eb' }} 
-            />
-          ) : (
-            <div style={{
-              width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#d1d5db',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563'
-            }}>
-              👤
-            </div>
-          )}
-        </Link>
-      </div>
 
     </div>
   )
