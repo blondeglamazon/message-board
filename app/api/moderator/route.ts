@@ -4,10 +4,11 @@ import { ImageAnnotatorClient } from '@google-cloud/vision';
 export async function POST(req: Request) {
   try {
     // --- MOVED INSIDE: Initialize here to catch any key errors ---
+    // We also use a more robust replacement for the newlines
     const client = new ImageAnnotatorClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.split(String.raw`\n`).join('\n'),
       },
       projectId: process.env.GOOGLE_PROJECT_ID,
     });
