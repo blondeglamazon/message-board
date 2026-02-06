@@ -1,50 +1,112 @@
-import { supabase } from "../lib/supabaseClient";
-import { notFound } from "next/navigation";
-import React from "react";
+'use client'
 
-interface ProfilePageProps {
-  params: {
-    username: string;
-  };
-}
+import { useState, useEffect } from 'react'
+import { supabase } from '@/app/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
-export default async function ProfilePage({ params }: ProfilePageProps) {
-  const { username } = params;
+export default function MessageBoard() {
+  const [messages, setMessages] = useState<any[]>([])
+  const [newMessage, setNewMessage] = useState('')
+  const [user, setUser] = useState<any>(null)
+  const router = useRouter()
 
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("username", username)
-    .single();
+  useEffect(() => {
+    async function getInitialData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
 
-  if (error || !profile) {
-    notFound();
+      const { data } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (data) setMessages(data)
+    }
+
+    getInitialData()
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
+        setMessages((prev) => [payload.new, ...prev])
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  async function handlePost() {
+    if (!newMessage.trim() || !user) return
+    const { error } = await supabase.from('posts').insert([
+      { content: newMessage, email: user.email, user_id: user.id }
+    ])
+    if (!error) setNewMessage('')
   }
 
   return (
-    <div style={{ padding: "40px", maxWidth: "800px", margin: "0 auto" }}>
-      <header style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-        <div style={{ 
-          width: "80px", 
-          height: "80px", 
-          borderRadius: "50%", 
-          backgroundColor: "#6366f1", 
-          display: "flex", 
-          alignItems: "center", 
-          justifyContent: "center",
-          color: "white",
-          fontSize: "30px",
-          fontWeight: "bold"
-        }}>
-          {profile.username[0].toUpperCase()}
-        </div>
-        <div>
-          <h1 style={{ margin: 0 }}>{profile.display_name || profile.username}</h1>
-          <p style={{ color: "#666" }}>@{profile.username}</p>
-        </div>
+    <div style={{ maxWidth: '700px', margin: '0 auto', color: 'white' }}>
+      <header style={{ marginBottom: '30px' }}>
+        <h1 style={{ fontSize: '32px' }}>🧵 Message Board</h1>
       </header>
-      <hr style={{ margin: "20px 0", border: "0", borderTop: "1px solid #eee" }} />
-      <p>{profile.bio || "No bio yet."}</p>
+
+      {/* Input Area */}
+      <div style={{ marginBottom: '40px' }}>
+        <textarea
+          style={{ 
+            width: '100%', 
+            padding: '15px', 
+            borderRadius: '10px', 
+            backgroundColor: '#1a1a1a', // Dark input background
+            color: 'white', 
+            border: '1px solid #333', 
+            minHeight: '100px',
+            fontSize: '16px' 
+          }}
+          placeholder="Write a message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <button 
+          onClick={handlePost}
+          style={{ 
+            width: '100%', 
+            padding: '12px', 
+            backgroundColor: '#0070f3', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px', 
+            marginTop: '10px',
+            fontWeight: 'bold',
+            cursor: 'pointer' 
+          }}
+        >
+          Post Message
+        </button>
+      </div>
+
+      {/* Messages List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        {messages.map((msg) => (
+          <div 
+            key={msg.id} 
+            style={{ 
+              backgroundColor: '#1a1a1a', // FIX: Dark gray card background
+              padding: '20px', 
+              borderRadius: '12px', 
+              border: '1px solid #333',   // Subtle border for definition
+              color: 'white'              // Ensures text is visible
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email}</span>
+              <span style={{ color: '#888', fontSize: '12px' }}>
+                {new Date(msg.created_at).toLocaleTimeString()}
+              </span>
+            </div>
+            <p style={{ margin: 0, lineHeight: '1.5' }}>{msg.content}</p>
+          </div>
+        ))}
+      </div>
     </div>
-  );
+  )
 }

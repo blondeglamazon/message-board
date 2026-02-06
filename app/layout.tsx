@@ -13,19 +13,18 @@ export default function RootLayout({
         padding: 0, 
         display: "flex", 
         fontFamily: "sans-serif",
-        backgroundColor: "#000000", // Dark background
-        color: "#FFFFFF",           // Ensures global text defaults to white
+        backgroundColor: "#000000", // Global page background
+        color: "#FFFFFF",           // Default text color
       }}>
-        {/* The Sidebar component manages dynamic user routing */}
         <Sidebar />
         
-        {/* Main content area */}
         <main style={{ 
           marginLeft: "75px", 
           flex: 1, 
           padding: "20px", 
           minHeight: "100vh",
-          // This line forces all child text elements (like posts) to be visible
+          // The following line ensures that browser-default 
+          // elements (like scrollbars and inputs) use dark mode.
           colorScheme: "dark" 
         }}>
           {children}
