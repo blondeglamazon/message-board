@@ -63,7 +63,7 @@ function MessageBoardContent() {
         .select(`
             *,
             likes ( user_id ),
-            comments ( id, content, email, user_id, created_at )
+            comments ( id, content, email, user_id, created_at, username )
         `)
         .order('created_at', { ascending: false })
         .order('created_at', { foreignTable: 'comments', ascending: true })
@@ -305,13 +305,13 @@ function MessageBoardContent() {
         });
         
         contentElement = (
-            <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
+            <div style={{ margin: '0 0 10px 0', color: '#111827', lineHeight: '1.5' }}>
                 {textContent}
                 {msg.media_url && (
                     <div style={{ marginTop: '10px' }}>
                         {msg.post_type === 'image' && <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />}
                         {msg.post_type === 'video' && <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
-                        {msg.post_type === 'audio' && (<div style={{ backgroundColor: '#333', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}><span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>)}
+                        {msg.post_type === 'audio' && (<div style={{ backgroundColor: '#f3f4f6', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}><span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>)}
                     </div>
                 )}
             </div>
@@ -322,46 +322,43 @@ function MessageBoardContent() {
   };
 
   return (
-    // MAIN LAYOUT CONTAINER
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: 'white', fontFamily: 'sans-serif' }}>
+    // MAIN LAYOUT CONTAINER - WHITE BACKGROUND
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#ffffff', color: '#111827', fontFamily: 'sans-serif' }}>
       
-      {/* --- LEFT SIDEBAR --- */}
-      <nav style={{ width: '250px', borderRight: '1px solid #333', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: 0, height: '100vh' }}>
-        <h1 style={{ fontSize: '28px', color: 'white', margin: '0 0 20px 0', fontWeight: '900' }}>💎 VIMciety</h1>
+      {/* --- LEFT SIDEBAR (LIGHT) --- */}
+      <nav style={{ width: '250px', borderRight: '1px solid #e5e7eb', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: 0, height: '100vh', backgroundColor: '#f9fafb' }}>
+        <h1 style={{ fontSize: '28px', color: '#111827', margin: '0 0 20px 0', fontWeight: '900' }}>💎 VIMciety</h1>
         
-        <Link href="/" style={{ textDecoration: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
+        <Link href="/" style={{ textDecoration: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
             <span>🏠</span> Home
         </Link>
         
-        {/* --- NEW: Following & Friends Buttons --- */}
-        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
             <span>👣</span> Following
         </button>
         
-        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
             <span>👥</span> Friends
         </button>
-        {/* -------------------------------------- */}
 
-        <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
             <span>🔍</span> Search
         </button>
 
-        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
             <span>➕</span> Create Post
         </button>
 
-        <Link href="/profile" style={{ textDecoration: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
+        <Link href="/profile" style={{ textDecoration: 'none', color: '#374151', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
             <span>👤</span> Profile
         </Link>
 
-        {/* Notification Star */}
         {user && (
             <button 
                 onClick={handleNotificationClick} 
                 style={{ 
                     background: 'none', border: 'none', 
-                    color: hasNewNotifications ? '#ef4444' : 'white', 
+                    color: hasNewNotifications ? '#ef4444' : '#374151', 
                     fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 
                 }}
             >
@@ -372,7 +369,7 @@ function MessageBoardContent() {
         <div style={{ flex: 1 }}></div>
 
         {user ? (
-            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ background: '#333', border: 'none', color: 'white', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ background: '#e5e7eb', border: 'none', color: '#374151', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
                 Sign Out
             </button>
         ) : (
@@ -382,11 +379,11 @@ function MessageBoardContent() {
         )}
       </nav>
 
-      {/* --- RIGHT FEED CONTENT --- */}
+      {/* --- RIGHT FEED CONTENT (WHITE) --- */}
       <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
          <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h2 style={{ margin: 0 }}>{currentFeed === 'global' ? 'Global Feed' : currentFeed.toUpperCase()}</h2>
-            {urlSearchQuery && <span style={{ backgroundColor: '#333', padding: '4px 8px', borderRadius: '4px' }}>Searching: "{urlSearchQuery}"</span>}
+            <h2 style={{ margin: 0, color: '#111827' }}>{currentFeed === 'global' ? 'Global Feed' : currentFeed.toUpperCase()}</h2>
+            {urlSearchQuery && <span style={{ backgroundColor: '#e5e7eb', padding: '4px 8px', borderRadius: '4px', color: '#374151' }}>Searching: "{urlSearchQuery}"</span>}
          </div>
 
         {/* Post List */}
@@ -399,53 +396,55 @@ function MessageBoardContent() {
                 const isCommentsOpen = openComments.has(msg.id);
 
                 return (
-                <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Link href={`/profile?id=${msg.user_id}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
-                            {msg.email || 'Anonymous'}
-                        </Link>
-                        {user && user.id !== msg.user_id && (
-                            <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #4b5563' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#9ca3af' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
-                            </button>
-                        )}
-                    </div>
-                    <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
-                </div>
-                {renderContent(msg)}
-                <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', gap: '20px' }}>
-                        <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
-                            {isLiked ? '❤️' : '🤍'} {likesCount}
-                        </button>
-                        <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
-                            💬 {commentsCount}
-                        </button>
-                </div>
-                {isCommentsOpen && (
-                    <div style={{ marginTop: '15px', backgroundColor: '#262626', padding: '15px', borderRadius: '8px' }}>
-                        <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
-                            {msg.comments && msg.comments.length > 0 ? (
-                                msg.comments.map((c: any) => (
-                                    <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
-                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
-                                        <div style={{ fontSize: '14px', color: '#e5e7eb' }}>{c.content}</div>
-                                    </div>
-                                ))
-                            ) : (<div style={{ color: '#6b7280', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
+                <div key={msg.id} style={{ backgroundColor: '#ffffff', padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {/* LINK TO USERNAME */}
+                            <Link href={"/" + (msg.username || (msg.email ? msg.email.split('@')[0] : '#'))} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
+                                {msg.username || (msg.email || 'Anonymous')}
+                            </Link>
+                            
+                            {user && user.id !== msg.user_id && (
+                                <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
+                                </button>
+                            )}
                         </div>
-                        {user ? (
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white' }} />
-                                <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
-                            </div>
-                        ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
+                        <span style={{ color: '#6b7280', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
                     </div>
-                )}
+                    {renderContent(msg)}
+                    <div style={{ marginTop: '15px', borderTop: '1px solid #e5e7eb', paddingTop: '10px', display: 'flex', gap: '20px' }}>
+                            <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
+                                {isLiked ? '❤️' : '🤍'} {likesCount}
+                            </button>
+                            <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
+                                💬 {commentsCount}
+                            </button>
+                    </div>
+                    {isCommentsOpen && (
+                        <div style={{ marginTop: '15px', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                            <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
+                                {msg.comments && msg.comments.length > 0 ? (
+                                    msg.comments.map((c: any) => (
+                                        <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>
+                                            <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.username || c.email}</div>
+                                            <div style={{ fontSize: '14px', color: '#374151' }}>{c.content}</div>
+                                        </div>
+                                    ))
+                                ) : (<div style={{ color: '#9ca3af', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
+                            </div>
+                            {user ? (
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827' }} />
+                                    <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
+                                </div>
+                            ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
+                        </div>
+                    )}
                 </div>
                 )})
             ) : (
-            <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
+            <div style={{ textAlign: 'center', color: '#6b7280', marginTop: '50px' }}>
                     <p>No posts found.</p>
                     {(currentFeed !== 'global' || urlSearchQuery) && (
                         <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
@@ -460,10 +459,10 @@ function MessageBoardContent() {
       {/* SEARCH MODAL */}
       {showSearchModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '100px' }}>
-           <div style={{ backgroundColor: 'white', width: '90%', maxWidth: '600px', borderRadius: '12px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+           <div style={{ backgroundColor: 'white', width: '90%', maxWidth: '600px', borderRadius: '12px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
                <h2 style={{ margin: 0, fontSize: '18px', color: '#111827' }}>Search Posts</h2>
-               <Link href="/" style={{ textDecoration: 'none', fontSize: '24px', color: '#666' }}>&times;</Link>
+               <Link href="/" style={{ textDecoration: 'none', fontSize: '24px', color: '#6b7280' }}>&times;</Link>
              </div>
              <input 
                 type="text" 
@@ -472,7 +471,7 @@ function MessageBoardContent() {
                 onChange={(e) => setSearchQuery(e.target.value)} 
                 autoFocus 
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-                style={{ width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', border: '1px solid #ccc', marginBottom: '10px' }} 
+                style={{ width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '10px', color: '#111827' }} 
              />
              <div style={{ textAlign: 'right' }}>
                  <button 
@@ -489,19 +488,19 @@ function MessageBoardContent() {
       {/* CREATE MODAL */}
       {showCreateModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ backgroundColor: '#1a1a1a', width: '90%', maxWidth: '500px', borderRadius: '16px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', border: '1px solid #333' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2 style={{ color: 'white', margin: 0, fontSize: '20px' }}>Create New Post</h2><Link href="/" style={{ color: '#888', textDecoration: 'none', fontSize: '24px' }}>&times;</Link></div>
+          <div style={{ backgroundColor: 'white', width: '90%', maxWidth: '500px', borderRadius: '16px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2 style={{ color: '#111827', margin: 0, fontSize: '20px' }}>Create New Post</h2><Link href="/" style={{ color: '#6b7280', textDecoration: 'none', fontSize: '24px' }}>&times;</Link></div>
             <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept={getAcceptType()} onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => handleOptionClick('text')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'text' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📝</span><span style={{ fontSize: '10px' }}>Text</span></button>
-                <button onClick={() => handleOptionClick('audio')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'audio' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎵</span><span style={{ fontSize: '10px' }}>Audio</span></button>
-                <button onClick={() => handleOptionClick('image')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'image' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📷</span><span style={{ fontSize: '10px' }}>Picture</span></button>
-                <button onClick={() => handleOptionClick('video')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'video' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎥</span><span style={{ fontSize: '10px' }}>Video</span></button>
-                <button onClick={() => handleOptionClick('embed')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'embed' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>{'</>'}</span><span style={{ fontSize: '10px' }}>Embed</span></button>
+                <button onClick={() => handleOptionClick('text')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'text' ? '#6366f1' : '#f3f4f6', color: postType === 'text' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📝</span><span style={{ fontSize: '10px' }}>Text</span></button>
+                <button onClick={() => handleOptionClick('audio')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'audio' ? '#6366f1' : '#f3f4f6', color: postType === 'audio' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎵</span><span style={{ fontSize: '10px' }}>Audio</span></button>
+                <button onClick={() => handleOptionClick('image')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'image' ? '#6366f1' : '#f3f4f6', color: postType === 'image' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>📷</span><span style={{ fontSize: '10px' }}>Picture</span></button>
+                <button onClick={() => handleOptionClick('video')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'video' ? '#6366f1' : '#f3f4f6', color: postType === 'video' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>🎥</span><span style={{ fontSize: '10px' }}>Video</span></button>
+                <button onClick={() => handleOptionClick('embed')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'embed' ? '#6366f1' : '#f3f4f6', color: postType === 'embed' ? 'white' : '#374151', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}><span style={{ fontSize: '20px' }}>{'</>'}</span><span style={{ fontSize: '10px' }}>Embed</span></button>
             </div>
             {mediaFile && <div style={{ marginBottom: '15px', color: '#6366f1', fontSize: '14px', textAlign: 'center' }}>File Selected: <strong>{mediaFile.name}</strong></div>}
-            <textarea style={{ width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', border: 'none', minHeight: '100px', fontSize: '16px', marginBottom: '20px', resize: 'none' }} placeholder={postType === 'embed' ? "Paste your Canva/Embed code here..." : "What's on your mind?"} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-            <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '14px', backgroundColor: uploading ? '#4b5563' : '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>{uploading ? 'Publishing...' : 'Post Message'}</button>
+            <textarea style={{ width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#f9fafb', color: '#111827', border: '1px solid #d1d5db', minHeight: '100px', fontSize: '16px', marginBottom: '20px', resize: 'none' }} placeholder={postType === 'embed' ? "Paste your Canva/Embed code here..." : "What's on your mind?"} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+            <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '14px', backgroundColor: uploading ? '#9ca3af' : '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>{uploading ? 'Publishing...' : 'Post Message'}</button>
           </div>
         </div>
       )}
@@ -511,7 +510,7 @@ function MessageBoardContent() {
 
 export default function MessageBoard() {
   return (
-    <Suspense fallback={<div style={{color: 'white', padding: '20px'}}>Loading...</div>}>
+    <Suspense fallback={<div style={{color: '#111827', padding: '20px'}}>Loading...</div>}>
       <MessageBoardContent />
     </Suspense>
   )
