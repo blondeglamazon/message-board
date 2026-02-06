@@ -13,6 +13,9 @@ function MessageBoardContent() {
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   
+  // Notification State
+  const [hasNewNotifications, setHasNewNotifications] = useState(false)
+  
   // Comment State
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
@@ -49,9 +52,12 @@ function MessageBoardContent() {
       if (user) {
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
         setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
+        
+        // --- NOTIFICATION CHECK ---
+        checkNotifications(user.id)
       }
 
-      // Fetch Posts + Likes + Comments
+      // Fetch Posts
       let query = supabase
         .from('posts')
         .select(`
@@ -95,6 +101,49 @@ function MessageBoardContent() {
 
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed]) 
+
+  // --- NEW: Notification Logic ---
+  async function checkNotifications(userId: string) {
+      // Get the last time the user clicked the notification star
+      const lastCheck = localStorage.getItem('lastNotificationCheck') || new Date(0).toISOString()
+      
+      // 1. Check for new Follows
+      const { data: newFollows } = await supabase
+        .from('follows')
+        .select('created_at')
+        .eq('following_id', userId)
+        .gt('created_at', lastCheck)
+        
+      // 2. Check for new Comments on MY posts
+      // We use !inner to filter comments where the related post belongs to ME
+      const { data: newComments } = await supabase
+        .from('comments')
+        .select('created_at, posts!inner(user_id)')
+        .eq('posts.user_id', userId)
+        .neq('user_id', userId) // Don't notify for my own comments
+        .gt('created_at', lastCheck)
+
+      // 3. Check for new Likes on MY posts
+      const { data: newLikes } = await supabase
+        .from('likes')
+        .select('created_at, posts!inner(user_id)')
+        .eq('posts.user_id', userId)
+        .neq('user_id', userId) // Don't notify for my own likes
+        .gt('created_at', lastCheck)
+
+      if ((newFollows && newFollows.length > 0) || 
+          (newComments && newComments.length > 0) || 
+          (newLikes && newLikes.length > 0)) {
+          setHasNewNotifications(true)
+      }
+  }
+
+  const handleNotificationClick = () => {
+      setHasNewNotifications(false)
+      // Save current time as the new "Last Checked" time
+      localStorage.setItem('lastNotificationCheck', new Date().toISOString())
+      alert("Notifications cleared! (This would open a notifications page in the future)")
+  }
 
   async function toggleFollow(targetId: string) {
     if (!user) return alert("Please login to follow.")
@@ -281,156 +330,132 @@ function MessageBoardContent() {
   };
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
+    // MAIN LAYOUT CONTAINER (Flexbox for Sidebar + Feed)
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: 'white', fontFamily: 'sans-serif' }}>
       
-      {/* HEADER */}
-      <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
-            {currentFeed !== 'global' && (
-                <span style={{ backgroundColor: '#6366f1', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                    {currentFeed}
-                </span>
-            )}
-            {urlSearchQuery && (
-                 <span style={{ backgroundColor: '#111827', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    🔍 "{urlSearchQuery}" 
-                    <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: 0 }}>&times;</button>
-                </span>
-            )}
-        </div>
+      {/* --- LEFT SIDEBAR --- */}
+      <nav style={{ width: '250px', borderRight: '1px solid #333', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: 0, height: '100vh' }}>
+        <h1 style={{ fontSize: '28px', color: 'white', margin: '0 0 20px 0', fontWeight: '900' }}>💎 VIMciety</h1>
         
-        {user ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-             {/* NEW: Link to Profile Page */}
-             <Link href="/profile" style={{ textDecoration: 'none', color: '#111827', fontWeight: 'bold', fontSize: '14px' }}>
-               👤 My Profile
-             </Link>
-             
-             <button 
-                onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
-                style={{ backgroundColor: '#e5e7eb', color: '#374151', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-             >
-                Sign Out
-             </button>
-          </div>
-        ) : (
-          <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}>
-            Login / Sign Up
-          </Link>
+        <Link href="/" style={{ textDecoration: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
+            <span>🏠</span> Home
+        </Link>
+        
+        <button onClick={() => { setSearchQuery(''); router.push('/?search=true') }} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+            <span>🔍</span> Search
+        </button>
+
+        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}>
+            <span>➕</span> Create Post
+        </button>
+
+        <Link href="/profile" style={{ textDecoration: 'none', color: 'white', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold' }}>
+            <span>👤</span> Profile
+        </Link>
+
+        {/* --- NOTIFICATION STAR --- */}
+        {user && (
+            <button 
+                onClick={handleNotificationClick} 
+                style={{ 
+                    background: 'none', border: 'none', 
+                    color: hasNewNotifications ? '#ef4444' : 'white', // RED if new, White if read
+                    fontSize: '20px', display: 'flex', alignItems: 'center', gap: '15px', fontWeight: 'bold', cursor: 'pointer', padding: 0 
+                }}
+            >
+                <span>{hasNewNotifications ? '★' : '☆'}</span> Notifications
+            </button>
         )}
-      </header>
 
-      {/* Feed */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        {filteredMessages.length > 0 ? (
-           filteredMessages.map((msg: any) => {
-             const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
-             const likesCount = msg.likes?.length || 0;
-             const commentsCount = msg.comments?.length || 0;
-             const isCommentsOpen = openComments.has(msg.id);
+        <div style={{ flex: 1 }}></div> {/* Spacer to push Sign Out down */}
 
-             return (
-             <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
-               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    
-                    {/* NEW: Clickable Username */}
-                    <Link href={`/profile?id=${msg.user_id}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
-                        {msg.email || 'Anonymous'}
-                    </Link>
-                    
-                    {user && user.id !== msg.user_id && (
-                        <button 
-                            onClick={() => toggleFollow(msg.user_id)}
-                            disabled={adminIds.has(msg.user_id)} 
-                            style={{ 
-                                padding: '2px 8px', fontSize: '10px', borderRadius: '4px', 
-                                cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', 
-                                border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #4b5563' : '1px solid #6366f1',
-                                backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1',
-                                color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#9ca3af' : 'white',
-                                display: 'flex', alignItems: 'center', gap: '4px'
-                            }}
-                        >
-                            {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
+        {user ? (
+            <button onClick={async () => { await supabase.auth.signOut(); setUser(null); }} style={{ background: '#333', border: 'none', color: 'white', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                Sign Out
+            </button>
+        ) : (
+            <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '10px', borderRadius: '8px', textAlign: 'center', textDecoration: 'none', fontWeight: 'bold' }}>
+                Login / Sign Up
+            </Link>
+        )}
+      </nav>
+
+
+      {/* --- RIGHT FEED CONTENT --- */}
+      <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
+         {/* Feed Header info */}
+         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h2 style={{ margin: 0 }}>{currentFeed === 'global' ? 'Global Feed' : currentFeed.toUpperCase()}</h2>
+            {urlSearchQuery && <span style={{ backgroundColor: '#333', padding: '4px 8px', borderRadius: '4px' }}>Searching: "{urlSearchQuery}"</span>}
+         </div>
+
+        {/* Post List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {filteredMessages.length > 0 ? (
+            filteredMessages.map((msg: any) => {
+                const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
+                const likesCount = msg.likes?.length || 0;
+                const commentsCount = msg.comments?.length || 0;
+                const isCommentsOpen = openComments.has(msg.id);
+
+                return (
+                <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Link href={`/profile?id=${msg.user_id}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
+                            {msg.email || 'Anonymous'}
+                        </Link>
+                        {user && user.id !== msg.user_id && (
+                            <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #4b5563' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#9ca3af' : 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {adminIds.has(msg.user_id) ? <><span>🔒</span> Admin</> : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
+                            </button>
+                        )}
+                    </div>
+                    <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
+                </div>
+                {renderContent(msg)}
+                <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', gap: '20px' }}>
+                        <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
+                            {isLiked ? '❤️' : '🤍'} {likesCount}
+                        </button>
+                        <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}>
+                            💬 {commentsCount}
+                        </button>
+                </div>
+                {isCommentsOpen && (
+                    <div style={{ marginTop: '15px', backgroundColor: '#262626', padding: '15px', borderRadius: '8px' }}>
+                        <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
+                            {msg.comments && msg.comments.length > 0 ? (
+                                msg.comments.map((c: any) => (
+                                    <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
+                                        <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
+                                        <div style={{ fontSize: '14px', color: '#e5e7eb' }}>{c.content}</div>
+                                    </div>
+                                ))
+                            ) : (<div style={{ color: '#6b7280', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
+                        </div>
+                        {user ? (
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white' }} />
+                                <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
+                            </div>
+                        ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
+                    </div>
+                )}
+                </div>
+                )})
+            ) : (
+            <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
+                    <p>No posts found.</p>
+                    {(currentFeed !== 'global' || urlSearchQuery) && (
+                        <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                            Clear Search & Return to Feed
                         </button>
                     )}
-                 </div>
-                 <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
-               </div>
-               
-               {renderContent(msg)}
-
-               {/* ACTIONS BAR */}
-               <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', gap: '20px' }}>
-                    <button 
-                        onClick={() => handleLike(msg.id, isLiked)}
-                        style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}
-                    >
-                        {isLiked ? '❤️' : '🤍'} {likesCount}
-                    </button>
-                    <button 
-                        onClick={() => toggleComments(msg.id)}
-                        style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}
-                    >
-                        💬 {commentsCount}
-                    </button>
-               </div>
-
-               {/* COMMENTS SECTION */}
-               {isCommentsOpen && (
-                   <div style={{ marginTop: '15px', backgroundColor: '#262626', padding: '15px', borderRadius: '8px' }}>
-                       {/* Comment List */}
-                       <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
-                           {msg.comments && msg.comments.length > 0 ? (
-                               msg.comments.map((c: any) => (
-                                   <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
-                                       <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
-                                       <div style={{ fontSize: '14px', color: '#e5e7eb' }}>{c.content}</div>
-                                   </div>
-                               ))
-                           ) : (
-                               <div style={{ color: '#6b7280', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>
-                           )}
-                       </div>
-                       
-                       {/* Add Comment */}
-                       {user ? (
-                           <div style={{ display: 'flex', gap: '10px' }}>
-                               <input 
-                                  type="text" 
-                                  placeholder="Write a comment..." 
-                                  value={commentText[msg.id] || ''}
-                                  onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                                  onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)}
-                                  style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white' }}
-                               />
-                               <button 
-                                  onClick={() => handlePostComment(msg.id)}
-                                  style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}
-                               >
-                                  Post
-                               </button>
-                           </div>
-                       ) : (
-                           <div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>
-                       )}
-                   </div>
-               )}
-             </div>
-           )})
-        ) : (
-           <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
-                <p>No posts found.</p>
-                {(currentFeed !== 'global' || urlSearchQuery) && (
-                    <button onClick={() => { setSearchQuery(''); router.push('/') }} style={{ color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                        Clear Search & Return to Feed
-                    </button>
-                )}
-           </div>
-        )}
-      </div>
+            </div>
+            )}
+        </div>
+      </main>
 
       {/* SEARCH MODAL */}
       {showSearchModal && (
