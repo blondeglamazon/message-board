@@ -4,51 +4,45 @@ import { useState, useEffect, Suspense } from 'react'
 import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import DOMPurify from 'isomorphic-dompurify'
 
 function ProfileContent() {
   const [loading, setLoading] = useState(true)
-  const [profileUser, setProfileUser] = useState<any>(null) // The user we are VIEWING
-  const [currentUser, setCurrentUser] = useState<any>(null) // The user who is LOGGED IN
+  const [profileUser, setProfileUser] = useState<any>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [posts, setPosts] = useState<any[]>([])
   
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  // 1. Get the ID from the URL (if it exists)
   const targetId = searchParams.get('id')
 
   useEffect(() => {
     async function loadProfile() {
       setLoading(true)
       
-      // Get the currently logged-in user
       const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       setCurrentUser(loggedInUser)
 
-      // Decide which ID to look up: The URL ID or the Logged-in ID
       const userIdToFetch = targetId || loggedInUser?.id
 
       if (!userIdToFetch) {
          setLoading(false)
-         return // No ID to load (and not logged in)
+         return 
       }
 
-     // A. Fetch User Details (Email/Date)
-      // FIX: Check 'profiles' table first, then fallback to 'posts'
-      // We also verify the email is not null so we don't display "null"
+      // A. Fetch User Details
       let email = 'Unknown User'
       let memberSince = new Date().toLocaleDateString()
 
-      // 1. Try to find a post with a valid email (Newest first)
       const { data: userPosts } = await supabase
          .from('posts')
          .select('email, created_at')
          .eq('user_id', userIdToFetch)
-         .not('email', 'is', null) // Ensure email exists
-         .order('created_at', { ascending: false }) // Look at NEWEST posts first
+         .not('email', 'is', null) 
+         .order('created_at', { ascending: false }) 
          .limit(1)
       
-      // 2. Also get the *oldest* date for "Member Since"
       const { data: firstPost } = await supabase
          .from('posts')
          .select('created_at')
@@ -68,7 +62,7 @@ function ProfileContent() {
 
       setProfileUser({ id: userIdToFetch, email, memberSince })
 
-      // B. Fetch This User's Post History
+      // B. Fetch Post History
       const { data: history } = await supabase
         .from('posts')
         .select('*')
@@ -92,9 +86,42 @@ function ProfileContent() {
       }
   }
 
+  // --- THE TRANSLATOR FUNCTION ---
+  const renderContent = (post: any) => {
+    // 1. Handle Embeds (Canva, Spotify, etc.)
+    if (post.post_type === 'embed') {
+        const cleanHTML = DOMPurify.sanitize(post.content, {
+            ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'blockquote', 'ul', 'li', 'br'],
+            ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'href', 'target', 'class', 'loading'],
+            ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling']
+        });
+        return <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: cleanHTML }} />
+    }
+
+    // 2. Handle Normal Text & YouTube Links
+    const text = post.content || '';
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    const textContent = parts.map((part: string, index: number) => {
+      if (part.match(urlRegex)) {
+        const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+        if (youtubeMatch) return (
+            <div key={index} style={{ margin: '15px 0' }}><iframe width="100%" height="300" src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} title="YouTube" frameBorder="0" allowFullScreen style={{ borderRadius: '12px' }}></iframe></div>
+        );
+        return <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
+      }
+      return <span key={index}>{part}</span>;
+    });
+
+    return (
+      <div style={{ margin: '0 0 10px 0', lineHeight: '1.5' }}>
+        {textContent}
+      </div>
+    )
+  };
+
   if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
 
-  // Check if we are viewing our own profile
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
 
   return (
@@ -112,12 +139,10 @@ function ProfileContent() {
 
       {/* PROFILE CARD */}
       <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
-         {/* Avatar Circle */}
          <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
              {profileUser?.email?.[0]?.toUpperCase() || '?'}
          </div>
          
-         {/* Info */}
          <div>
              <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>
                  {profileUser?.email}
@@ -125,13 +150,6 @@ function ProfileContent() {
              <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>
                  Member since: {profileUser?.memberSince}
              </p>
-             
-             {/* Only show "Edit" if it is MY profile */}
-             {isMyProfile && (
-                 <button style={{ marginTop: '10px', backgroundColor: '#374151', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    ⚙️ Edit Theme & Photo
-                 </button>
-             )}
          </div>
       </div>
 
@@ -158,8 +176,10 @@ function ProfileContent() {
                           )}
                       </div>
                       
-                      {post.content && <p style={{ margin: '0 0 10px 0', lineHeight: '1.5' }}>{post.content}</p>}
+                      {/* FIX: Use the renderContent function to show Embeds/Text properly */}
+                      {renderContent(post)}
                       
+                      {/* Show Uploaded Media (Images/Videos) */}
                       {post.media_url && (
                           <div style={{ marginTop: '10px' }}>
                               {post.post_type === 'image' && <img src={post.media_url} alt="Post media" style={{ maxWidth: '100%', borderRadius: '8px', maxHeight: '300px', objectFit: 'cover' }} />}
