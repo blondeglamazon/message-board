@@ -5,10 +5,10 @@ import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
-// --- FIX 1: Imports moved to the TOP ---
+// --- Imports for Client-Side Filter ---
 import * as nsfwjs from 'nsfwjs'
 import * as tf from '@tensorflow/tfjs'
-// ---------------------------------------
+// --------------------------------------
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
@@ -160,9 +160,10 @@ function MessageBoardContent() {
            // Classify the image
            const predictions = await model.classify(img)
            
-           // FIX 2: Added ': any' to 'p' so TypeScript doesn't complain
+           // FIX: Raised limit to 0.90 (90%)
+           // It will now only block if it is VERY sure.
            const isExplicit = predictions.some((p: any) => 
-             (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.60
+             (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.90
            )
 
            if (isExplicit) {
