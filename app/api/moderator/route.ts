@@ -1,22 +1,11 @@
 import { NextResponse } from 'next/server';
-
-// ------------------------------------------------------------------
-// 🚨 ISOLATION TEST: ACTIVE
-// We return "Safe" immediately.
-// The Google Code is commented out below so it cannot cause errors.
-// ------------------------------------------------------------------
-
-export async function POST(req: Request) {
-  return NextResponse.json({ safe: true });
-}
-
-/* // --- IGNORE EVERYTHING BELOW FOR NOW ---
-// This keeps the code safe for later, but hides it from TypeScript errors.
-
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 
-async function ORIGINAL_CODE(req: Request) {
+export async function POST(req: Request) {
+  console.log("🚀 STARTING MODERATION REQUEST");
+
   try {
+    // 1. FIX: Handle the Key safely so it doesn't crash
     const rawKey = process.env.GOOGLE_PRIVATE_KEY || '';
     const privateKey = rawKey.split(String.raw`\n`).join('\n');
 
@@ -29,11 +18,14 @@ async function ORIGINAL_CODE(req: Request) {
     });
 
     const { url, type } = await req.json();
+    console.log("📸 Received URL:", url);
 
     if (type === 'image') {
+      // 2. Scan the image
       const [result] = await client.safeSearchDetection(url);
       const detections = result.safeSearchAnnotation;
 
+      // 3. FIX: Check if detections exist before reading them
       if (detections) {
         const isUnsafe = 
           detections.adult === 'LIKELY' || detections.adult === 'VERY_LIKELY' ||
@@ -41,13 +33,21 @@ async function ORIGINAL_CODE(req: Request) {
           detections.racy === 'LIKELY' || detections.racy === 'VERY_LIKELY';
 
         if (isUnsafe) {
-          return NextResponse.json({ safe: false });
+          console.log("🚨 BLOCKING unsafe content!");
+          return NextResponse.json({ safe: false, reason: "Explicit content detected." });
         }
       }
     }
+
+    // If we get here, it's safe!
     return NextResponse.json({ safe: true });
-  } catch (error) {
-    return NextResponse.json({ safe: false });
+
+  } catch (error: any) {
+    console.error("🔥 CRITICAL ERROR:", error);
+    // Return error in a way the browser can read it
+    return NextResponse.json({ 
+        safe: false, 
+        reason: `DEBUG ERROR: ${error.message}` 
+    }, { status: 200 });
   }
 }
-*/
