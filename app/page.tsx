@@ -51,8 +51,7 @@ function MessageBoardContent() {
         setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
       }
 
-      // --- UPDATED QUERY: Fetch Likes and Comments ---
-      // We join 'likes' and 'comments' to get the counts and data
+      // Fetch Posts + Likes + Comments
       let query = supabase
         .from('posts')
         .select(`
@@ -86,11 +85,10 @@ function MessageBoardContent() {
     }
     initData()
 
-    // Realtime subscription (basic)
+    // Realtime subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
-        // Note: New posts won't have likes/comments yet, so we just add the raw payload
         setMessages((prev) => [{ ...payload.new, likes: [], comments: [] }, ...prev])
       })
       .subscribe()
@@ -115,22 +113,19 @@ function MessageBoardContent() {
     }
   }
 
-  // --- NEW: Handle Likes ---
   async function handleLike(postId: string, isLiked: boolean) {
     if (!user) return alert("Please login to like posts.")
     
-    // 1. Optimistic Update (Update UI instantly)
     setMessages(prev => prev.map(msg => {
         if (msg.id === postId) {
             const newLikes = isLiked 
-                ? msg.likes.filter((l: any) => l.user_id !== user.id) // Remove like
-                : [...(msg.likes || []), { user_id: user.id }] // Add like
+                ? msg.likes.filter((l: any) => l.user_id !== user.id) 
+                : [...(msg.likes || []), { user_id: user.id }] 
             return { ...msg, likes: newLikes }
         }
         return msg
     }))
 
-    // 2. Database Update
     if (isLiked) {
         await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
     } else {
@@ -138,7 +133,6 @@ function MessageBoardContent() {
     }
   }
 
-  // --- NEW: Handle Comments ---
   const toggleComments = (postId: string) => {
     const newSet = new Set(openComments)
     if (newSet.has(postId)) newSet.delete(postId)
@@ -151,7 +145,6 @@ function MessageBoardContent() {
     const text = commentText[postId]?.trim()
     if (!text) return
 
-    // 1. Database Update
     const { data: newComment, error } = await supabase
         .from('comments')
         .insert({ post_id: postId, user_id: user.id, email: user.email, content: text })
@@ -163,7 +156,6 @@ function MessageBoardContent() {
         return
     }
 
-    // 2. Local Update
     setMessages(prev => prev.map(msg => {
         if (msg.id === postId) {
             return { ...msg, comments: [...(msg.comments || []), newComment] }
@@ -309,12 +301,19 @@ function MessageBoardContent() {
         </div>
         
         {user ? (
-          <button 
-            onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
-            style={{ backgroundColor: '#e5e7eb', color: '#374151', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
-          >
-            Sign Out
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+             {/* NEW: Link to Profile Page */}
+             <Link href="/profile" style={{ textDecoration: 'none', color: '#111827', fontWeight: 'bold', fontSize: '14px' }}>
+               👤 My Profile
+             </Link>
+             
+             <button 
+                onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
+                style={{ backgroundColor: '#e5e7eb', color: '#374151', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}
+             >
+                Sign Out
+             </button>
+          </div>
         ) : (
           <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold', fontSize: '14px' }}>
             Login / Sign Up
@@ -335,7 +334,11 @@ function MessageBoardContent() {
              <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email || 'Anonymous'}</span>
+                    
+                    {/* NEW: Clickable Username */}
+                    <Link href={`/profile?id=${msg.user_id}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>
+                        {msg.email || 'Anonymous'}
+                    </Link>
                     
                     {user && user.id !== msg.user_id && (
                         <button 
