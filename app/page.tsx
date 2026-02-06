@@ -6,13 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify' 
 
-// 1. MAIN CONTENT COMPONENT
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   
-  // Post Types: text, image, video, audio, embed
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('')
+  
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
@@ -21,8 +22,9 @@ function MessageBoardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  // Detect "Create" signal
+  // Detect Signals
   const showCreateModal = searchParams.get('create') === 'true'
+  const showSearchModal = searchParams.get('search') === 'true'
 
   useEffect(() => {
     async function getUser() {
@@ -51,6 +53,12 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
+  // Filter Messages based on Search
+  const filteredMessages = messages.filter(msg => {
+    if (!searchQuery) return true;
+    return msg.content?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
   async function handlePost() {
     if (!user) {
       alert("You must be logged in to post!")
@@ -78,7 +86,6 @@ function MessageBoardContent() {
         publicUrl = data.publicUrl
       }
 
-      // Special Check: If Video was selected but user pasted a YouTube link, switch to text (auto-renderer)
       if (type === 'video' && !mediaFile && newMessage.match(/youtube\.com|youtu\.be/)) {
          type = 'text' 
       }
@@ -107,7 +114,6 @@ function MessageBoardContent() {
     }
   }
 
-  // Handle Button Clicks in Modal
   const handleOptionClick = (type: string) => {
     setPostType(type)
     setMediaFile(null)
@@ -124,36 +130,22 @@ function MessageBoardContent() {
   }
 
   const renderContent = (msg: any) => {
-    // 1. EMBED / CODE (Canva, etc)
     if (msg.post_type === 'embed') {
-        
-        // --- SAFETY CONFIGURATION ---
         const cleanHTML = DOMPurify.sanitize(msg.content, {
-            // Allow these tags (useful for Canva/Embeds)
             ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'blockquote', 'ul', 'li', 'br'],
-            // Allow these attributes (essential for styling/sizing)
             ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'href', 'target', 'class', 'loading'],
-            // Allow iframes from safe providers
             ADD_TAGS: ['iframe'], 
             ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling']
         });
-
-        return (
-            <div 
-                style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }}
-                dangerouslySetInnerHTML={{ __html: cleanHTML }} 
-            />
-        )
+        return <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: cleanHTML }} />
     }
 
-    // 2. REGULAR TEXT (with Auto-Link and YouTube detection)
     const text = msg.content || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
 
     const textContent = parts.map((part: string, index: number) => {
       if (part.match(urlRegex)) {
-        // YouTube Auto-Embed
         const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
         if (youtubeMatch) {
           return (
@@ -165,7 +157,6 @@ function MessageBoardContent() {
             </div>
           );
         }
-        // Standard Clickable Link
         return <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
       }
       return <span key={index}>{part}</span>;
@@ -174,16 +165,10 @@ function MessageBoardContent() {
     return (
       <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
         {textContent}
-        
-        {/* 3. MEDIA UPLOADS */}
         {msg.media_url && (
             <div style={{ marginTop: '10px' }}>
-                {msg.post_type === 'image' && (
-                    <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                )}
-                {msg.post_type === 'video' && (
-                    <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                )}
+                {msg.post_type === 'image' && <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                {msg.post_type === 'video' && <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
                 {msg.post_type === 'audio' && (
                     <div style={{ backgroundColor: '#333', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}>
                         <span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span>
@@ -199,7 +184,6 @@ function MessageBoardContent() {
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
       
-      {/* HEADER */}
       <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
         {user && (
@@ -212,18 +196,58 @@ function MessageBoardContent() {
         )}
       </header>
 
-      {/* FEED */}
+      {/* FEED (Filtered by Search) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        {messages.map((msg: any) => (
-          <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email || 'Anonymous User'}</span>
-              <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
-            </div>
-            {renderContent(msg)}
-          </div>
-        ))}
+        {filteredMessages.length > 0 ? (
+           filteredMessages.map((msg: any) => (
+             <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                 <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email || 'Anonymous User'}</span>
+                 <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
+               </div>
+               {renderContent(msg)}
+             </div>
+           ))
+        ) : (
+           <p style={{ textAlign: 'center', color: '#666' }}>No posts found.</p>
+        )}
       </div>
+
+      {/* SEARCH MODAL */}
+      {showSearchModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '100px'
+        }}>
+           <div style={{
+             backgroundColor: 'white', width: '90%', maxWidth: '600px',
+             borderRadius: '12px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
+           }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+               <h2 style={{ margin: 0, fontSize: '18px', color: '#111827' }}>Search Posts</h2>
+               <Link href="/" style={{ textDecoration: 'none', fontSize: '24px', color: '#666' }}>&times;</Link>
+             </div>
+             <input 
+               type="text" 
+               placeholder="Type word to search..." 
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+               autoFocus
+               style={{ 
+                 width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', 
+                 border: '1px solid #ccc', marginBottom: '10px'
+               }}
+             />
+             <div style={{ textAlign: 'right' }}>
+                <Link href="/" style={{ 
+                   backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', 
+                   borderRadius: '6px', textDecoration: 'none', fontSize: '14px' 
+                }}>Done</Link>
+             </div>
+           </div>
+        </div>
+      )}
 
       {/* CREATE POST MODAL */}
       {showCreateModal && (
@@ -242,74 +266,39 @@ function MessageBoardContent() {
               <Link href="/" style={{ color: '#888', textDecoration: 'none', fontSize: '24px' }}>&times;</Link>
             </div>
 
-            {/* Hidden File Input */}
             <input 
-                type="file" 
-                ref={fileInputRef}
-                style={{ display: 'none' }} 
-                accept={getAcceptType()}
-                onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
+                type="file" ref={fileInputRef} style={{ display: 'none' }} 
+                accept={getAcceptType()} onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
             />
 
-            {/* 5 OPTION BUTTONS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
-                {/* 1. Text */}
                 <button onClick={() => handleOptionClick('text')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'text' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '20px' }}>📝</span>
-                    <span style={{ fontSize: '10px' }}>Text</span>
+                    <span style={{ fontSize: '20px' }}>📝</span><span style={{ fontSize: '10px' }}>Text</span>
                 </button>
-                {/* 2. Audio */}
                 <button onClick={() => handleOptionClick('audio')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'audio' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '20px' }}>🎵</span>
-                    <span style={{ fontSize: '10px' }}>Audio</span>
+                    <span style={{ fontSize: '20px' }}>🎵</span><span style={{ fontSize: '10px' }}>Audio</span>
                 </button>
-                {/* 3. Picture */}
                 <button onClick={() => handleOptionClick('image')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'image' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '20px' }}>📷</span>
-                    <span style={{ fontSize: '10px' }}>Picture</span>
+                    <span style={{ fontSize: '20px' }}>📷</span><span style={{ fontSize: '10px' }}>Picture</span>
                 </button>
-                {/* 4. Video */}
                 <button onClick={() => handleOptionClick('video')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'video' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '20px' }}>🎥</span>
-                    <span style={{ fontSize: '10px' }}>Video</span>
+                    <span style={{ fontSize: '20px' }}>🎥</span><span style={{ fontSize: '10px' }}>Video</span>
                 </button>
-                {/* 5. EMBED (For Canva Code, etc) */}
                 <button onClick={() => handleOptionClick('embed')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'embed' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '20px' }}>{'</>'}</span>
-                    <span style={{ fontSize: '10px' }}>Embed</span>
+                    <span style={{ fontSize: '20px' }}>{'</>'}</span><span style={{ fontSize: '10px' }}>Embed</span>
                 </button>
             </div>
 
-            {mediaFile && (
-                <div style={{ marginBottom: '15px', color: '#6366f1', fontSize: '14px', textAlign: 'center' }}>
-                    File Selected: <strong>{mediaFile.name}</strong>
-                </div>
-            )}
+            {mediaFile && <div style={{ marginBottom: '15px', color: '#6366f1', fontSize: '14px', textAlign: 'center' }}>File Selected: <strong>{mediaFile.name}</strong></div>}
 
             <textarea
-              style={{ 
-                width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', 
-                border: 'none', minHeight: '100px', fontSize: '16px', marginBottom: '20px', resize: 'none'
-              }}
-              placeholder={
-                  postType === 'embed' ? "Paste your Canva/Embed code here..." :
-                  postType === 'video' ? "Describe video or paste YouTube link..." :
-                  postType === 'audio' ? "Describe your audio..." :
-                  "What's on your mind?"
-              }
+              style={{ width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', border: 'none', minHeight: '100px', fontSize: '16px', marginBottom: '20px', resize: 'none' }}
+              placeholder={postType === 'embed' ? "Paste your Canva/Embed code here..." : "What's on your mind?"}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
             />
 
-            <button 
-              onClick={handlePost}
-              disabled={uploading}
-              style={{ 
-                width: '100%', padding: '14px', backgroundColor: uploading ? '#4b5563' : '#6366f1', 
-                color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: uploading ? 'not-allowed' : 'pointer',
-                fontSize: '16px'
-              }}
-            >
+            <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '14px', backgroundColor: uploading ? '#4b5563' : '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: uploading ? 'not-allowed' : 'pointer', fontSize: '16px' }}>
               {uploading ? 'Publishing...' : 'Post Message'}
             </button>
           </div>
@@ -320,7 +309,6 @@ function MessageBoardContent() {
   )
 }
 
-// 2. WRAPPER FOR BUILD SAFETY
 export default function MessageBoard() {
   return (
     <Suspense fallback={<div style={{color: 'white', padding: '20px'}}>Loading...</div>}>
