@@ -4,7 +4,11 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import DOMPurify from 'isomorphic-dompurify' 
+import DOMPurify from 'isomorphic-dompurify'
+// --- FIX 1: Imports moved to the TOP ---
+import * as nsfwjs from 'nsfwjs'
+import * as tf from '@tensorflow/tfjs'
+// ---------------------------------------
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
@@ -141,6 +145,32 @@ function MessageBoardContent() {
       let type = postType
 
       if (mediaFile) {
+        // ---------------------------------------------------------
+        // 🚨 1. FREE CLIENT-SIDE NUDITY CHECK (NSFWJS)
+        // ---------------------------------------------------------
+        if (type === 'image') {
+           // Load the model (this happens in the browser)
+           const model = await nsfwjs.load()
+           
+           // Create a temporary HTML image to scan
+           const img = document.createElement('img')
+           img.src = URL.createObjectURL(mediaFile)
+           await new Promise((resolve) => { img.onload = resolve }) // Wait for it to load
+
+           // Classify the image
+           const predictions = await model.classify(img)
+           
+           // FIX 2: Added ': any' to 'p' so TypeScript doesn't complain
+           const isExplicit = predictions.some((p: any) => 
+             (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.60
+           )
+
+           if (isExplicit) {
+             throw new Error("Content flagged as inappropriate (NSFW detected).")
+           }
+        }
+        // ---------------------------------------------------------
+
         const fileExt = mediaFile.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`
         const filePath = `${fileName}`
@@ -150,19 +180,6 @@ function MessageBoardContent() {
         
         const { data } = supabase.storage.from('uploads').getPublicUrl(filePath)
         publicUrl = data.publicUrl
-
-        // MODERATION HOOK (If you added the API)
-        if (type === 'image' || type === 'video') {
-            const response = await fetch('/api/moderator', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: publicUrl, type: type })
-            });
-            const result = await response.json();
-            if (!response.ok || !result.safe) {
-                await supabase.storage.from('uploads').remove([filePath]);
-                throw new Error(result.reason || "Content flagged as inappropriate.");
-            }
-        }
       }
 
       if (type === 'video' && !mediaFile && newMessage.match(/youtube\.com|youtu\.be/)) type = 'text' 
