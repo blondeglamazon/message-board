@@ -8,7 +8,7 @@ export default function MessageBoard() {
 
   useEffect(() => {
     async function fetchAllPosts() {
-      // Selecting all posts without filters to restore the home feed
+      // We must explicitly select 'email' and 'user_id' for proper display
       const { data } = await supabase
         .from('posts')
         .select('id, content, created_at, email, user_id') 
@@ -22,7 +22,7 @@ export default function MessageBoard() {
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto' }}>
       <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ fontSize: '32px', color: '#111827' }}>💎 VIMciety</h1>
+        <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
       </header>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -33,19 +33,20 @@ export default function MessageBoard() {
               backgroundColor: '#1a1a1a', 
               padding: '20px', 
               borderRadius: '12px', 
-              border: '1px solid #333'
+              border: '1px solid #333',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontWeight: 'bold', color: '#6366f1' }}>
-                {/* This fixes the "Anonymous" issue by ensuring email is used */}
+              <span style={{ fontWeight: 'bold', color: '#6366f1', fontSize: '14px' }}>
+                {/* This uses the 'email' column from Supabase */}
                 {msg.email || 'Anonymous User'}
               </span>
               <span style={{ color: '#888', fontSize: '12px' }}>
                 {new Date(msg.created_at).toLocaleTimeString()}
               </span>
             </div>
-            <p style={{ margin: 0, color: 'white' }}>{msg.content}</p>
+            <p style={{ margin: 0, color: 'white', lineHeight: '1.5' }}>{msg.content}</p>
           </div>
         ))}
       </div>

@@ -10,9 +10,7 @@ export default function ProfilePage({ params }: { params: { username: string } }
 
   useEffect(() => {
     async function fetchProfileAndPosts() {
-      setLoading(true)
-      
-      // 1. Fetch the profile details using 'ilike' for a case-insensitive match
+      // 1. Fetch profile using case-insensitive 'ilike' match
       const { data: profileData } = await supabase
         .from('profiles')
         .select('id, username')
@@ -22,11 +20,10 @@ export default function ProfilePage({ params }: { params: { username: string } }
       if (profileData) {
         setProfile(profileData)
 
-        // 2. Fetch ONLY posts belonging to this specific profile's user_id
-        // CRITICAL: We must explicitly select 'email' to avoid "Anonymous" labels
+        // 2. Fetch ONLY posts belonging to this specific user_id
         const { data: postsData } = await supabase
           .from('posts')
-          .select('id, content, created_at, email, user_id')
+          .select('id, content, created_at, email')
           .eq('user_id', profileData.id)
           .order('created_at', { ascending: false })
 
@@ -35,19 +32,11 @@ export default function ProfilePage({ params }: { params: { username: string } }
       setLoading(false)
     }
 
-    if (params.username) {
-      fetchProfileAndPosts()
-    }
+    if (params.username) fetchProfileAndPosts()
   }, [params.username])
 
   if (loading) return <div style={{ padding: '20px', color: '#111827' }}>Loading profile...</div>
-  
-  if (!profile) return (
-    <div style={{ padding: '20px', color: '#111827' }}>
-      <h1>Profile not found</h1>
-      <p>We couldn't find a profile for "{params.username}"</p>
-    </div>
-  )
+  if (!profile) return <div style={{ padding: '20px', color: '#111827' }}>Profile not found for "{params.username}"</div>
 
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto', color: '#111827' }}>
@@ -59,25 +48,12 @@ export default function ProfilePage({ params }: { params: { username: string } }
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         {userPosts.length > 0 ? (
           userPosts.map((msg: any) => (
-            <div 
-              key={msg.id} 
-              style={{ 
-                backgroundColor: '#1a1a1a', 
-                padding: '20px', 
-                borderRadius: '12px', 
-                border: '1px solid #333',
-                color: 'white'
-              }}
-            >
+            <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', color: 'white' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <span style={{ fontWeight: 'bold', color: '#6366f1' }}>
-                  {msg.email || 'Anonymous User'}
-                </span>
-                <span style={{ color: '#888', fontSize: '12px' }}>
-                  {new Date(msg.created_at).toLocaleDateString()}
-                </span>
+                <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{msg.email}</span>
+                <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleDateString()}</span>
               </div>
-              <p style={{ margin: 0, lineHeight: '1.5' }}>{msg.content}</p>
+              <p style={{ margin: 0 }}>{msg.content}</p>
             </div>
           ))
         ) : (
