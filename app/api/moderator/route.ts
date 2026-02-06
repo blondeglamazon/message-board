@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 
-// Initialize the Google Vision Client
-// We use a trick to fix the "\n" characters in the key
-const client = new ImageAnnotatorClient({
-  credentials: {
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-  projectId: process.env.GOOGLE_PROJECT_ID,
-});
-
 export async function POST(req: Request) {
   try {
+    // --- MOVED INSIDE: Initialize here to catch any key errors ---
+    const client = new ImageAnnotatorClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      },
+      projectId: process.env.GOOGLE_PROJECT_ID,
+    });
+    // -------------------------------------------------------------
+
     const { url, type } = await req.json();
 
-    // We only scan images for now (Video requires a different setup)
+    // We only scan images for now
     if (type === 'image') {
       console.log("🔍 Scanning image:", url);
 
@@ -44,7 +44,11 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Moderation Error:", error);
-    // FAIL SECURE: If scanning fails, block the upload just in case.
-    return NextResponse.json({ safe: false, reason: "Could not verify content safety." }, { status: 500 });
+    // This will now print the REAL error message to your terminal/logs
+    return NextResponse.json({ 
+        safe: false, 
+        reason: "Could not verify content safety.",
+        details: error.message 
+    }, { status: 500 });
   }
 }
