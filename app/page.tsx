@@ -2,32 +2,40 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/app/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
 export default function MessageBoard() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
-    // 1. Get the current logged-in user so we can tag new posts
+    // 1. Get Current User
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
+      setLoading(false)
     }
     getUser()
 
-    // 2. Fetch ALL posts for the home feed (Restores the missing content)
-    async function fetchAllPosts() {
-      const { data } = await supabase
+    // 2. Fetch Messages
+    async function fetchMessages() {
+      const { data, error } = await supabase
         .from('posts')
-        .select('id, content, created_at, email, user_id') // explicitly selects email
+        .select('id, content, created_at, email, user_id')
         .order('created_at', { ascending: false })
       
-      if (data) setMessages(data)
+      if (error) {
+        console.error('Error fetching posts:', error)
+      } else if (data) {
+        setMessages(data)
+      }
     }
-    fetchAllPosts()
+    fetchMessages()
 
-    // 3. Real-time updates (Optional, but keeps the list fresh)
+    // 3. Real-time Subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -39,7 +47,11 @@ export default function MessageBoard() {
   }, [])
 
   async function handlePost() {
-    if (!newMessage.trim() || !user) return
+    if (!user) {
+      alert("You must be logged in to post!")
+      return
+    }
+    if (!newMessage.trim()) return
 
     const { error } = await supabase.from('posts').insert([
       { 
@@ -49,13 +61,51 @@ export default function MessageBoard() {
       }
     ])
 
-    if (!error) setNewMessage('')
+    if (error) {
+      alert("Error posting: " + error.message)
+    } else {
+      setNewMessage('')
+    }
   }
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
       <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
+        <h1 style={{ fontSize: '32px', color: '#111827', margin: '0 0 20px 0' }}>💎 VIMciety</h1>
+        
+        {/* User Status Bar */}
+        {loading ? (
+          <p style={{ color: '#666' }}>Loading user...</p>
+        ) : user ? (
+          <div style={{ 
+            backgroundColor: '#d1fae5', 
+            color: '#065f46', 
+            padding: '10px', 
+            borderRadius: '8px', 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px'
+          }}>
+            <span>Logged in as: <strong>{user.email}</strong></span>
+            <button 
+              onClick={async () => { await supabase.auth.signOut(); setUser(null); }}
+              style={{ backgroundColor: '#059669', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Sign Out
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '20px' }}>
+             <p style={{ color: 'red', marginBottom: '10px' }}>You are not logged in.</p>
+             <button 
+               onClick={() => router.push('/login')}
+               style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer' }}
+             >
+               Go to Login Page
+             </button>
+          </div>
+        )}
       </header>
 
       {/* Input Area */}
@@ -86,7 +136,8 @@ export default function MessageBoard() {
             borderRadius: '8px', 
             marginTop: '10px',
             fontWeight: 'bold',
-            cursor: 'pointer' 
+            cursor: 'pointer',
+            opacity: user ? 1 : 0.5 
           }}
         >
           Post Message
@@ -117,6 +168,9 @@ export default function MessageBoard() {
             <p style={{ margin: 0, color: 'white', lineHeight: '1.5' }}>{msg.content}</p>
           </div>
         ))}
+        {messages.length === 0 && (
+          <p style={{ textAlign: 'center', color: '#666' }}>No posts found.</p>
+        )}
       </div>
     </div>
   )
