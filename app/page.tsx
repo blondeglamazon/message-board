@@ -156,7 +156,7 @@ export default function MessageBoard() {
         )}
       </header>
 
-      {/* Input Area - ADDED ID HERE FOR SIDEBAR SCROLLING */}
+      {/* Input Area - NOW HAS ID for Sidebar Navigation */}
       <div id="create-post" style={{ marginBottom: '40px', backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px' }}>
         <textarea
           style={{ 
@@ -168,9 +168,9 @@ export default function MessageBoard() {
           onChange={(e) => setNewMessage(e.target.value)}
         />
         
-        {/* Image Uploader */}
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ color: '#ccc', fontSize: '14px', marginRight: '10px' }}>Attach Image:</label>
+        {/* Post Options */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
+          <label style={{ color: '#ccc', fontSize: '14px' }}>Attach Image:</label>
           <input 
             type="file" 
             accept="image/*"
