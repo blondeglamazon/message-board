@@ -1,31 +1,30 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function MessageBoard() {
+// 1. THE MAIN LOGIC COMPONENT
+function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [postType, setPostType] = useState<string>('text') // text, image, video, audio, link
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
   
-  // Ref to trigger file inputs
   const fileInputRef = useRef<HTMLInputElement>(null)
-
   const router = useRouter()
   const searchParams = useSearchParams()
+  
+  // Read the ?create=true signal
   const showCreateModal = searchParams.get('create') === 'true'
 
   useEffect(() => {
     async function getUser() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
-      setLoading(false)
     }
     getUser()
 
@@ -49,7 +48,6 @@ export default function MessageBoard() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  // Handle Post Submission
   async function handlePost() {
     if (!user) {
       alert("You must be logged in to post!")
@@ -62,7 +60,6 @@ export default function MessageBoard() {
       let publicUrl = null
       let type = postType
 
-      // Upload Logic
       if (mediaFile) {
         const fileExt = mediaFile.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`
@@ -78,9 +75,8 @@ export default function MessageBoard() {
         publicUrl = data.publicUrl
       }
 
-      // Check for YouTube links if type is video but no file
+      // Check for YouTube links if video type selected but no file
       if (type === 'video' && !mediaFile && newMessage.match(/youtube\.com|youtu\.be/)) {
-         // It's a YouTube text link, treat as text/link but with video intent
          type = 'text' 
       }
 
@@ -108,17 +104,14 @@ export default function MessageBoard() {
     }
   }
 
-  // Handle Button Clicks in Modal
   const handleOptionClick = (type: string) => {
     setPostType(type)
     setMediaFile(null)
     if (type === 'image' || type === 'video' || type === 'audio') {
-        // Trigger hidden file input
         setTimeout(() => fileInputRef.current?.click(), 100)
     }
   }
 
-  // Get correct accept attribute
   const getAcceptType = () => {
       if (postType === 'image') return 'image/*'
       if (postType === 'video') return 'video/*'
@@ -126,9 +119,7 @@ export default function MessageBoard() {
       return '*'
   }
 
-  // Helper to render content
   const renderContent = (msg: any) => {
-    // 1. Render Text with Links/YouTube
     const text = msg.content || '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = text.split(urlRegex);
@@ -154,8 +145,6 @@ export default function MessageBoard() {
     return (
       <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
         {textContent}
-        
-        {/* 2. Render Uploaded Media */}
         {msg.media_url && (
             <div style={{ marginTop: '10px' }}>
                 {msg.post_type === 'image' && (
@@ -179,7 +168,6 @@ export default function MessageBoard() {
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto', padding: '20px' }}>
       
-      {/* HEADER */}
       <header style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ fontSize: '32px', color: '#111827', margin: 0 }}>💎 VIMciety</h1>
         {user && (
@@ -192,7 +180,6 @@ export default function MessageBoard() {
         )}
       </header>
 
-      {/* MESSAGE LIST */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         {messages.map((msg: any) => (
           <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
@@ -205,7 +192,6 @@ export default function MessageBoard() {
         ))}
       </div>
 
-      {/* MODAL - Create Post */}
       {showCreateModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -222,7 +208,6 @@ export default function MessageBoard() {
               <Link href="/" style={{ color: '#888', textDecoration: 'none', fontSize: '24px' }}>&times;</Link>
             </div>
 
-            {/* Hidden File Input */}
             <input 
                 type="file" 
                 ref={fileInputRef}
@@ -231,7 +216,6 @@ export default function MessageBoard() {
                 onChange={(e) => setMediaFile(e.target.files?.[0] || null)}
             />
 
-            {/* 5 OPTION BUTTONS */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' }}>
                 <button onClick={() => handleOptionClick('text')} style={{ padding: '10px', borderRadius: '8px', border: 'none', backgroundColor: postType === 'text' ? '#6366f1' : '#333', color: 'white', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
                     <span style={{ fontSize: '20px' }}>📝</span>
@@ -255,14 +239,12 @@ export default function MessageBoard() {
                 </button>
             </div>
 
-            {/* Status Display */}
             {mediaFile && (
                 <div style={{ marginBottom: '15px', color: '#6366f1', fontSize: '14px', textAlign: 'center' }}>
                     File Selected: <strong>{mediaFile.name}</strong>
                 </div>
             )}
 
-            {/* Input Area */}
             <textarea
               style={{ 
                 width: '100%', padding: '15px', borderRadius: '10px', backgroundColor: '#333', color: 'white', 
@@ -294,5 +276,14 @@ export default function MessageBoard() {
       )}
 
     </div>
+  )
+}
+
+// 2. THE WRAPPER (Fixes the Build Error)
+export default function MessageBoard() {
+  return (
+    <Suspense fallback={<div style={{color: 'white', padding: '20px'}}>Loading...</div>}>
+      <MessageBoardContent />
+    </Suspense>
   )
 }
