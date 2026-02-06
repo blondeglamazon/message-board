@@ -13,19 +13,19 @@ export default function RootLayout({
         padding: 0, 
         display: "flex", 
         fontFamily: "sans-serif",
-        backgroundColor: "#000000", // Global page background
-        color: "#FFFFFF",           // Default text color
+        // This is the new light baby blue background
+        backgroundColor: "#E0F2FE", 
+        minHeight: "100vh"
       }}>
+        {/* The Sidebar component */}
         <Sidebar />
         
         <main style={{ 
           marginLeft: "75px", 
           flex: 1, 
-          padding: "20px", 
-          minHeight: "100vh",
-          // The following line ensures that browser-default 
-          // elements (like scrollbars and inputs) use dark mode.
-          colorScheme: "dark" 
+          padding: "20px",
+          // Ensures content is visible against the light background
+          color: "#111827" 
         }}>
           {children}
         </main>
