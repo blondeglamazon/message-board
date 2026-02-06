@@ -5,24 +5,23 @@ import { supabase } from '@/app/lib/supabaseClient'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
-// --- Imports for Client-Side Filter ---
 import * as nsfwjs from 'nsfwjs'
 import * as tf from '@tensorflow/tfjs'
-// --------------------------------------
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   
-  // Search State
+  // Comment State
+  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+
   const [searchQuery, setSearchQuery] = useState('')
-  
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
   
-  // Follow System State
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [adminIds, setAdminIds] = useState<Set<string>>(new Set())
 
@@ -33,12 +32,9 @@ function MessageBoardContent() {
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
   const currentFeed = searchParams.get('feed') || 'global' 
-  
-  // Load initial search from URL if present
   const urlSearchQuery = searchParams.get('q') || ''
 
   useEffect(() => {
-    // Sync local state with URL query on load
     if (urlSearchQuery) setSearchQuery(urlSearchQuery)
   }, [urlSearchQuery])
 
@@ -47,21 +43,25 @@ function MessageBoardContent() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
-      // Fetch Admins
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
       if (user) {
-        // Fetch Follows
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
         setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
       }
 
-      // Fetch Posts
+      // --- UPDATED QUERY: Fetch Likes and Comments ---
+      // We join 'likes' and 'comments' to get the counts and data
       let query = supabase
         .from('posts')
-        .select('id, content, created_at, email, user_id, media_url, post_type')
+        .select(`
+            *,
+            likes ( user_id ),
+            comments ( id, content, email, user_id, created_at )
+        `)
         .order('created_at', { ascending: false })
+        .order('created_at', { foreignTable: 'comments', ascending: true })
 
       if (user && currentFeed === 'following') {
          const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
@@ -80,15 +80,18 @@ function MessageBoardContent() {
          else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
       }
 
-      const { data: posts } = await query
+      const { data: posts, error } = await query
+      if (error) console.error("Error fetching posts:", error)
       if (posts) setMessages(posts)
     }
     initData()
 
+    // Realtime subscription (basic)
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
-        setMessages((prev) => [payload.new, ...prev])
+        // Note: New posts won't have likes/comments yet, so we just add the raw payload
+        setMessages((prev) => [{ ...payload.new, likes: [], comments: [] }, ...prev])
       })
       .subscribe()
 
@@ -112,23 +115,74 @@ function MessageBoardContent() {
     }
   }
 
-  // --- UPDATED SEARCH LOGIC ---
-  const handleSearchSubmit = () => {
-    // When "Done" is clicked, push the query to the URL so it persists
-    if (searchQuery.trim()) {
-      router.push(`/?q=${encodeURIComponent(searchQuery)}`)
+  // --- NEW: Handle Likes ---
+  async function handleLike(postId: string, isLiked: boolean) {
+    if (!user) return alert("Please login to like posts.")
+    
+    // 1. Optimistic Update (Update UI instantly)
+    setMessages(prev => prev.map(msg => {
+        if (msg.id === postId) {
+            const newLikes = isLiked 
+                ? msg.likes.filter((l: any) => l.user_id !== user.id) // Remove like
+                : [...(msg.likes || []), { user_id: user.id }] // Add like
+            return { ...msg, likes: newLikes }
+        }
+        return msg
+    }))
+
+    // 2. Database Update
+    if (isLiked) {
+        await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
     } else {
-      router.push('/')
+        await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
     }
   }
 
+  // --- NEW: Handle Comments ---
+  const toggleComments = (postId: string) => {
+    const newSet = new Set(openComments)
+    if (newSet.has(postId)) newSet.delete(postId)
+    else newSet.add(postId)
+    setOpenComments(newSet)
+  }
+
+  async function handlePostComment(postId: string) {
+    if (!user) return alert("Please login to comment.")
+    const text = commentText[postId]?.trim()
+    if (!text) return
+
+    // 1. Database Update
+    const { data: newComment, error } = await supabase
+        .from('comments')
+        .insert({ post_id: postId, user_id: user.id, email: user.email, content: text })
+        .select()
+        .single()
+
+    if (error) {
+        alert("Error posting comment: " + error.message)
+        return
+    }
+
+    // 2. Local Update
+    setMessages(prev => prev.map(msg => {
+        if (msg.id === postId) {
+            return { ...msg, comments: [...(msg.comments || []), newComment] }
+        }
+        return msg
+    }))
+    
+    setCommentText(prev => ({ ...prev, [postId]: '' }))
+  }
+
+  const handleSearchSubmit = () => {
+    if (searchQuery.trim()) router.push(`/?q=${encodeURIComponent(searchQuery)}`)
+    else router.push('/')
+  }
+
   const filteredMessages = messages.filter(msg => {
-    // 1. If we have a URL query (?q=...), use that. Otherwise use local input.
     const query = urlSearchQuery || searchQuery
     if (!query) return true;
-    
     const lowerQ = query.toLowerCase();
-    // 2. Search both CONTENT and EMAIL (Username)
     return (
         (msg.content && msg.content.toLowerCase().includes(lowerQ)) || 
         (msg.email && msg.email.toLowerCase().includes(lowerQ))
@@ -145,32 +199,17 @@ function MessageBoardContent() {
       let type = postType
 
       if (mediaFile) {
-        // ---------------------------------------------------------
-        // 🚨 1. FREE CLIENT-SIDE NUDITY CHECK (NSFWJS)
-        // ---------------------------------------------------------
         if (type === 'image') {
-           // Load the model (this happens in the browser)
            const model = await nsfwjs.load()
-           
-           // Create a temporary HTML image to scan
            const img = document.createElement('img')
            img.src = URL.createObjectURL(mediaFile)
-           await new Promise((resolve) => { img.onload = resolve }) // Wait for it to load
-
-           // Classify the image
+           await new Promise((resolve) => { img.onload = resolve }) 
            const predictions = await model.classify(img)
-           
-           // FIX: Raised limit to 0.90 (90%)
-           // It will now only block if it is VERY sure.
            const isExplicit = predictions.some((p: any) => 
              (p.className === 'Porn' || p.className === 'Hentai') && p.probability > 0.90
            )
-
-           if (isExplicit) {
-             throw new Error("Content flagged as inappropriate (NSFW detected).")
-           }
+           if (isExplicit) throw new Error("Content flagged as inappropriate (NSFW detected).")
         }
-        // ---------------------------------------------------------
 
         const fileExt = mediaFile.name.split('.').pop()
         const fileName = `${Date.now()}.${fileExt}`
@@ -208,41 +247,45 @@ function MessageBoardContent() {
   }
 
   const renderContent = (msg: any) => {
+    let contentElement = null;
+    
     if (msg.post_type === 'embed') {
         const cleanHTML = DOMPurify.sanitize(msg.content, {
             ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'blockquote', 'ul', 'li', 'br'],
             ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'href', 'target', 'class', 'loading'],
             ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling']
         });
-        return <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: cleanHTML }} />
+        contentElement = <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: cleanHTML }} />
+    } else {
+        const text = msg.content || '';
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        const parts = text.split(urlRegex);
+        const textContent = parts.map((part: string, index: number) => {
+          if (part.match(urlRegex)) {
+            const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+            if (youtubeMatch) return (
+                <div key={index} style={{ margin: '15px 0' }}><iframe width="100%" height="300" src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} title="YouTube" frameBorder="0" allowFullScreen style={{ borderRadius: '12px' }}></iframe></div>
+            );
+            return <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
+          }
+          return <span key={index}>{part}</span>;
+        });
+        
+        contentElement = (
+            <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
+                {textContent}
+                {msg.media_url && (
+                    <div style={{ marginTop: '10px' }}>
+                        {msg.post_type === 'image' && <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                        {msg.post_type === 'video' && <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                        {msg.post_type === 'audio' && (<div style={{ backgroundColor: '#333', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}><span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>)}
+                    </div>
+                )}
+            </div>
+        )
     }
 
-    const text = msg.content || '';
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = text.split(urlRegex);
-    const textContent = parts.map((part: string, index: number) => {
-      if (part.match(urlRegex)) {
-        const youtubeMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-        if (youtubeMatch) return (
-            <div key={index} style={{ margin: '15px 0' }}><iframe width="100%" height="300" src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} title="YouTube" frameBorder="0" allowFullScreen style={{ borderRadius: '12px' }}></iframe></div>
-        );
-        return <a key={index} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
-      }
-      return <span key={index}>{part}</span>;
-    });
-
-    return (
-      <div style={{ margin: '0 0 10px 0', color: 'white', lineHeight: '1.5' }}>
-        {textContent}
-        {msg.media_url && (
-            <div style={{ marginTop: '10px' }}>
-                {msg.post_type === 'image' && <img src={msg.media_url} alt="Uploaded" style={{ maxWidth: '100%', borderRadius: '8px' }} />}
-                {msg.post_type === 'video' && <video controls src={msg.media_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
-                {msg.post_type === 'audio' && (<div style={{ backgroundColor: '#333', padding: '10px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}><span style={{ marginRight: '10px', fontSize: '20px' }}>🎵</span><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>)}
-            </div>
-        )}
-      </div>
-    )
+    return contentElement
   };
 
   return (
@@ -257,7 +300,6 @@ function MessageBoardContent() {
                     {currentFeed}
                 </span>
             )}
-            {/* Show active search pill */}
             {urlSearchQuery && (
                  <span style={{ backgroundColor: '#111827', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     🔍 "{urlSearchQuery}" 
@@ -283,7 +325,13 @@ function MessageBoardContent() {
       {/* Feed */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         {filteredMessages.length > 0 ? (
-           filteredMessages.map((msg: any) => (
+           filteredMessages.map((msg: any) => {
+             const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
+             const likesCount = msg.likes?.length || 0;
+             const commentsCount = msg.comments?.length || 0;
+             const isCommentsOpen = openComments.has(msg.id);
+
+             return (
              <div key={msg.id} style={{ backgroundColor: '#1a1a1a', padding: '20px', borderRadius: '12px', border: '1px solid #333' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -308,9 +356,67 @@ function MessageBoardContent() {
                  </div>
                  <span style={{ color: '#888', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleTimeString()}</span>
                </div>
+               
                {renderContent(msg)}
+
+               {/* ACTIONS BAR */}
+               <div style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px', display: 'flex', gap: '20px' }}>
+                    <button 
+                        onClick={() => handleLike(msg.id, isLiked)}
+                        style={{ background: 'none', border: 'none', color: isLiked ? '#ef4444' : '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}
+                    >
+                        {isLiked ? '❤️' : '🤍'} {likesCount}
+                    </button>
+                    <button 
+                        onClick={() => toggleComments(msg.id)}
+                        style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px' }}
+                    >
+                        💬 {commentsCount}
+                    </button>
+               </div>
+
+               {/* COMMENTS SECTION */}
+               {isCommentsOpen && (
+                   <div style={{ marginTop: '15px', backgroundColor: '#262626', padding: '15px', borderRadius: '8px' }}>
+                       {/* Comment List */}
+                       <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
+                           {msg.comments && msg.comments.length > 0 ? (
+                               msg.comments.map((c: any) => (
+                                   <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
+                                       <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
+                                       <div style={{ fontSize: '14px', color: '#e5e7eb' }}>{c.content}</div>
+                                   </div>
+                               ))
+                           ) : (
+                               <div style={{ color: '#6b7280', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>
+                           )}
+                       </div>
+                       
+                       {/* Add Comment */}
+                       {user ? (
+                           <div style={{ display: 'flex', gap: '10px' }}>
+                               <input 
+                                  type="text" 
+                                  placeholder="Write a comment..." 
+                                  value={commentText[msg.id] || ''}
+                                  onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                  onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)}
+                                  style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white' }}
+                               />
+                               <button 
+                                  onClick={() => handlePostComment(msg.id)}
+                                  style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}
+                               >
+                                  Post
+                               </button>
+                           </div>
+                       ) : (
+                           <div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>
+                       )}
+                   </div>
+               )}
              </div>
-           ))
+           )})
         ) : (
            <div style={{ textAlign: 'center', color: '#666', marginTop: '50px' }}>
                 <p>No posts found.</p>
