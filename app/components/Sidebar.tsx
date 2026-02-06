@@ -57,8 +57,8 @@ export default function Sidebar() {
         </div>
       </Link>
 
-      {/* Create Post Icon (Plus) - Fixed to scroll to the input box */}
-      <Link href="/#create-post">
+      {/* Create Post Icon (Plus) - UPDATED TO OPEN MODAL */}
+      <Link href="/?create=true">
         <div style={{ 
           cursor: 'pointer', 
           color: '#6366f1', 
