@@ -4,15 +4,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/app/lib/supabaseClient'
 
 export default function MessageBoard() {
-  // Fixes Error 2552: Correctly defining state for messages
   const [messages, setMessages] = useState<any[]>([])
 
   useEffect(() => {
     async function fetchAllPosts() {
-      // Fetching ALL posts for the home feed
-      const { data, error } = await supabase
+      // Selecting all posts without filters to restore the home feed
+      const { data } = await supabase
         .from('posts')
-        .select('id, content, created_at, email, user_id') // Ensure email is selected
+        .select('id, content, created_at, email, user_id') 
         .order('created_at', { ascending: false })
       
       if (data) setMessages(data)
@@ -39,8 +38,8 @@ export default function MessageBoard() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
               <span style={{ fontWeight: 'bold', color: '#6366f1' }}>
-                {/* Ensuring email displays correctly instead of "Anonymous" */}
-                {msg.email ? msg.email : 'Anonymous User'}
+                {/* This fixes the "Anonymous" issue by ensuring email is used */}
+                {msg.email || 'Anonymous User'}
               </span>
               <span style={{ color: '#888', fontSize: '12px' }}>
                 {new Date(msg.created_at).toLocaleTimeString()}
