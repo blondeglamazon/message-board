@@ -40,13 +40,14 @@ export default function SettingsPage() {
       return
     }
 
-    // We only send username and bio. 
-    // The database handles 'id' and 'updated_at' automatically.
+    // Clean username one last time before saving
+    const finalUsername = username.trim().toLowerCase()
+
     const { error } = await supabase
       .from('profiles')
       .upsert({ 
         id: user.id, 
-        username: username.trim(), 
+        username: finalUsername, 
         bio: bio.trim()
       })
 
@@ -88,9 +89,14 @@ export default function SettingsPage() {
             color: 'white' 
           }}
           value={username} 
-          onChange={(e) => setUsername(e.target.value)} 
+          onChange={(e) => setUsername(e.target.value.replace(/\s/g, "").toLowerCase())} 
           placeholder="Enter username"
+          pattern="^[a-z0-9_]+$"
+          title="Usernames can only contain lowercase letters, numbers, and underscores."
         />
+        <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
+          Only lowercase letters, numbers, and underscores. No spaces allowed.
+        </p>
       </div>
 
       <div style={{ marginBottom: '20px' }}>

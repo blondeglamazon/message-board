@@ -1,11 +1,43 @@
 "use client";
-import React, { useState } from 'react';
-import { Home, Search, PlusSquare, Type, Image, Link, Code, Mic, Video, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Search, PlusSquare, Type, Image, Link, Code, Mic, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/app/lib/supabaseClient'; 
 
-export default function Sidebar({ currentUser }: { currentUser: any }) {
+export default function Sidebar() {
   const [isPostModalOpen, setPostModalOpen] = useState(false);
+  const [profilePath, setProfilePath] = useState('/login');
+  const [userLetter, setUserLetter] = useState('U');
   const router = useRouter();
+
+  useEffect(() => {
+    async function getDynamicLink() {
+      // 1. Get the current logged-in user from Supabase Auth
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        // 2. Fetch their specific username from your Supabase table
+        const { data } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        if (data?.username) {
+          // If username exists, route to /[username]
+          setProfilePath(`/${data.username}`);
+          setUserLetter(data.username[0].toUpperCase());
+        } else {
+          // Fallback to settings if they haven't set a username yet
+          setProfilePath('/settings');
+        }
+      } else {
+        // 3. If no user is found, default the icon to the login page
+        setProfilePath('/login');
+      }
+    }
+    getDynamicLink();
+  }, []);
 
   const navItems = [
     { icon: <Home size={28} />, label: 'Home', path: '/' },
@@ -15,22 +47,17 @@ export default function Sidebar({ currentUser }: { currentUser: any }) {
   return (
     <>
       <aside style={styles.sidebar}>
-        {/* 1. Profile Picture Icon */}
+        {/* Dynamic Profile Icon Link */}
         <div 
-          onClick={() => router.push('/profile')} 
+          onClick={() => router.push(profilePath)} 
           style={styles.profileIcon}
           title="My Profile"
         >
-          {currentUser?.avatar_url ? (
-            <img src={currentUser.avatar_url} alt="Profile" style={styles.avatar} />
-          ) : (
-            <div style={styles.avatarPlaceholder}>
-              {currentUser?.email?.[0].toUpperCase() || 'U'}
-            </div>
-          )}
+          <div style={styles.avatarPlaceholder}>
+            {userLetter}
+          </div>
         </div>
 
-        {/* 2. Navigation Buttons */}
         <nav style={styles.navGroup}>
           {navItems.map((item) => (
             <button key={item.label} onClick={() => router.push(item.path)} style={styles.iconBtn}>
@@ -38,7 +65,6 @@ export default function Sidebar({ currentUser }: { currentUser: any }) {
             </button>
           ))}
 
-          {/* 3. New Post Button */}
           <button onClick={() => setPostModalOpen(true)} style={styles.postBtn}>
             <PlusSquare size={32} color="#6366f1" />
           </button>
@@ -95,14 +121,6 @@ const styles: Record<string, React.CSSProperties> = {
   profileIcon: {
     cursor: 'pointer',
     marginBottom: '40px',
-    transition: 'transform 0.2s',
-  },
-  avatar: {
-    width: '45px',
-    height: '45px',
-    borderRadius: '50%',
-    objectFit: 'cover',
-    border: '2px solid #6366f1',
   },
   avatarPlaceholder: {
     width: '45px',

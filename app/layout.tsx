@@ -1,24 +1,30 @@
 import React from "react";
-import Sidebar from "./components/Sidebar"; // Matches the Capital S
+import Sidebar from "./components/Sidebar";
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Mock user for the sidebar to link to your profile
-  const mockUser = { 
-    username: "blondeglamazon", 
-    avatar_url: null 
-  };
-
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0, display: "flex", fontFamily: "sans-serif" }}>
-        {/* The Sidebar is now global */}
-        <Sidebar currentUser={mockUser} />
+      <body style={{ 
+        margin: 0, 
+        padding: 0, 
+        display: "flex", 
+        fontFamily: "sans-serif",
+        backgroundColor: "#000",
+        color: "white"
+      }}>
+        {/* The Sidebar now automatically detects the user session */}
+        <Sidebar />
         
-        <main style={{ marginLeft: "75px", flex: 1, padding: "20px", minHeight: "100vh" }}>
+        <main style={{ 
+          marginLeft: "75px", 
+          flex: 1, 
+          padding: "20px", 
+          minHeight: "100vh" 
+        }}>
           {children}
         </main>
       </body>
