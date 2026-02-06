@@ -33,26 +33,37 @@ function ProfileContent() {
          return // No ID to load (and not logged in)
       }
 
-      // A. Fetch User Details (Email/Date)
-      // We try to get it from 'posts' first since we know that table has emails
+     // A. Fetch User Details (Email/Date)
+      // FIX: Check 'profiles' table first, then fallback to 'posts'
+      // We also verify the email is not null so we don't display "null"
+      let email = 'Unknown User'
+      let memberSince = new Date().toLocaleDateString()
+
+      // 1. Try to find a post with a valid email (Newest first)
       const { data: userPosts } = await supabase
          .from('posts')
          .select('email, created_at')
          .eq('user_id', userIdToFetch)
-         .order('created_at', { ascending: true })
+         .not('email', 'is', null) // Ensure email exists
+         .order('created_at', { ascending: false }) // Look at NEWEST posts first
          .limit(1)
       
-      let email = 'Unknown User'
-      let memberSince = new Date().toLocaleDateString()
-      
+      // 2. Also get the *oldest* date for "Member Since"
+      const { data: firstPost } = await supabase
+         .from('posts')
+         .select('created_at')
+         .eq('user_id', userIdToFetch)
+         .order('created_at', { ascending: true })
+         .limit(1)
+
       if (userPosts && userPosts.length > 0) {
           email = userPosts[0].email
-          // Use first post date as proxy for "Member Since" if auth data isn't available
-          memberSince = new Date(userPosts[0].created_at).toLocaleDateString() 
       } else if (loggedInUser && loggedInUser.id === userIdToFetch) {
-          // If it's ME, I know my own details
           email = loggedInUser.email || ''
-          memberSince = new Date(loggedInUser.created_at).toLocaleDateString()
+      }
+      
+      if (firstPost && firstPost.length > 0) {
+          memberSince = new Date(firstPost[0].created_at).toLocaleDateString()
       }
 
       setProfileUser({ id: userIdToFetch, email, memberSince })
