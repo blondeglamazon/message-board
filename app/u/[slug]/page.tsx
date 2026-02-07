@@ -6,13 +6,13 @@ interface UserProfilePageProps {
 }
 
 export default async function UserProfilePage({ params }: UserProfilePageProps) {
-  // 1. Await params (Required for Next.js 15+)
+  // 1. Next.js 15 REQUIRES awaiting params
   const { slug } = await params
   
-  // 2. Initialize the server client
+  // 2. Initialize the server client (ensure it is awaited)
   const supabase = await createClient()
 
-  // 3. Fetch the profile by slug (case-insensitive)
+  // 3. Fetch profile (ilike handles case-insensitivity like Blondeglamazon vs blondeglamazon)
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
