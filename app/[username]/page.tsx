@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { supabase } from '@/app/lib/supabaseClient'
+import { supabase } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 

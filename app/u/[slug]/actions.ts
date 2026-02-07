@@ -1,5 +1,5 @@
 'use server'
-import { createClient } from '@/app/lib/supabaseServer'
+import { createClient } from '@/app/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 export async function toggleFollow(followerId: string, followingId: string, isFollowing: boolean) {

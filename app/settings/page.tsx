@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/app/lib/supabaseClient'
+import { supabase } from '@/app/lib/supabase/client'
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(false)

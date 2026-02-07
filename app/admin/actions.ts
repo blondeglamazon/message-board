@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/app/lib/supabaseServer'
+import { createClient } from '@/app/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
 // Helper function for logging admin actions
