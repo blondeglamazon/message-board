@@ -16,9 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#000' }}>
-        {/* We removed the <SideNav> component from here */}
-        {/* Now it will only render the page content (which includes your new Black Sidebar) */}
+      <body
+        className={inter.className}
+        style={{ margin: 0, padding: 0, backgroundColor: '#000' }}
+      >
         {children}
       </body>
     </html>
