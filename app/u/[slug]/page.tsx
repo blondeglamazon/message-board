@@ -1,134 +1,156 @@
-import { createClient } from '@/app/lib/supabase/server'
-import { notFound } from 'next/navigation'
-import { toggleFollow, likePost } from './actions'
+// app/u/[slug]/page.tsx
+'use server'
 
-export default async function UserHomepage({ params }: { params: { slug: string } }) {
+import { createClient } from '@/app/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+import Link from 'next/link'
+
+interface Profile {
+  id: string
+  username: string
+  email: string
+  avatar_url?: string
+  bio?: string
+  homepage_slug: string
+  is_public: boolean
+}
+
+interface Post {
+  id: string
+  content: string
+  created_at: string
+}
+
+interface UserProfilePageProps {
+  params: { slug: string }
+}
+
+export default async function UserProfilePage({ params }: UserProfilePageProps) {
   const supabase = await createClient()
-  
-  // 1. Fetch user profile
-  const { data: profile } = await supabase
+  const slug = params.slug
+
+  // 1️⃣ Fetch profile by slug (public profiles only)
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
-    .eq('homepage_slug', params.slug)
-    .single()
+    .ilike('homepage_slug', slug)
+    .eq('is_public', true) // ensures only public profiles
+    .maybeSingle()
 
-  if (!profile) notFound()
+  if (profileError || !profile) {
+    return (
+      <div style={{ padding: 40, color: 'white' }}>
+        Profile not found.
+      </div>
+    )
+  }
 
-  // 2. Fetch Social Stats (Followers/Following)
-  const { count: followersCount } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('following_id', profile.id)
-
-  const { count: followingCount } = await supabase
-    .from('follows')
-    .select('*', { count: 'exact', head: true })
-    .eq('follower_id', profile.id)
-
-  // 3. Fetch Posts with Comments (Pinned first, then Newest)
-  // Logic matches your BIGINT post_id and UUID user_id schema 
+  // 2️⃣ Fetch posts for this profile
   const { data: posts } = await supabase
     .from('posts')
-    .select(`
-      *,
-      profiles(email),
-      comments (
-        id,
-        content,
-        created_at,
-        user_id
-      )
-    `)
-    .eq('author_id', profile.id)
-    .order('is_pinned', { ascending: false })
+    .select('*')
+    .eq('user_id', profile.id)
     .order('created_at', { ascending: false })
 
-  // 4. Auth & Follow Status Check
-  const { data: { user } } = await supabase.auth.getUser()
+  // 3️⃣ Determine if current logged-in user is following this profile
   let isFollowing = false
-  if (user) {
-    const { data: followData } = await supabase
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user?.id) {
+    const { data: follows } = await supabase
       .from('follows')
-      .select('id')
+      .select('*')
       .match({ follower_id: user.id, following_id: profile.id })
-      .single()
-    isFollowing = !!followData
+    isFollowing = (follows || []).length > 0
+  }
+
+  // 4️⃣ Server-side toggle follow function
+  const toggleFollow = async () => {
+    if (!user?.id) return
+
+    if (isFollowing) {
+      await supabase.from('follows').delete().match({ follower_id: user.id, following_id: profile.id })
+    } else {
+      await supabase.from('follows').insert({ follower_id: user.id, following_id: profile.id })
+    }
+    revalidatePath(`/u/${slug}`)
   }
 
   return (
-    <div className="min-h-screen p-12 bg-fixed bg-cover" style={{ 
-      backgroundImage: `url(${profile.canva_design_id})`,
-      backgroundAttachment: 'fixed'
-    }}>
-      {/* --- HEADER --- */}
-      <header className="max-w-6xl mx-auto mb-16">
-        <div className="rounded-3xl overflow-hidden shadow-2xl h-80 bg-white/10 backdrop-blur-md mb-8 border border-white/20">
-          {profile.canva_banner_url && (
-            <img src={profile.canva_banner_url} className="w-full h-full object-cover" alt="Banner" />
-          )}
-        </div>
-
-        <div className="flex justify-between items-end px-4">
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm border border-white/40">
-            <h1 className="text-4xl font-bold text-gray-900">{profile.email?.split('@')[0]}'s Space</h1>
-            <div className="flex gap-4 mt-2 text-sm font-semibold text-blue-600">
-              <span>{followersCount || 0} Followers</span>
-              <span>{followingCount || 0} Following</span>
-            </div>
-            <p className="text-gray-600 mt-2 text-lg">{profile.bio || "Welcome to my custom homepage!"}</p>
+    <div style={{ padding: 40, color: 'white', maxWidth: '800px', margin: '0 auto' }}>
+      {/* Profile Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        {profile.avatar_url ? (
+          <img
+            src={profile.avatar_url}
+            alt="Avatar"
+            style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover' }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 120,
+              height: 120,
+              borderRadius: '50%',
+              backgroundColor: '#374151',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '40px',
+            }}
+          >
+            {profile.username?.charAt(0).toUpperCase()}
           </div>
+        )}
+        <div>
+          <h1 style={{ margin: 0 }}>{profile.username || profile.email}</h1>
+          <p>{profile.bio || 'No bio yet.'}</p>
 
-          {user && user.id !== profile.id && (
-            <form action={toggleFollow.bind(null, user.id, profile.id, isFollowing)}>
-              <button type="submit" className={`px-8 py-3 rounded-full font-bold shadow-lg transition-all ${
-                isFollowing ? 'bg-gray-100 text-gray-600' : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}>
-                {isFollowing ? 'Unfollow' : 'Follow'}
-              </button>
-            </form>
+          {user?.id && profile.id !== user.id && (
+            <button
+              onClick={toggleFollow}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isFollowing ? '#374151' : '#6366f1',
+                color: 'white',
+                cursor: 'pointer',
+                marginTop: '8px',
+              }}
+            >
+              {isFollowing ? 'Following' : '+ Follow'}
+            </button>
           )}
         </div>
-      </header>
+      </div>
 
-      {/* --- 2-COLUMN POST GRID --- */}
-      <main className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12">
-        {posts?.map((post) => (
-          <article key={post.id} className="bg-white/95 p-8 rounded-3xl shadow-xl border border-white/20 flex flex-col">
-            {post.is_pinned && <div className="text-blue-600 text-xs font-bold mb-3 flex items-center">📌 PINNED POST</div>}
-            
-            {/* DYNAMIC MEDIA HANDLING */}
-            <div className="mb-6 rounded-2xl overflow-hidden shadow-inner bg-gray-50">
-              {post.post_type === 'audio' && (
-                <iframe 
-                  width="100%" height="166" scrolling="no" frameBorder="no" 
-                  src={`https://w.soundcloud.com/player/?url=${encodeURIComponent(post.media_url)}&color=%23ff5500&auto_play=false&show_user=true`} 
-                />
-              )}
-              {post.post_type === 'picture' && <img src={post.media_url} className="w-full h-auto max-h-[400px] object-cover" alt="Post content" />}
-              {post.post_type === 'video' && <video src={post.media_url} controls className="w-full" />}
-              {post.post_type === 'link' && (
-                <a href={post.media_url} target="_blank" className="p-4 block text-blue-600 hover:underline bg-blue-50/50 truncate">
-                  🔗 {post.media_url}
-                </a>
-              )}
-            </div>
+      <hr style={{ margin: '20px 0', borderColor: '#374151' }} />
 
-            <p className="text-gray-800 text-lg leading-relaxed mb-6 flex-grow">{post.content}</p>
-            
-            {/* INTERACTION BAR */}
-            <footer className="pt-6 border-t border-gray-100 flex gap-6 text-gray-500 font-medium">
-              <form action={likePost.bind(null, post.id, params.slug)}>
-                <button type="submit" className="flex items-center gap-2 hover:text-red-500 transition-colors">
-                  ❤️ {post.likes_count || 0} Likes
-                </button>
-              </form>
-              <div className="flex items-center gap-2 hover:text-blue-500 cursor-default">
-                💬 {post.comments?.length || 0} Comments
-              </div>
-            </footer>
-          </article>
-        ))}
-      </main>
+      {/* Posts */}
+      <h2>Posts</h2>
+      {(!posts || posts.length === 0) ? (
+        <p>No posts yet.</p>
+      ) : (
+        posts.map((post: Post) => (
+          <div
+            key={post.id}
+            style={{
+              backgroundColor: '#111827',
+              padding: '15px',
+              borderRadius: '8px',
+              marginBottom: '15px',
+            }}
+          >
+            <p>{post.content}</p>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+              {new Date(post.created_at).toLocaleString()}
+            </span>
+          </div>
+        ))
+      )}
     </div>
   )
 }
