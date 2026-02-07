@@ -23,19 +23,16 @@ interface UserProfilePageProps {
 }
 
 export default async function UserProfilePage({ params }: UserProfilePageProps) {
-  // 1️⃣ Await params in Next.js 15+
   const { slug } = await params
   const supabase = await createClient()
 
-  // 2️⃣ Fetch the profile (case-insensitive slug search)
+  // Fetch profile
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('*')
     .ilike('homepage_slug', slug)
     .maybeSingle()
 
-  // 3️⃣ Check if profile exists and is public
-  // Note: We check if it's NOT false because if you haven't set a default, it might be null/undefined
   if (profileError || !profile || profile.is_public === false) {
     return (
       <div style={{ padding: 40, color: 'white' }}>
@@ -44,17 +41,17 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
     )
   }
 
-  // 4️⃣ Fetch posts for this profile
+  // Fetch posts
   const { data: posts } = await supabase
     .from('posts')
     .select('*')
     .eq('user_id', profile.id)
     .order('created_at', { ascending: false })
 
-  // 5️⃣ Check if current viewer is following (if logged in)
+  // Auth check
   const { data: { user: currentUser } } = await supabase.auth.getUser()
-  
   let initialIsFollowing = false
+
   if (currentUser && currentUser.id !== profile.id) {
     const { data: follows } = await supabase
       .from('follows')
@@ -73,19 +70,25 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
             style={{ width: 120, height: 120, borderRadius: '50%', objectFit: 'cover' }}
           />
         ) : (
-          <div style={{
-            width: 120, height: 120, borderRadius: '50%',
-            backgroundColor: '#374151', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', fontSize: 40
-          }}>
+          <div
+            style={{
+              width: 120,
+              height: 120,
+              borderRadius: '50%',
+              backgroundColor: '#374151',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 40,
+            }}
+          >
             {profile.username?.charAt(0).toUpperCase()}
           </div>
         )}
+
         <div>
           <h1>{profile.username || profile.email}</h1>
           <p>{profile.bio || 'No bio yet.'}</p>
-
-          {/* Follow button only shows for other logged-in users */}
           {currentUser && currentUser.id !== profile.id && (
             <FollowButton
               profileId={profile.id}
@@ -102,12 +105,18 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
       {(!posts || posts.length === 0) ? (
         <p>No posts yet.</p>
       ) : (
-        posts.map((post: Post) => (
-          <div key={post.id} style={{
-            background: '#111', padding: 15, borderRadius: 8, marginBottom: 10
-          }}>
+        posts.map((post) => (
+          <div
+            key={post.id}
+            style={{
+              backgroundColor: '#111',
+              padding: 15,
+              borderRadius: 8,
+              marginBottom: 10,
+            }}
+          >
             <p>{post.content}</p>
-            <span style={{ fontSize: 12, color: '#999' }}>
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>
               {new Date(post.created_at).toLocaleString()}
             </span>
           </div>
