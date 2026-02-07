@@ -1,8 +1,8 @@
+// app/lib/supabase/server.ts
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 export async function createClient() {
-  // In Next.js 15+, cookies() is a Promise and must be awaited
   const cookieStore = await cookies()
 
   return createServerClient(
@@ -16,15 +16,15 @@ export async function createClient() {
         set(name: string, value: string, options: any) {
           try {
             cookieStore.set({ name, value, ...options })
-          } catch (error) {
-            // This can be ignored if the client is used in a Server Component
+          } catch {
+            // ignore in server context
           }
         },
         remove(name: string, options: any) {
           try {
             cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
-            // This can be ignored if the client is used in a Server Component
+          } catch {
+            // ignore in server context
           }
         },
       },

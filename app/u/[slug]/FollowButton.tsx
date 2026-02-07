@@ -4,15 +4,13 @@
 import { useState } from 'react'
 import { supabase } from '@/app/lib/supabase/client'
 
-export default function FollowButton({ 
-  profileId, 
-  initialIsFollowing, 
-  userId 
-}: { 
-  profileId: string, 
-  initialIsFollowing: boolean, 
-  userId: string 
-}) {
+interface FollowButtonProps {
+  profileId: string
+  initialIsFollowing: boolean
+  userId: string
+}
+
+export default function FollowButton({ profileId, initialIsFollowing, userId }: FollowButtonProps) {
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
 
   const handleToggle = async () => {
