@@ -21,7 +21,7 @@ interface Post {
 }
 
 export default function UserProfilePage({ params }: { params: Promise<{ slug: string }> }) {
-  // 1. Next.js 15 requires unwrapping the params Promise
+  // 1. Unwrap the params Promise using the use() hook (Required for Next.js 15)
   const { slug } = use(params)
 
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -32,18 +32,18 @@ export default function UserProfilePage({ params }: { params: Promise<{ slug: st
 
   useEffect(() => {
     async function fetchData() {
-      // Get current logged-in user (if any)
+      // Get current logged-in user
       const { data: { user } } = await supabase.auth.getUser()
       setUserId(user?.id || null)
 
-      // 2. Fetch profile by slug (case-insensitive)
+      // 2. Fetch profile by slug (Using .ilike for case-insensitive matching)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .ilike('homepage_slug', slug)
         .maybeSingle()
 
-      // 3. Handle visibility (if profile exists and is public)
+      // 3. Check if profile exists and is public
       if (profileError || !profileData || profileData.is_public === false) {
         setProfile(null)
         setLoading(false)
@@ -52,7 +52,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ slug: st
 
       setProfile(profileData)
 
-      // 4. Fetch posts for this specific user
+      // 4. Fetch posts for this user
       const { data: postsData } = await supabase
         .from('posts')
         .select('*')
@@ -77,7 +77,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ slug: st
   }, [slug])
 
   if (loading) return <div style={{ padding: 40, color: 'white' }}>Loading...</div>
-  if (!profile) return <div style={{ padding: 40, color: 'white' }}>Profile not found at this custom URL.</div>
+  if (!profile) return <div style={{ padding: 40, color: 'white' }}>Profile not found at this address.</div>
 
   return (
     <div style={{ padding: 40, color: 'white', maxWidth: 800, margin: '0 auto' }}>
