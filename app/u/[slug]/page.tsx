@@ -1,4 +1,4 @@
-import { createClient } from '@/app/lib/supabaseServer'
+import { createClient } from '@/app/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import { toggleFollow, likePost } from './actions'
 
