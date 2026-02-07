@@ -1,4 +1,4 @@
-import { createClient } from '@/app/lib/supabaseServer'
+import { createClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 
@@ -59,7 +59,7 @@ export default async function PostModeration() {
               <div className="ml-4 flex gap-2">
                 <form action={async () => {
                   'use server'
-                 const { createClient: createActionClient } = await import('@/app/lib/supabaseServer')
+                 const { createClient: createActionClient } = await import('@/app/lib/supabase/server')
                   const supabaseAction = await createActionClient()
                   
                   await supabaseAction.from('posts').delete().eq('id', post.id)
