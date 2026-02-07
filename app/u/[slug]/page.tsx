@@ -1,4 +1,4 @@
-import { createClient } from '@/app/lib/supabase/server' // Corrected import path
+import { createClient } from '@/app/lib/supabase/server' // Path must match your folder exactly
 import FollowButton from './FollowButton'
 
 interface UserProfilePageProps {
@@ -6,18 +6,20 @@ interface UserProfilePageProps {
 }
 
 export default async function UserProfilePage({ params }: UserProfilePageProps) {
-  // 1. You MUST await params in Next.js 15
+  // 1. Next.js 15+ REQUIRES awaiting params
   const { slug } = await params
   
-  // 2. createClient is now async
+  // 2. Initialize the async server client
   const supabase = await createClient()
 
+  // 3. Fetch profile (ilike handles Blondeglamazon vs blondeglamazon)
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('*')
     .ilike('homepage_slug', slug)
     .maybeSingle()
 
+  // 4. Handle visibility
   if (error || !profile || profile.is_public === false) {
     return (
       <div style={{ padding: 40, color: 'white' }}>
@@ -26,6 +28,7 @@ export default async function UserProfilePage({ params }: UserProfilePageProps) 
     )
   }
 
+  // 5. Fetch posts for this specific profile
   const { data: posts } = await supabase
     .from('posts')
     .select('*')
