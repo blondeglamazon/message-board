@@ -1,56 +1,32 @@
-'use client'
-import { useState, useEffect, use } from 'react' // Added 'use'
-import { supabase } from '@/app/lib/supabase/client'
+import { createClient } from '@/app/lib/supabase/server'
+import { notFound } from 'next/navigation'
+import PublicProfileContent from '@/components/PublicProfileContent' 
 
-export default function Page({ params }: { params: Promise<{ username: string }> }) {
-  // Unwrap params safely for Next.js 15
-  const { username } = use(params)
+// 1. Update the type to match your folder name [slug]
+export default async function ProfilePage({ params }: { params: Promise<{ slug: string }> }) {
+  // 2. Await params (Required in Next.js 15) and extract 'slug'
+  const { slug } = await params
   
-  const [debugError, setDebugError] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
+  const supabase = await createClient()
 
-  useEffect(() => {
-    async function load() {
-      // 1. We look for the user
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .ilike('username', username) // Case-insensitive search
-        .single()
+  // 3. Fetch the profile
+  // We use the 'slug' from the URL to search the 'homepage_slug' column
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .ilike('homepage_slug', slug) // Case-insensitive match
+    .maybeSingle()
 
-      if (error) {
-        console.error("Supabase Error:", error)
-        setDebugError(error) // Show error on screen
-      } else {
-        setProfile(data)
-      }
-    }
-    load()
-  }, [username])
-
-  if (debugError) {
+  // 4. Handle 404 (Profile not found)
+  if (!profile) {
     return (
-      <div className="p-10 text-white bg-red-900">
-        <h2 className="text-xl font-bold">Database Error</h2>
-        <pre className="mt-4 bg-black p-4 rounded">
-          {JSON.stringify(debugError, null, 2)}
-        </pre>
-        <p className="mt-4">
-          <strong>Code:</strong> {debugError.code} <br/>
-          <strong>Message:</strong> {debugError.message} <br/>
-          <strong>Hint:</strong> {debugError.hint || 'No hint'}
-        </p>
+      <div style={{ padding: '40px', color: 'white', textAlign: 'center' }}>
+        <h1>Profile Not Found</h1>
+        <p>The user @{slug} does not exist or has not set a homepage slug.</p>
       </div>
     )
   }
 
-  if (!profile) return <div className="p-10 text-white">Loading or Not Found...</div>
-
-  return (
-    <div className="p-10 text-white">
-      <h1 className="text-2xl font-bold">Success!</h1>
-      <p>Found user: {profile.username}</p>
-      <p>ID: {profile.id}</p>
-    </div>
-  )
+  // 5. Render the profile component
+  return <PublicProfileContent profile={profile} />
 }
