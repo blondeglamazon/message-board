@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, use } from 'react'
 import { supabase } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
@@ -14,7 +14,7 @@ function PublicProfileContent({ username }: { username: string }) {
     async function loadProfile() {
       setLoading(true)
 
-      // 1. Find user by Username (from the URL)
+      // 1. Find user by Username
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
@@ -33,7 +33,7 @@ function PublicProfileContent({ username }: { username: string }) {
         .eq('user_id', profileData.id)
         .order('created_at', { ascending: false })
 
-      // 3. Get "Member Since" date from their first post
+      // 3. Get "Member Since" date
       const { data: firstPost } = await supabase
         .from('posts')
         .select('created_at')
@@ -115,10 +115,13 @@ function PublicProfileContent({ username }: { username: string }) {
   )
 }
 
-export default function ProfilePage({ params }: { params: { username: string } }) {
+// ✅ FIXED: Using 'use(params)' to unwrap the Promise
+export default function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = use(params)
+  
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <PublicProfileContent username={params.username} />
+      <PublicProfileContent username={username} />
     </Suspense>
   )
 }

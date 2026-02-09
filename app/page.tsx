@@ -261,7 +261,7 @@ function MessageBoardContent() {
                             <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
                                     {/* LINK TO CLEAN URL */}
-                                    <Link href={`/${username}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>@{username}</Link>
+                                    <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>@{username}</Link>
                                     
                                     {user && user.id !== msg.user_id && (
                                         <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white' }}>
