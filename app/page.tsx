@@ -8,7 +8,7 @@ import DOMPurify from 'isomorphic-dompurify'
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
-  // ✅ UPDATE: Stores full profile object now (username, display_name, avatar)
+  // Stores full profile object now (username, display_name, avatar)
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
@@ -44,7 +44,6 @@ function MessageBoardContent() {
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
       // 1. Fetch Usernames, Display Names, and Avatars
-      // ✅ UPDATE: Fetches display_name and avatar_url too
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach(p => { pMap[p.id] = p }) // Store the whole object
@@ -169,7 +168,7 @@ function MessageBoardContent() {
   const handleNotificationClick = () => {
       setHasNewNotifications(false)
       localStorage.setItem('lastNotificationCheck', new Date().toISOString())
-      router.push('/notifications') // Updated to link to real page
+      router.push('/notifications') 
   }
 
   const filteredMessages = messages.filter(msg => {
@@ -177,7 +176,7 @@ function MessageBoardContent() {
     if (!query) return true;
     const lowerQ = query.toLowerCase();
     
-    // ✅ UPDATE: Search by username AND display name
+    // Search by username AND display name
     const profile = profilesMap[msg.user_id];
     const username = profile?.username || '';
     const displayName = profile?.display_name || '';
@@ -248,7 +247,7 @@ function MessageBoardContent() {
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.length > 0 ? (
                 filteredMessages.map((msg) => {
-                    // ✅ UPDATE: Get Profile Data
+                    // Get Profile Data
                     const profile = profilesMap[msg.user_id]
                     const username = profile?.username || (msg.email ? msg.email.split('@')[0] : 'Anonymous');
                     const displayName = profile?.display_name || username;
@@ -263,7 +262,7 @@ function MessageBoardContent() {
                             <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
                                     
-                                    {/* ✅ UPDATE: Avatar Circle */}
+                                    {/* Avatar Circle */}
                                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                         {avatarUrl ? (
                                             <img src={avatarUrl} alt={displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -273,9 +272,13 @@ function MessageBoardContent() {
                                     </div>
 
                                     <div style={{display:'flex', flexDirection:'column'}}>
-                                        {/* ✅ UPDATE: Link to Display Name + Handle below */}
+                                        {/* ✅ UPDATED: Link to Display Name */}
                                         <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#111827', textDecoration: 'none' }}>{displayName}</Link>
-                                        <span style={{fontSize:'12px', color:'#6b7280'}}>@{username}</span>
+                                        
+                                        {/* ✅ UPDATED: Date/Time IS HERE NOW (replaces handle) */}
+                                        <span style={{ color: '#9ca3af', fontSize: '12px' }}>
+                                            {new Date(msg.created_at).toLocaleDateString()} at {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                        </span>
                                     </div>
                                     
                                     {user && user.id !== msg.user_id && (
@@ -285,10 +288,7 @@ function MessageBoardContent() {
                                     )}
                                 </div>
                                 
-                                {/* ✅ UPDATE: Date AND Time */}
-                                <span style={{ color: '#9ca3af', fontSize: '12px' }}>
-                                    {new Date(msg.created_at).toLocaleDateString()} at {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </span>
+                                {/* Removed the old date/time span from here */}
                             </div>
                             {renderContent(msg)}
                             {msg.media_url && msg.post_type === 'image' && <img src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}

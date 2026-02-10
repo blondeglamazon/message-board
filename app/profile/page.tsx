@@ -186,19 +186,47 @@ function ProfileContent() {
                     <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Display Name (e.g. "Cool Cat")</label>
-                    <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="Your Name" />
+                    <input 
+                        type="text" 
+                        value={editForm.display_name} 
+                        onChange={e => setEditForm({...editForm, display_name: e.target.value})} 
+                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
+                        placeholder="Your Name" 
+                    />
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Avatar / Profile Picture URL</label>
-                    <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://imgur.com/..." />
+                    <input 
+                        type="text" 
+                        value={editForm.avatar_url} 
+                        onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} 
+                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
+                        placeholder="https://imgur.com/..." 
+                    />
 
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background (Image URL OR Canva Embed Code)</label>
-                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://... OR <div..." />
+                    <input 
+                        type="text" 
+                        value={editForm.background_url} 
+                        onChange={e => setEditForm({...editForm, background_url: e.target.value})} 
+                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
+                        placeholder="https://... OR <div..." 
+                    />
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Spotify/SoundCloud Embed Code</label>
-                    <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px'}} placeholder="<iframe src='...'></iframe>" />
+                    <textarea 
+                        value={editForm.music_embed} 
+                        onChange={e => setEditForm({...editForm, music_embed: e.target.value})} 
+                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} 
+                        placeholder="<iframe src='...'></iframe>" 
+                    />
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Bio / About Me</label>
-                    <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px'}} placeholder="Tell us about yourself..." />
+                    <textarea 
+                        value={editForm.bio} 
+                        onChange={e => setEditForm({...editForm, bio: e.target.value})} 
+                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} 
+                        placeholder="Tell us about yourself..." 
+                    />
                     
                     <div style={{display:'flex', gap:'10px'}}>
                         <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save Changes</button>
