@@ -102,13 +102,17 @@ function ProfileContent() {
   // ✅ FIX 1: Allow modern embed attributes (loading, referrerpolicy)
   const renderSafeHTML = (html: string) => {
       const clean = DOMPurify.sanitize(html, {
-          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i'],
+          // Allow all the tags Canva uses
+          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
+          // Allow 'style' (crucial for Canva) and 'class'
           ALLOWED_ATTR: [
-            'src', 'width', 'height', 'style', 'title', 
+            'src', 'width', 'height', 'style', 'title', 'class', 'id',
             'allow', 'allowfullscreen', 'frameborder', 'scrolling', 
-            'loading', 'referrerpolicy' // Needed for Spotify/Canva
+            'loading', 'referrerpolicy'
           ],
-          ADD_TAGS: ['iframe']
+          // Forcefully allow these URI schemes (sometimes needed for redirects)
+          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+          ADD_TAGS: ['iframe', 'link'] // 'link' is sometimes used for fonts
       })
       return <div dangerouslySetInnerHTML={{ __html: clean }} />
   }
