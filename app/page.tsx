@@ -8,7 +8,8 @@ import DOMPurify from 'isomorphic-dompurify'
 
 function MessageBoardContent() {
   const [messages, setMessages] = useState<any[]>([])
-  const [profilesMap, setProfilesMap] = useState<Record<string, string>>({}) // Stores UserID -> Username
+  // ✅ UPDATE: Stores full profile object now (username, display_name, avatar)
+  const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
   const [hasNewNotifications, setHasNewNotifications] = useState(false)
@@ -25,7 +26,6 @@ function MessageBoardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  // --- RESTORED MISSING DEFINITIONS ---
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
   const currentFeed = searchParams.get('feed') || 'global' 
@@ -43,10 +43,11 @@ function MessageBoardContent() {
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
-      // 1. Fetch Usernames Map (Safe way to get usernames without breaking joins)
-      const { data: allProfiles } = await supabase.from('profiles').select('id, username')
-      const pMap: Record<string, string> = {}
-      allProfiles?.forEach(p => { if(p.username) pMap[p.id] = p.username })
+      // 1. Fetch Usernames, Display Names, and Avatars
+      // ✅ UPDATE: Fetches display_name and avatar_url too
+      const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
+      const pMap: Record<string, any> = {}
+      allProfiles?.forEach(p => { pMap[p.id] = p }) // Store the whole object
       setProfilesMap(pMap)
 
       if (user) {
@@ -55,7 +56,7 @@ function MessageBoardContent() {
         checkNotifications(user.id)
       }
 
-      // 2. Fetch Posts (Simplified query to prevent database errors)
+      // 2. Fetch Posts
       let query = supabase
         .from('posts')
         .select(`
@@ -88,7 +89,6 @@ function MessageBoardContent() {
     }
     initData()
     
-    // Realtime subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -169,19 +169,24 @@ function MessageBoardContent() {
   const handleNotificationClick = () => {
       setHasNewNotifications(false)
       localStorage.setItem('lastNotificationCheck', new Date().toISOString())
-      alert("Notifications cleared! (This would open a notifications page in the future)")
+      router.push('/notifications') // Updated to link to real page
   }
 
   const filteredMessages = messages.filter(msg => {
     const query = urlSearchQuery || searchQuery
     if (!query) return true;
     const lowerQ = query.toLowerCase();
-    // Also search by username if available
-    const username = profilesMap[msg.user_id] || '';
+    
+    // ✅ UPDATE: Search by username AND display name
+    const profile = profilesMap[msg.user_id];
+    const username = profile?.username || '';
+    const displayName = profile?.display_name || '';
+
     return (
         (msg.content && msg.content.toLowerCase().includes(lowerQ)) || 
         (msg.email && msg.email.toLowerCase().includes(lowerQ)) ||
-        (username && username.toLowerCase().includes(lowerQ))
+        (username && username.toLowerCase().includes(lowerQ)) ||
+        (displayName && displayName.toLowerCase().includes(lowerQ))
     );
   });
 
@@ -209,7 +214,7 @@ function MessageBoardContent() {
         }
         await supabase.from('posts').insert([{ content: newMessage, user_id: user.id, email: user.email, post_type: postType, media_url: publicUrl }])
         setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/')
-        window.location.reload() // Force reload to see new post
+        window.location.reload()
     } catch (e: any) { alert(e.message) }
     setUploading(false)
   }
@@ -218,13 +223,6 @@ function MessageBoardContent() {
   const handleOptionClick = (type: string) => {
     setPostType(type); setMediaFile(null)
     if (type === 'image' || type === 'video' || type === 'audio') setTimeout(() => fileInputRef.current?.click(), 100)
-  }
-  
-  const getAcceptType = () => {
-      if (postType === 'image') return 'image/*'
-      if (postType === 'video') return 'video/*'
-      if (postType === 'audio') return 'audio/*'
-      return '*'
   }
 
   return (
@@ -250,8 +248,12 @@ function MessageBoardContent() {
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.length > 0 ? (
                 filteredMessages.map((msg) => {
-                    // GET USERNAME FROM OUR MAP (Safe Fallback)
-                    const username = profilesMap[msg.user_id] || (msg.email ? msg.email.split('@')[0] : 'Anonymous');
+                    // ✅ UPDATE: Get Profile Data
+                    const profile = profilesMap[msg.user_id]
+                    const username = profile?.username || (msg.email ? msg.email.split('@')[0] : 'Anonymous');
+                    const displayName = profile?.display_name || username;
+                    const avatarUrl = profile?.avatar_url;
+
                     const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
                     const commentsCount = msg.comments?.length || 0;
                     const isCommentsOpen = openComments.has(msg.id);
@@ -260,16 +262,33 @@ function MessageBoardContent() {
                         <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
                             <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                                    {/* LINK TO CLEAN URL */}
-                                    <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#6366f1', textDecoration: 'none' }}>@{username}</Link>
+                                    
+                                    {/* ✅ UPDATE: Avatar Circle */}
+                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        {avatarUrl ? (
+                                            <img src={avatarUrl} alt={displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{displayName[0]?.toUpperCase()}</span>
+                                        )}
+                                    </div>
+
+                                    <div style={{display:'flex', flexDirection:'column'}}>
+                                        {/* ✅ UPDATE: Link to Display Name + Handle below */}
+                                        <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#111827', textDecoration: 'none' }}>{displayName}</Link>
+                                        <span style={{fontSize:'12px', color:'#6b7280'}}>@{username}</span>
+                                    </div>
                                     
                                     {user && user.id !== msg.user_id && (
-                                        <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white' }}>
+                                        <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ marginLeft:'10px', padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white' }}>
                                             {adminIds.has(msg.user_id) ? '🔒 Admin' : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
                                         </button>
                                     )}
                                 </div>
-                                <span style={{ color: '#9ca3af', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleDateString()}</span>
+                                
+                                {/* ✅ UPDATE: Date AND Time */}
+                                <span style={{ color: '#9ca3af', fontSize: '12px' }}>
+                                    {new Date(msg.created_at).toLocaleDateString()} at {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
                             </div>
                             {renderContent(msg)}
                             {msg.media_url && msg.post_type === 'image' && <img src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
