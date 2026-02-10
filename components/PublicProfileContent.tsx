@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/app/lib/supabase/client' // Ensure this matches your actual client path
+import { supabase } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 
@@ -26,16 +26,21 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
     loadPosts()
   }, [profile])
 
+  // ✅ FIX 1: Updated Sanitizer to allow modern embed attributes (loading, referrerpolicy)
   const renderSafeHTML = (html: string) => {
+      if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
-          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br'],
-          ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'scrolling'],
+          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i'],
+          ALLOWED_ATTR: [
+            'src', 'width', 'height', 'style', 'title', 
+            'allow', 'allowfullscreen', 'frameborder', 'scrolling', 
+            'loading', 'referrerpolicy' // Crucial for Spotify/Canva
+          ],
           ADD_TAGS: ['iframe']
       })
       return <div dangerouslySetInnerHTML={{ __html: clean }} />
   }
 
-  // Calculate member since date safely
   const memberSince = profile.created_at 
     ? new Date(profile.created_at).toLocaleDateString() 
     : 'Unknown'
@@ -43,7 +48,10 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
   return (
     <div style={{ 
         minHeight: '100vh', 
-        backgroundImage: profile.background_url ? `url(${profile.background_url})` : 'none',
+        // ✅ FIX 2: Safety check to ensure background_url is a link, not HTML code
+        backgroundImage: (profile.background_url && !profile.background_url.startsWith('<')) 
+            ? `url(${profile.background_url})` 
+            : 'none',
         backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed',
         backgroundColor: '#111827' 
     }}>
@@ -75,8 +83,10 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
                     </div>
                 </div>
 
+                {/* ✅ FIX 3: Added label and spacing for Music Embed */}
                 {profile.music_embed && (
-                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px', marginTop: '15px' }}>
+                        <p style={{ fontSize: '12px', color: '#666', marginBottom: '5px', textTransform: 'uppercase', fontWeight: 'bold' }}>Featured Music</p>
                         {renderSafeHTML(profile.music_embed)}
                     </div>
                 )}
