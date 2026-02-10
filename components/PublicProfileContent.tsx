@@ -87,7 +87,10 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
                 
                 {/* HEADER */}
                 <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                    <h1 style={{ margin: 0, color: 'white', fontSize: '28px' }}>@{profile.username}</h1>
+                    {/* ✅ UPDATED: Shows Display Name in Header now too */}
+                    <h1 style={{ margin: 0, color: 'white', fontSize: '28px' }}>
+                        {profile.display_name || profile.username}
+                    </h1>
                     <Link href="/" style={{ padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
                         ← Back to Feed
                     </Link>
@@ -100,20 +103,15 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
                             {profile.avatar_url ? (
                                 <img src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
-                                // ✅ UPDATED: Use Display Name initial if available
                                 (profile.display_name || profile.username)?.[0]?.toUpperCase()
                             )}
                         </div>
                         <div>
-                            {/* ✅ UPDATED: Show Display Name (fallback to username) */}
                             <h2 style={{ margin: 0, fontSize: '24px', color: '#111827' }}>
                                 {profile.display_name || profile.username}
                             </h2>
                             
-                            {/* ✅ ADDED: Show handle below if Display Name exists */}
-                            {profile.display_name && (
-                                <p style={{ margin: 0, color: '#6b7280' }}>@{profile.username}</p>
-                            )}
+                            {/* ❌ REMOVED: The secondary handle line is gone */}
                             
                             <p style={{ margin: '5px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>Member since: {memberSince}</p>
                             {profile.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profile.bio}"</p>}
