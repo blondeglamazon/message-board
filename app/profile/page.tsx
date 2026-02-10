@@ -30,17 +30,17 @@ function ProfileContent() {
       if (!userIdToFetch) { setLoading(false); return }
 
       // 1. Fetch Profile Theme (Background, Music, Bio)
-      // We assume a row exists in 'profiles'. If not, we might get null (handled below)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('background_url, music_embed, bio, email, id') // Try to get email from profiles if possible
+        .select('background_url, music_embed, bio, email, id')
         .eq('id', userIdToFetch)
         .single()
 
-      // 2. Fetch User Email/Date from Posts (Fallback if profiles table is empty of details)
+      // 2. Fetch User Email/Date from Posts (Fallback)
       let email = profileData?.email || 'Unknown User'
       let memberSince = new Date().toLocaleDateString()
 
+      // Try to find email/date from posts if not in profile
       const { data: userPosts } = await supabase.from('posts').select('email, created_at').eq('user_id', userIdToFetch).not('email', 'is', null).order('created_at', { ascending: false }).limit(1)
       const { data: firstPost } = await supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1)
 
@@ -83,7 +83,6 @@ function ProfileContent() {
           background_url: editForm.background_url,
           music_embed: editForm.music_embed,
           bio: editForm.bio
-          // Note: We don't save email here to avoid auth conflicts, just theme data
       })
 
       if (error) {
@@ -100,11 +99,15 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // Helper to render Embeds safely
+  // ✅ FIX 1: Allow modern embed attributes (loading, referrerpolicy)
   const renderSafeHTML = (html: string) => {
       const clean = DOMPurify.sanitize(html, {
-          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br'],
-          ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'title', 'allow', 'allowfullscreen', 'frameborder', 'scrolling'],
+          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i'],
+          ALLOWED_ATTR: [
+            'src', 'width', 'height', 'style', 'title', 
+            'allow', 'allowfullscreen', 'frameborder', 'scrolling', 
+            'loading', 'referrerpolicy' // Needed for Spotify/Canva
+          ],
           ADD_TAGS: ['iframe']
       })
       return <div dangerouslySetInnerHTML={{ __html: clean }} />
@@ -112,7 +115,6 @@ function ProfileContent() {
 
   const renderPostContent = (post: any) => {
     if (post.post_type === 'embed') return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>
-    // ... (Text logic omitted for brevity, reusing standard render) ...
     return <p style={{lineHeight:'1.5'}}>{post.content}</p>
   }
 
@@ -124,12 +126,14 @@ function ProfileContent() {
     <div style={{ 
         minHeight: '100vh', 
         fontFamily: 'sans-serif',
-        // DYNAMIC BACKGROUND: Shows your Canva image if set!
-        backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none',
+        // ✅ FIX 2: Safety check to ensure background is a URL, not HTML
+        backgroundImage: (profileUser?.background_url && !profileUser.background_url.startsWith('<')) 
+            ? `url(${profileUser.background_url})` 
+            : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed',
-        backgroundColor: profileUser?.background_url ? 'transparent' : '#111827' // Fallback color
+        backgroundColor: '#111827' 
     }}>
       
       {/* Overlay to ensure text is readable on busy backgrounds */}
@@ -151,8 +155,8 @@ function ProfileContent() {
                 <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
                     <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
                     
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background Image URL (Canva/Imgur link)</label>
-                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://..." />
+                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background Image URL (Direct Link to Image)</label>
+                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://example.com/image.png" />
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Spotify/SoundCloud Embed Code</label>
                     <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px'}} placeholder="<iframe src='...'></iframe>" />
