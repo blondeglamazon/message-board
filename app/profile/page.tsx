@@ -14,7 +14,7 @@ function ProfileContent() {
   
   // Edit Mode State
   const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ background_url: '', music_embed: '', bio: '' })
+  const [editForm, setEditForm] = useState({ display_name: '', background_url: '', music_embed: '', bio: '' })
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -29,10 +29,10 @@ function ProfileContent() {
       const userIdToFetch = targetId || loggedInUser?.id
       if (!userIdToFetch) { setLoading(false); return }
 
-      // 1. Fetch Profile Theme (Background, Music, Bio)
+      // 1. Fetch Profile Theme (Now including display_name)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('background_url, music_embed, bio, email, id')
+        .select('display_name, background_url, music_embed, bio, email, id')
         .eq('id', userIdToFetch)
         .single()
 
@@ -51,6 +51,7 @@ function ProfileContent() {
           id: userIdToFetch, 
           email, 
           memberSince,
+          display_name: profileData?.display_name || '',
           background_url: profileData?.background_url || '',
           music_embed: profileData?.music_embed || '',
           bio: profileData?.bio || ''
@@ -59,6 +60,7 @@ function ProfileContent() {
       // Initialize Edit Form
       if (loggedInUser && loggedInUser.id === userIdToFetch) {
           setEditForm({
+              display_name: profileData?.display_name || '',
               background_url: profileData?.background_url || '',
               music_embed: profileData?.music_embed || '',
               bio: profileData?.bio || ''
@@ -80,6 +82,7 @@ function ProfileContent() {
       // Upsert: Create or Update profile row
       const { error } = await supabase.from('profiles').upsert({
           id: currentUser.id,
+          display_name: editForm.display_name,
           background_url: editForm.background_url,
           music_embed: editForm.music_embed,
           bio: editForm.bio
@@ -99,7 +102,7 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // ✅ FIX 1: Updated Sanitizer to allow modern embed attributes (Canva/Spotify)
+  // Safe HTML Render
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
@@ -123,7 +126,7 @@ function ProfileContent() {
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
 
-  // ✅ FIX 2: Background Logic Check
+  // Background Logic
   const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
 
   return (
@@ -138,12 +141,10 @@ function ProfileContent() {
           pointerEvents: 'none' 
       }}>
           {isEmbedBackground ? (
-              // OPTION A: Canva Embed
               <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
                   {renderSafeHTML(profileUser.background_url)}
               </div>
           ) : (
-              // OPTION B: Image URL
               <div style={{ 
                   width: '100%', height: '100%', 
                   backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none',
@@ -176,6 +177,9 @@ function ProfileContent() {
                 <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
                     <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
                     
+                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Display Name (e.g. "Cool Cat")</label>
+                    <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="Your Name" />
+                    
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background (Image URL OR Canva Embed Code)</label>
                     <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://... OR <div..." />
                     
@@ -196,11 +200,16 @@ function ProfileContent() {
             <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
                     <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
-                        {profileUser?.email?.[0]?.toUpperCase() || '?'}
+                        {(profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div style={{ flex: 1 }}>
-                        <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.email}</h2>
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
+                        <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
+                        {profileUser?.display_name && (
+                             <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>@{profileUser?.email?.split('@')[0] || 'user'}</p>
+                        )}
+                        {!profileUser?.display_name && (
+                            <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
+                        )}
                         {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
                     </div>
                     {isMyProfile && !isEditing && (
@@ -228,6 +237,7 @@ function ProfileContent() {
                 {posts.map(post => (
                     <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
+                            {/* ✅ FIXED TAG: changed </p> to </span> */}
                             <span>{new Date(post.created_at).toLocaleString()}</span>
                             {isMyProfile && <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>}
                         </div>

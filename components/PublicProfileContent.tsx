@@ -26,7 +26,7 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
     loadPosts()
   }, [profile])
 
-  // 1. SAFE HTML RENDERER (Updated for Canva/Spotify)
+  // 1. SAFE HTML RENDERER
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
@@ -46,8 +46,7 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
     ? new Date(profile.created_at).toLocaleDateString() 
     : 'Unknown'
 
-  // 3. BACKGROUND LOGIC: Check if it starts with '<' (Embed Code) or is a URL
-  // We use .trim() to handle accidental spaces
+  // 3. BACKGROUND LOGIC
   const isEmbedBackground = profile.background_url && profile.background_url.trim().startsWith('<');
 
   return (
@@ -101,12 +100,22 @@ export default function PublicProfileContent({ profile }: { profile: any }) {
                             {profile.avatar_url ? (
                                 <img src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
-                                profile.username?.[0]?.toUpperCase()
+                                // ✅ UPDATED: Use Display Name initial if available
+                                (profile.display_name || profile.username)?.[0]?.toUpperCase()
                             )}
                         </div>
                         <div>
-                            <h2 style={{ margin: 0, fontSize: '24px', color: '#111827' }}>{profile.username}</h2>
-                            <p style={{ margin: 0, color: '#6b7280' }}>Member since: {memberSince}</p>
+                            {/* ✅ UPDATED: Show Display Name (fallback to username) */}
+                            <h2 style={{ margin: 0, fontSize: '24px', color: '#111827' }}>
+                                {profile.display_name || profile.username}
+                            </h2>
+                            
+                            {/* ✅ ADDED: Show handle below if Display Name exists */}
+                            {profile.display_name && (
+                                <p style={{ margin: 0, color: '#6b7280' }}>@{profile.username}</p>
+                            )}
+                            
+                            <p style={{ margin: '5px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>Member since: {memberSince}</p>
                             {profile.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profile.bio}"</p>}
                         </div>
                     </div>
