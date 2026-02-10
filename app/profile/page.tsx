@@ -14,7 +14,14 @@ function ProfileContent() {
   
   // Edit Mode State
   const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ display_name: '', background_url: '', music_embed: '', bio: '' })
+  // ✅ RESTORED: avatar_url in state
+  const [editForm, setEditForm] = useState({ 
+      display_name: '', 
+      avatar_url: '', 
+      background_url: '', 
+      music_embed: '', 
+      bio: '' 
+  })
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -29,10 +36,10 @@ function ProfileContent() {
       const userIdToFetch = targetId || loggedInUser?.id
       if (!userIdToFetch) { setLoading(false); return }
 
-      // 1. Fetch Profile Theme (Now including display_name)
+      // 1. Fetch Profile Theme (Now including avatar_url)
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('display_name, background_url, music_embed, bio, email, id')
+        .select('display_name, avatar_url, background_url, music_embed, bio, email, id')
         .eq('id', userIdToFetch)
         .single()
 
@@ -52,6 +59,8 @@ function ProfileContent() {
           email, 
           memberSince,
           display_name: profileData?.display_name || '',
+          // ✅ RESTORED: avatar_url
+          avatar_url: profileData?.avatar_url || '',
           background_url: profileData?.background_url || '',
           music_embed: profileData?.music_embed || '',
           bio: profileData?.bio || ''
@@ -61,6 +70,7 @@ function ProfileContent() {
       if (loggedInUser && loggedInUser.id === userIdToFetch) {
           setEditForm({
               display_name: profileData?.display_name || '',
+              avatar_url: profileData?.avatar_url || '',
               background_url: profileData?.background_url || '',
               music_embed: profileData?.music_embed || '',
               bio: profileData?.bio || ''
@@ -83,6 +93,7 @@ function ProfileContent() {
       const { error } = await supabase.from('profiles').upsert({
           id: currentUser.id,
           display_name: editForm.display_name,
+          avatar_url: editForm.avatar_url, // ✅ Saving Avatar
           background_url: editForm.background_url,
           music_embed: editForm.music_embed,
           bio: editForm.bio
@@ -180,6 +191,10 @@ function ProfileContent() {
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Display Name (e.g. "Cool Cat")</label>
                     <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="Your Name" />
                     
+                    {/* ✅ RESTORED: Avatar Input */}
+                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Avatar / Profile Picture URL</label>
+                    <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://imgur.com/..." />
+
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background (Image URL OR Canva Embed Code)</label>
                     <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://... OR <div..." />
                     
@@ -199,8 +214,13 @@ function ProfileContent() {
             {/* PROFILE CARD */}
             <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold' }}>
-                        {(profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'}
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', overflow: 'hidden' }}>
+                        {/* ✅ RESTORED: Show Image if exists, else show initial */}
+                        {profileUser?.avatar_url ? (
+                            <img src={profileUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            (profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'
+                        )}
                     </div>
                     <div style={{ flex: 1 }}>
                         <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
@@ -237,7 +257,6 @@ function ProfileContent() {
                 {posts.map(post => (
                     <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
-                            {/* ✅ FIXED TAG: changed </p> to </span> */}
                             <span>{new Date(post.created_at).toLocaleString()}</span>
                             {isMyProfile && <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>}
                         </div>
