@@ -99,20 +99,17 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // ✅ FIX 1: Allow modern embed attributes (loading, referrerpolicy)
+  // ✅ FIX 1: Updated Sanitizer to allow modern embed attributes (Canva/Spotify)
   const renderSafeHTML = (html: string) => {
+      if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
-          // Allow all the tags Canva uses
           ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
-          // Allow 'style' (crucial for Canva) and 'class'
           ALLOWED_ATTR: [
             'src', 'width', 'height', 'style', 'title', 'class', 'id',
             'allow', 'allowfullscreen', 'frameborder', 'scrolling', 
             'loading', 'referrerpolicy'
           ],
-          // Forcefully allow these URI schemes (sometimes needed for redirects)
-          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-          ADD_TAGS: ['iframe', 'link'] // 'link' is sometimes used for fonts
+          ADD_TAGS: ['iframe', 'link']
       })
       return <div dangerouslySetInnerHTML={{ __html: clean }} />
   }
@@ -126,23 +123,43 @@ function ProfileContent() {
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
 
+  // ✅ FIX 2: Background Logic Check
+  const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
+
   return (
-    <div style={{ 
-        minHeight: '100vh', 
-        fontFamily: 'sans-serif',
-        // ✅ FIX 2: Safety check to ensure background is a URL, not HTML
-        backgroundImage: (profileUser?.background_url && !profileUser.background_url.startsWith('<')) 
-            ? `url(${profileUser.background_url})` 
-            : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed',
-        backgroundColor: '#111827' 
-    }}>
+    <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
       
-      {/* Overlay to ensure text is readable on busy backgrounds */}
-      <div style={{ backgroundColor: 'rgba(0,0,0,0.7)', minHeight: '100vh', padding: '20px' }}>
-        
+      {/* === BACKGROUND LAYER (Fixed) === */}
+      <div style={{ 
+          position: 'fixed', 
+          top: 0, left: 0, width: '100%', height: '100%', 
+          zIndex: 0, 
+          overflow: 'hidden',
+          pointerEvents: 'none' 
+      }}>
+          {isEmbedBackground ? (
+              // OPTION A: Canva Embed
+              <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
+                  {renderSafeHTML(profileUser.background_url)}
+              </div>
+          ) : (
+              // OPTION B: Image URL
+              <div style={{ 
+                  width: '100%', height: '100%', 
+                  backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none',
+                  backgroundSize: 'cover', backgroundPosition: 'center'
+              }} />
+          )}
+      </div>
+
+      {/* === CONTENT LAYER (Scrollable) === */}
+      <div style={{ 
+          position: 'relative', 
+          zIndex: 1, 
+          backgroundColor: 'rgba(0,0,0,0.5)', 
+          minHeight: '100vh', 
+          padding: '20px' 
+      }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
             {/* HEADER */}
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
@@ -159,8 +176,8 @@ function ProfileContent() {
                 <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
                     <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
                     
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background Image URL (Direct Link to Image)</label>
-                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://example.com/image.png" />
+                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background (Image URL OR Canva Embed Code)</label>
+                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none'}} placeholder="https://... OR <div..." />
                     
                     <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Spotify/SoundCloud Embed Code</label>
                     <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px'}} placeholder="<iframe src='...'></iframe>" />
