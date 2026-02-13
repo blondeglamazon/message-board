@@ -1,5 +1,5 @@
 {
-  "name": "message-board",
+  "name": "vimciety",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
   "dependencies": {
     "@canva/app-ui-kit": "^5.5.0",
     "@canva/intents": "^2.1.2",
+    "@capacitor/android": "^8.1.0",
     "@google-cloud/vision": "^5.3.4",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
@@ -24,6 +25,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.1.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

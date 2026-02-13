@@ -1,12 +1,15 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 
 function ProfileContent() {
+  // Initialize the Supabase client
+  const supabase = createClient()
+
   const [loading, setLoading] = useState(true)
   const [profileUser, setProfileUser] = useState<any>(null) // User Info + Theme
   const [currentUser, setCurrentUser] = useState<any>(null) // Me
@@ -29,6 +32,8 @@ function ProfileContent() {
   useEffect(() => {
     async function loadProfile() {
       setLoading(true)
+      
+      // Get the logged in user
       const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       setCurrentUser(loggedInUser)
 
@@ -46,8 +51,20 @@ function ProfileContent() {
       let email = profileData?.email || 'Unknown User'
       let memberSince = new Date().toLocaleDateString()
 
-      const { data: userPosts } = await supabase.from('posts').select('email, created_at').eq('user_id', userIdToFetch).not('email', 'is', null).order('created_at', { ascending: false }).limit(1)
-      const { data: firstPost } = await supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1)
+      const { data: userPosts } = await supabase
+        .from('posts')
+        .select('email, created_at')
+        .eq('user_id', userIdToFetch)
+        .not('email', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const { data: firstPost } = await supabase
+        .from('posts')
+        .select('created_at')
+        .eq('user_id', userIdToFetch)
+        .order('created_at', { ascending: true })
+        .limit(1)
 
       if (userPosts && userPosts.length > 0) email = userPosts[0].email
       if (firstPost && firstPost.length > 0) memberSince = new Date(firstPost[0].created_at).toLocaleDateString()
@@ -75,18 +92,22 @@ function ProfileContent() {
       }
 
       // 3. Fetch Posts
-      const { data: history } = await supabase.from('posts').select('*').eq('user_id', userIdToFetch).order('created_at', { ascending: false })
+      const { data: history } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', userIdToFetch)
+        .order('created_at', { ascending: false })
+        
       if (history) setPosts(history)
       
       setLoading(false)
     }
     loadProfile()
-  }, [targetId])
+  }, [targetId, supabase])
 
   async function handleSaveProfile() {
       if (!currentUser) return
       
-      // Upsert: Create or Update profile row
       const { error } = await supabase.from('profiles').upsert({
           id: currentUser.id,
           display_name: editForm.display_name,
@@ -110,7 +131,6 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // Safe HTML Render
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
@@ -133,44 +153,22 @@ function ProfileContent() {
   if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
-
-  // Background Logic
   const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
 
   return (
     <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
-      
-      {/* === BACKGROUND LAYER (Fixed) === */}
-      <div style={{ 
-          position: 'fixed', 
-          top: 0, left: 0, width: '100%', height: '100%', 
-          zIndex: 0, 
-          overflow: 'hidden',
-          pointerEvents: 'none' 
-      }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           {isEmbedBackground ? (
               <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
                   {renderSafeHTML(profileUser.background_url)}
               </div>
           ) : (
-              <div style={{ 
-                  width: '100%', height: '100%', 
-                  backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none',
-                  backgroundSize: 'cover', backgroundPosition: 'center'
-              }} />
+              <div style={{ width: '100%', height: '100%', backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }} />
           )}
       </div>
 
-      {/* === CONTENT LAYER (Scrollable) === */}
-      <div style={{ 
-          position: 'relative', 
-          zIndex: 1, 
-          backgroundColor: 'rgba(0,0,0,0.5)', 
-          minHeight: '100vh', 
-          padding: '20px' 
-      }}>
+      <div style={{ position: 'relative', zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', minHeight: '100vh', padding: '20px' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            {/* HEADER */}
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                     {isMyProfile ? 'My Profile' : 'User Profile'}
@@ -180,62 +178,21 @@ function ProfileContent() {
                 </Link>
             </header>
 
-            {/* EDIT MODAL */}
             {isEditing && (
                 <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
                     <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
-                    
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Display Name (e.g. "Cool Cat")</label>
-                    <input 
-                        type="text" 
-                        value={editForm.display_name} 
-                        onChange={e => setEditForm({...editForm, display_name: e.target.value})} 
-                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
-                        placeholder="Your Name" 
-                    />
-                    
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Avatar / Profile Picture URL</label>
-                    <input 
-                        type="text" 
-                        value={editForm.avatar_url} 
-                        onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} 
-                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
-                        placeholder="https://imgur.com/..." 
-                    />
-
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Background (Image URL OR Canva Embed Code)</label>
-                    <input 
-                        type="text" 
-                        value={editForm.background_url} 
-                        onChange={e => setEditForm({...editForm, background_url: e.target.value})} 
-                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} 
-                        placeholder="https://... OR <div..." 
-                    />
-                    
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Spotify/SoundCloud Embed Code</label>
-                    <textarea 
-                        value={editForm.music_embed} 
-                        onChange={e => setEditForm({...editForm, music_embed: e.target.value})} 
-                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} 
-                        placeholder="<iframe src='...'></iframe>" 
-                    />
-                    
-                    <label style={{display:'block', color:'#9ca3af', fontSize:'12px', marginBottom:'5px'}}>Bio / About Me</label>
-                    <textarea 
-                        value={editForm.bio} 
-                        onChange={e => setEditForm({...editForm, bio: e.target.value})} 
-                        style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} 
-                        placeholder="Tell us about yourself..." 
-                    />
-                    
+                    <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Display Name" />
+                    <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Avatar URL" />
+                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Background URL or Embed" />
+                    <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Music Embed Code" />
+                    <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
                     <div style={{display:'flex', gap:'10px'}}>
-                        <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save Changes</button>
+                        <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
                         <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
                     </div>
                 </div>
             )}
 
-            {/* PROFILE CARD */}
             <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
                     <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', overflow: 'hidden' }}>
@@ -247,35 +204,20 @@ function ProfileContent() {
                     </div>
                     <div style={{ flex: 1 }}>
                         <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
-                        
-                        {/* ❌ REMOVED: Handle line gone */}
-                        
-                        {/* ✅ UPDATED: Always shows Member Since now */}
                         <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
-
                         {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
                     </div>
                     {isMyProfile && !isEditing && (
-                        <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}>
-                            ✏️ Edit Profile
-                        </button>
+                        <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}>✏️ Edit</button>
                     )}
                 </div>
-
-                {/* THEME SONG (Spotify) */}
                 {profileUser?.music_embed && (
                     <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
-                        <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '5px', fontWeight: 'bold' }}>🎵 VIBE CHECK</div>
                         {renderSafeHTML(profileUser.music_embed)}
                     </div>
                 )}
             </div>
 
-            {/* POSTS */}
-            <h3 style={{ color: 'white', fontSize: '20px', marginBottom: '15px', borderBottom:'1px solid #555', paddingBottom:'10px' }}>
-                {isMyProfile ? 'My Posts' : 'User Posts'}
-            </h3>
-            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {posts.map(post => (
                     <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
@@ -284,8 +226,7 @@ function ProfileContent() {
                             {isMyProfile && <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>}
                         </div>
                         {renderPostContent(post)}
-                        {post.media_url && post.post_type === 'image' && <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
-                        {post.media_url && post.post_type === 'video' && <video controls src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
+                        {post.media_url && post.post_type === 'image' && <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} alt="Post media" />}
                     </div>
                 ))}
             </div>
