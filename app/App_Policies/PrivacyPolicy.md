@@ -41,7 +41,17 @@ We may share information we have collected about you in certain situations. Your
     * **Supabase:** For authentication and database hosting.
 * **Third-Party Embeds:** If you interact with embedded content (e.g., Spotify, SoundCloud, Canva), these third parties may collect data about your interaction in accordance with their own privacy policies.
 * **Legal Obligations:** We may disclose your information where we are legally required to do so to comply with applicable law, governmental requests, a judicial proceeding, court order, or legal process.
+We use the information we collect for the following purposes:
+* **App Functionality:** To maintain your profile and allow you to post content.
+* **Safety & Moderation:** To process reports and enforce community standards.
+* **Marketing & Promotions:** We may use your contact information to send you updates about new features, promotions, or news related to VIMciety.
+* **Analytics:** To understand how users interact with the app and improve the user experience.
 
+## 5. Information Sharing and Disclosure
+While we do not currently sell your data to third parties, we disclose the following sharing practices for marketing and operational purposes:
+* **Service Providers:** We share data with providers like Supabase for data storage and infrastructure.
+* **Marketing Partners:** In the future, we may share hashed or pseudonymized data with third-party marketing platforms to deliver relevant advertisements or promotional content.
+* **Legal Requirements:** We may disclose information if required by law or to protect the safety of our users.
 ## 5. Data Retention and Deletion
 
 We keep your information for as long as necessary to fulfill the purposes outlined in this privacy policy unless otherwise required by law.
