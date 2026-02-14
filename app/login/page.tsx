@@ -1,18 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+// 1. Correct import to use createClient
+import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function LoginPage() {
+  // 2. Initialize supabase inside the component
+  const supabase = createClient()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false) // Toggle between Login and Sign Up
+  const [isSignUp, setIsSignUp] = useState(false)
   const router = useRouter()
 
-  // Check if already logged in
   useEffect(() => {
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -21,13 +24,12 @@ export default function LoginPage() {
       }
     }
     checkUser()
-  }, [])
+  }, [router, supabase])
 
   async function handleAuth() {
     setLoading(true)
     try {
       if (isSignUp) {
-        // --- SIGN UP ---
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -35,14 +37,13 @@ export default function LoginPage() {
         if (error) throw error
         alert('Check your email for the confirmation link!')
       } else {
-        // --- SIGN IN ---
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (error) throw error
-        router.push('/') // Go to Home on success
-        router.refresh() // Force refresh to update Sidebar
+        router.push('/')
+        router.refresh()
       }
     } catch (error: any) {
       alert(error.message)
@@ -61,7 +62,6 @@ export default function LoginPage() {
         padding: '30px', borderRadius: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' 
       }}>
         
-        {/* Header / Toggle */}
         <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: '20px' }}>
           <button 
             onClick={() => setIsSignUp(false)}
@@ -91,21 +91,20 @@ export default function LoginPage() {
           {isSignUp ? 'Create an Account' : 'Welcome Back'}
         </h2>
 
-        {/* Inputs */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <input 
             type="email" 
             placeholder="Email Address" 
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px' }}
+            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px', color: 'black' }}
           />
           <input 
             type="password" 
             placeholder="Password" 
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px' }}
+            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px', color: 'black' }}
           />
 
           <button 
@@ -126,7 +125,6 @@ export default function LoginPage() {
             ← Back to Home
           </Link>
         </div>
-
       </div>
     </div>
   )

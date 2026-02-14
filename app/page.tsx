@@ -1,14 +1,19 @@
 'use client'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 
+// 1. Configure for Static Export (Capacitor)
+export const dynamicParams = false;
+
 function MessageBoardContent() {
+  const supabase = createClient()
+
+  // State
   const [messages, setMessages] = useState<any[]>([])
-  // Stores full profile object now (username, display_name, avatar)
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
@@ -26,36 +31,46 @@ function MessageBoardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
+  // URL Params
   const showCreateModal = searchParams.get('create') === 'true'
   const showSearchModal = searchParams.get('search') === 'true'
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
 
+  // Sync URL search to State
   useEffect(() => {
     if (urlSearchQuery) setSearchQuery(urlSearchQuery)
   }, [urlSearchQuery])
 
+  // Initial Data Fetch
   useEffect(() => {
     async function initData() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
+      // Fetch Admins
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
-      // 1. Fetch Usernames, Display Names, and Avatars
+      // Fetch Profiles Map
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
-      allProfiles?.forEach(p => { pMap[p.id] = p }) // Store the whole object
+      allProfiles?.forEach(p => { pMap[p.id] = p })
       setProfilesMap(pMap)
+
+      // Local variable to ensure query uses fresh data immediately
+      let myFollowingIds = new Set<string>()
 
       if (user) {
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
-        setFollowingIds(new Set(follows?.map(f => f.following_id) || []))
+        const ids = follows?.map(f => f.following_id) || []
+        myFollowingIds = new Set(ids)
+        
+        setFollowingIds(myFollowingIds) // Update State
         checkNotifications(user.id)
       }
 
-      // 2. Fetch Posts
+      // Build Query
       let query = supabase
         .from('posts')
         .select(`
@@ -65,29 +80,32 @@ function MessageBoardContent() {
         `)
         .order('created_at', { ascending: false })
 
+      // Filter: FOLLOWING Feed
       if (user && currentFeed === 'following') {
-         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
-         const ids = follows?.map(f => f.following_id) || []
+         const ids = Array.from(myFollowingIds)
          if (ids.length > 0) query = query.in('user_id', ids)
-         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']) 
+         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']) // Force empty if following no one
       } 
+      // Filter: FRIENDS Feed (Followers I also follow back)
       else if (user && currentFeed === 'friends') {
-          const { data: myFollows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
-          const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
-          const myIds = myFollows?.map(f => f.following_id) || []
-          const theirIds = followsMe?.map(f => f.follower_id) || []
-          const friendIds = myIds.filter(id => theirIds.includes(id))
-          
-          if (friendIds.length > 0) query = query.in('user_id', friendIds)
-          else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
-       }
+         const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
+         const theirIds = new Set(followsMe?.map(f => f.follower_id) || [])
+         
+         const friendIds = Array.from(myFollowingIds).filter(id => theirIds.has(id))
+         
+         if (friendIds.length > 0) query = query.in('user_id', friendIds)
+         else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
+      }
 
+      // Execute Query
       const { data: posts, error } = await query
       if (error) console.error("Error fetching posts:", error)
       if (posts) setMessages(posts)
     }
+    
     initData()
     
+    // Realtime Listener
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
@@ -96,7 +114,9 @@ function MessageBoardContent() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [currentFeed]) 
+  }, [currentFeed, supabase])
+
+  // --- ACTIONS ---
 
   async function checkNotifications(userId: string) {
       const lastCheck = localStorage.getItem('lastNotificationCheck') || new Date(0).toISOString()
@@ -106,11 +126,15 @@ function MessageBoardContent() {
 
   async function handleLike(postId: string, isLiked: boolean) {
     if (!user) return alert("Please login to like posts.")
+    
+    // Optimistic Update
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== user.id) : [...msg.likes, { user_id: user.id }] } : msg))
+    
     if (isLiked) await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
     else await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
   }
   
+  // FIX: Client-side toggleFollow (No 'use server')
   async function toggleFollow(targetId: string) {
     if (!user) return alert("Please login to follow.")
     if (adminIds.has(targetId)) return alert("You cannot unfollow an Administrator.")
@@ -118,12 +142,20 @@ function MessageBoardContent() {
     if (followingIds.has(targetId)) {
         const { error } = await supabase.from('follows').delete().match({ follower_id: user.id, following_id: targetId })
         if (!error) {
-            const newSet = new Set(followingIds); newSet.delete(targetId); setFollowingIds(newSet)
+            setFollowingIds(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(targetId)
+                return newSet
+            })
         }
     } else {
         const { error } = await supabase.from('follows').insert({ follower_id: user.id, following_id: targetId })
         if (!error) {
-            const newSet = new Set(followingIds); newSet.add(targetId); setFollowingIds(newSet)
+            setFollowingIds(prev => {
+                const newSet = new Set(prev)
+                newSet.add(targetId)
+                return newSet
+            })
         }
     }
   }
@@ -175,8 +207,6 @@ function MessageBoardContent() {
     const query = urlSearchQuery || searchQuery
     if (!query) return true;
     const lowerQ = query.toLowerCase();
-    
-    // Search by username AND display name
     const profile = profilesMap[msg.user_id];
     const username = profile?.username || '';
     const displayName = profile?.display_name || '';
@@ -213,15 +243,9 @@ function MessageBoardContent() {
         }
         await supabase.from('posts').insert([{ content: newMessage, user_id: user.id, email: user.email, post_type: postType, media_url: publicUrl }])
         setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/')
-        window.location.reload()
+        // Note: Realtime subscription will auto-add the post to the feed
     } catch (e: any) { alert(e.message) }
     setUploading(false)
-  }
-
-  // Helper for Upload Input
-  const handleOptionClick = (type: string) => {
-    setPostType(type); setMediaFile(null)
-    if (type === 'image' || type === 'video' || type === 'audio') setTimeout(() => fileInputRef.current?.click(), 100)
   }
 
   return (
@@ -241,142 +265,87 @@ function MessageBoardContent() {
         {user ? <button onClick={() => supabase.auth.signOut()} style={{ background: '#e5e7eb', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Sign Out</button> : <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '10px', borderRadius: '8px', textDecoration: 'none', textAlign: 'center' }}>Login</Link>}
       </nav>
 
-      {/* FEED */}
+      {/* MAIN CONTENT */}
       <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '40px 20px' }}>
          <h2 style={{ marginBottom: '20px' }}>{currentFeed.toUpperCase()} FEED</h2>
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {filteredMessages.length > 0 ? (
-                filteredMessages.map((msg) => {
-                    // Get Profile Data
+            {filteredMessages.map((msg) => {
                     const profile = profilesMap[msg.user_id]
                     const username = profile?.username || (msg.email ? msg.email.split('@')[0] : 'Anonymous');
                     const displayName = profile?.display_name || username;
                     const avatarUrl = profile?.avatar_url;
-
                     const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
-                    const commentsCount = msg.comments?.length || 0;
                     const isCommentsOpen = openComments.has(msg.id);
 
                     return (
-                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                            <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                                <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-                                    
-                                    {/* Avatar Circle */}
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        {avatarUrl ? (
-                                            <img src={avatarUrl} alt={displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        ) : (
-                                            <span style={{ fontWeight: 'bold', color: '#6366f1' }}>{displayName[0]?.toUpperCase()}</span>
-                                        )}
-                                    </div>
-
-                                    <div style={{display:'flex', flexDirection:'column'}}>
-                                        {/* ✅ UPDATED: Link to Display Name */}
-                                        <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#111827', textDecoration: 'none' }}>{displayName}</Link>
-                                        
-                                        {/* ✅ UPDATED: Date/Time IS HERE NOW (replaces handle) */}
-                                        <span style={{ color: '#9ca3af', fontSize: '12px' }}>
-                                            {new Date(msg.created_at).toLocaleDateString()} at {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                        </span>
-                                    </div>
-                                    
-                                    {user && user.id !== msg.user_id && (
-                                        <button onClick={() => toggleFollow(msg.user_id)} disabled={adminIds.has(msg.user_id)} style={{ marginLeft:'10px', padding: '2px 8px', fontSize: '10px', borderRadius: '4px', cursor: adminIds.has(msg.user_id) ? 'not-allowed' : 'pointer', border: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '1px solid #d1d5db' : '1px solid #6366f1', backgroundColor: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? 'transparent' : '#6366f1', color: (followingIds.has(msg.user_id) || adminIds.has(msg.user_id)) ? '#6b7280' : 'white' }}>
-                                            {adminIds.has(msg.user_id) ? '🔒 Admin' : (followingIds.has(msg.user_id) ? 'Following' : '+ Follow')}
-                                        </button>
-                                    )}
+                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }}>
+                            <div style={{ marginBottom: '10px', display: 'flex', gap:'10px', alignItems:'center' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden' }}>
+                                    {avatarUrl && <img src={avatarUrl} alt={displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                                 </div>
-                                
-                                {/* Removed the old date/time span from here */}
+                                <div style={{display:'flex', flexDirection:'column'}}>
+                                    <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#111827', textDecoration: 'none' }}>{displayName}</Link>
+                                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleDateString()}</span>
+                                </div>
                             </div>
                             {renderContent(msg)}
-                            {msg.media_url && msg.post_type === 'image' && <img src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
-                            {msg.media_url && msg.post_type === 'video' && <video controls src={msg.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
-                            
                             <div style={{ marginTop: '15px', display: 'flex', gap: '20px' }}>
                                 <button onClick={() => handleLike(msg.id, isLiked)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#9ca3af' }}>{isLiked ? '❤️' : '🤍'} {msg.likes?.length || 0}</button>
-                                <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>💬 {commentsCount}</button>
+                                <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>💬 {msg.comments?.length || 0}</button>
                             </div>
-                            
                             {isCommentsOpen && (
-                                <div style={{ marginTop: '15px', backgroundColor: '#f9fafb', padding: '15px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                                    <div style={{ marginBottom: '15px', maxHeight: '200px', overflowY: 'auto' }}>
-                                        {msg.comments && msg.comments.length > 0 ? (
-                                            msg.comments.map((c: any) => (
-                                                <div key={c.id} style={{ marginBottom: '10px', borderBottom: '1px solid #e5e7eb', paddingBottom: '5px' }}>
-                                                    <div style={{ fontSize: '12px', color: '#6366f1', fontWeight: 'bold' }}>{c.email}</div>
-                                                    <div style={{ fontSize: '14px', color: '#374151' }}>{c.content}</div>
-                                                </div>
-                                            ))
-                                        ) : (<div style={{ color: '#9ca3af', fontSize: '13px', fontStyle: 'italic' }}>No comments yet.</div>)}
-                                    </div>
-                                    {user ? (
-                                        <div style={{ display: 'flex', gap: '10px' }}>
-                                            <input type="text" placeholder="Write a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText(prev => ({ ...prev, [msg.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handlePostComment(msg.id)} style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827' }} />
-                                            <button onClick={() => handlePostComment(msg.id)} style={{ backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '6px', padding: '0 15px', cursor: 'pointer' }}>Post</button>
+                                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                                    {msg.comments?.map((c: any) => (
+                                        <div key={c.id} style={{ marginBottom: '5px', fontSize: '14px' }}>
+                                            <strong>{c.email}:</strong> {c.content}
                                         </div>
-                                    ) : (<div style={{ fontSize: '12px', color: '#6b7280' }}>Log in to comment.</div>)}
+                                    ))}
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Write a comment..." 
+                                            value={commentText[msg.id] || ''} 
+                                            onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
+                                            style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #ccc' }}
+                                        />
+                                        <button onClick={() => handlePostComment(msg.id)} style={{ padding: '8px 15px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Send</button>
+                                    </div>
                                 </div>
                             )}
                         </div>
                     )
-                })
-            ) : (
-                <div style={{ textAlign: 'center', color: '#9ca3af' }}>No posts found in the {currentFeed} feed.</div>
-            )}
+                })}
          </div>
       </main>
 
       {/* SEARCH MODAL */}
       {showSearchModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '100px' }}>
-           <div style={{ backgroundColor: 'white', width: '90%', maxWidth: '600px', borderRadius: '12px', padding: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-               <h2 style={{ margin: 0, fontSize: '18px', color: '#111827' }}>Search Posts</h2>
-               <Link href="/" style={{ textDecoration: 'none', fontSize: '24px', color: '#6b7280' }}>&times;</Link>
-             </div>
-             <input 
-                type="text" 
-                placeholder="Search text or @username..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                autoFocus 
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-                style={{ width: '100%', padding: '12px', fontSize: '16px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '10px', color: '#111827' }} 
-             />
-             <div style={{ textAlign: 'right' }}>
-                 <button 
-                    onClick={handleSearchSubmit} 
-                    style={{ backgroundColor: '#6366f1', color: 'white', padding: '8px 16px', borderRadius: '6px', border: 'none', fontSize: '14px', cursor: 'pointer' }}
-                 >
-                    Search
-                 </button>
-             </div>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+           <div style={{ backgroundColor: 'white', width: '400px', borderRadius: '12px', padding: '20px' }}>
+             <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()} style={{ width: '100%', padding: '10px', color: 'black' }} />
+             <button onClick={() => router.push('/')} style={{ marginTop: '10px' }}>Close</button>
            </div>
         </div>
       )}
 
-      {/* CREATE POST MODAL - FIXED ZINDEX */}
+      {/* CREATE POST MODAL */}
       {showCreateModal && (
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-              <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '16px', width: '400px' }}>
+              <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '16px', width: '400px', color: 'black' }}>
                   <h3>Create New Post</h3>
-                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*,video/*,audio/*" onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
+                  <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} style={{ width: '100%', height: '100px', marginBottom: '10px' }} />
                   
-                  {/* Buttons for types */}
-                  <div style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
-                     <button onClick={() => handleOptionClick('text')}>📝 Text</button>
-                     <button onClick={() => handleOptionClick('image')}>📷 Image</button>
-                     <button onClick={() => handleOptionClick('embed')}>Embed</button>
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                      <button onClick={() => setPostType('text')} style={{ padding: '5px 10px', border: postType === 'text' ? '2px solid #6366f1' : '1px solid #ccc', borderRadius: '5px' }}>Text</button>
+                      <button onClick={() => { setPostType('image'); fileInputRef.current?.click() }} style={{ padding: '5px 10px', border: postType === 'image' ? '2px solid #6366f1' : '1px solid #ccc', borderRadius: '5px' }}>Image</button>
+                      <button onClick={() => setPostType('embed')} style={{ padding: '5px 10px', border: postType === 'embed' ? '2px solid #6366f1' : '1px solid #ccc', borderRadius: '5px' }}>Embed</button>
                   </div>
-                  
-                  {mediaFile && <div style={{fontSize:'12px', color:'green'}}>File: {mediaFile.name}</div>}
-                  
-                  <textarea value={newMessage} onChange={(e) => setNewMessage(e.target.value)} style={{ width: '100%', height: '100px', marginBottom: '10px', padding: '10px' }} placeholder={postType==='embed' ? "Paste embed code..." : "What's happening?"} />
-                  
-                  <button onClick={handlePost} disabled={uploading} style={{ width: '100%', padding: '10px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>{uploading ? 'Posting...' : 'Post'}</button>
-                  <button onClick={() => router.push('/')} style={{ width: '100%', marginTop: '10px', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}>Cancel</button>
+
+                  <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => setMediaFile(e.target.files?.[0] || null)} />
+                  {mediaFile && <p style={{ fontSize: '12px', color: 'green' }}>Selected: {mediaFile.name}</p>}
+
+                  <button onClick={handlePost} disabled={uploading} style={{ width: '100%', backgroundColor: '#6366f1', color: 'white', border: 'none', padding: '10px' }}>{uploading ? 'Posting...' : 'Post'}</button>
+                  <button onClick={() => router.push('/')} style={{ width: '100%', marginTop: '10px' }}>Cancel</button>
               </div>
           </div>
       )}
@@ -384,6 +353,7 @@ function MessageBoardContent() {
   )
 }
 
+// 2. Wrap in Suspense (Required for useSearchParams in static export)
 export default function MessageBoard() {
   return (
     <Suspense fallback={<div style={{color: '#111827', padding: '20px'}}>Loading...</div>}>

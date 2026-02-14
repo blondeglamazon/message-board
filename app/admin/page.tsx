@@ -1,72 +1,102 @@
-import { createClient } from '../lib/supabase/server'
-import { redirect } from 'next/navigation'
-import { updateUserRole } from './actions'
+'use client'
 
-export default async function AdminDashboard({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string; role?: string; page?: string }>
-}) {
-  const supabase = await createClient()
+import { useState, useEffect } from 'react'
+import { createClient } from '@/app/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { updateUserRole, deleteUser } from './actions' // Imports the client versions we just made
 
-  // 1. Auth & Admin Check
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: adminProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (adminProfile?.role !== 'admin') redirect('/')
-
-  // 2. Pagination & Filter Setup
-  const { q, role, page } = await searchParams
-  const searchTerm = q || ''
-  const roleFilter = role || 'all'
+export default function AdminDashboard() {
+  const [profiles, setProfiles] = useState<any[]>([])
+  const [stats, setStats] = useState({ users: 0, posts: 0 })
+  const [logs, setLogs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   
-  const pageSize = 5 
-  const currentPage = parseInt(page || '1')
-  const from = (currentPage - 1) * pageSize
-  const to = from + pageSize - 1
+  const supabase = createClient()
+  const router = useRouter()
 
-  // 3. Build Dynamic Query
-  let query = supabase
-    .from('profiles')
-    .select('id, email, role', { count: 'exact' })
-    .order('email', { ascending: true })
-    .range(from, to)
+  useEffect(() => {
+    async function loadData() {
+      // 1. Auth Check
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { 
+        router.push('/login') 
+        return 
+      }
+      
+      const { data: adminProfile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
 
-  if (searchTerm) query = query.ilike('email', `%${searchTerm}%`)
-  if (roleFilter !== 'all') query = query.eq('role', roleFilter)
+      if (adminProfile?.role !== 'admin') { 
+        router.push('/') 
+        return 
+      }
 
-  // 4. Fetch Data & Audit Logs
-  const [profilesRes, statsUsers, statsPosts, auditRes] = await Promise.all([
-    query,
-    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-    supabase.from('posts').select('id', { count: 'exact', head: true }),
-    supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(10)
-  ])
+      setCurrentUser(user)
 
-  const allProfiles = profilesRes.data
-  const filteredCount = profilesRes.count || 0
-  const totalPages = Math.ceil(filteredCount / pageSize)
-  const logs = auditRes.data
+      // 2. Fetch Live Data
+      const [allProfiles, usersCount, postsCount, auditLogs] = await Promise.all([
+        supabase.from('profiles').select('*').order('email'),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('posts').select('*', { count: 'exact', head: true }),
+        supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(10)
+      ])
+
+      setProfiles(allProfiles.data || [])
+      setStats({ users: usersCount.count || 0, posts: postsCount.count || 0 })
+      setLogs(auditLogs.data || [])
+      setLoading(false)
+    }
+
+    loadData()
+  }, [router, supabase])
+
+  // --- Handlers (Client Side) ---
+
+  const handleRoleToggle = async (userId: string, currentRole: string) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin'
+    try {
+        const success = await updateUserRole(userId, newRole)
+        if (success) {
+            // Manually update UI state
+            setProfiles(prev => prev.map(p => p.id === userId ? { ...p, role: newRole } : p))
+        }
+    } catch (e: any) { 
+        alert('Failed to update role: ' + e.message) 
+    }
+  }
+
+  const handleDelete = async (userId: string) => {
+    if(!confirm('Are you sure you want to delete this user? This cannot be undone.')) return
+    try {
+        const success = await deleteUser(userId)
+        if (success) {
+            // Manually remove from UI
+            setProfiles(prev => prev.filter(p => p.id !== userId))
+        }
+    } catch (e: any) { 
+        alert('Failed to delete user: ' + e.message) 
+    }
+  }
+
+  if (loading) return <div className="p-10 text-center text-gray-500">Loading Admin Dashboard...</div>
 
   return (
-    <div className="max-w-6xl mx-auto p-8">
+    <div className="max-w-6xl mx-auto p-8 text-gray-900">
       <header className="flex justify-between items-start mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <p className="text-gray-500 text-sm">System overview and management.</p>
         </div>
         <div className="flex gap-3">
-          <a href="/admin/posts" className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+          <button className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
             Moderate Content
-          </a>
+          </button>
           <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium border border-blue-100">
-            Admin: {user.email}
+            Admin: {currentUser?.email}
           </div>
         </div>
       </header>
@@ -75,11 +105,11 @@ export default async function AdminDashboard({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase">Total Users</p>
-          <p className="text-3xl font-bold text-gray-900">{statsUsers.count || 0}</p>
+          <p className="text-3xl font-bold">{stats.users}</p>
         </div>
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <p className="text-sm font-medium text-gray-500 uppercase">Total Posts</p>
-          <p className="text-3xl font-bold text-gray-900">{statsPosts.count || 0}</p>
+          <p className="text-3xl font-bold">{stats.posts}</p>
         </div>
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm text-center">
             <p className="text-sm font-medium text-gray-500 uppercase">Status</p>
@@ -98,29 +128,24 @@ export default async function AdminDashboard({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 bg-white">
-            {allProfiles?.map((profile) => (
+            {profiles.map((profile) => (
               <tr key={profile.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">{profile.email}</td>
+                <td className="px-6 py-4 text-sm font-medium">{profile.email}</td>
                 <td className="px-6 py-4">
-                    <form action={async () => { 
-                        'use server'; 
-                        await updateUserRole(profile.id, profile.role === 'admin' ? 'user' : 'admin'); 
-                    }}>
-                        <button type="submit" className="text-xs font-medium px-2 py-1 rounded border border-gray-200 hover:bg-gray-50">
-                            {profile.role || 'user'} ✎
-                        </button>
-                    </form>
+                    <button 
+                        onClick={() => handleRoleToggle(profile.id, profile.role)}
+                        className="text-xs font-medium px-2 py-1 rounded border border-gray-200 hover:bg-gray-100 transition"
+                    >
+                        {profile.role || 'user'} ✎
+                    </button>
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <form action={async () => {
-                    'use server'
-                    const { deleteUser } = await import('./actions')
-                    await deleteUser(profile.id)
-                  }}>
-                    <button type="submit" className="text-red-600 hover:text-red-900 text-sm font-semibold bg-red-50 px-3 py-1 rounded-md">
+                    <button 
+                        onClick={() => handleDelete(profile.id)}
+                        className="text-red-600 hover:text-red-900 text-sm font-semibold bg-red-50 px-3 py-1 rounded-md hover:bg-red-100 transition"
+                    >
                       Delete
                     </button>
-                  </form>
                 </td>
               </tr>
             ))}
@@ -134,7 +159,7 @@ export default async function AdminDashboard({
           <h2 className="font-semibold text-gray-700">Recent Audit Logs</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {logs?.map((log) => (
+          {logs.map((log) => (
             <div key={log.id} className="p-4 text-sm flex justify-between">
               <div>
                 <span className="font-medium text-blue-600">{log.admin_email}</span>
@@ -147,7 +172,7 @@ export default async function AdminDashboard({
               </div>
             </div>
           ))}
-          {logs?.length === 0 && <p className="p-4 text-gray-500 text-center italic">No logs recorded yet.</p>}
+          {logs.length === 0 && <p className="p-4 text-gray-500 text-center italic">No logs recorded yet.</p>}
         </div>
       </div>
     </div>

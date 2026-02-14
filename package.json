@@ -12,6 +12,7 @@
     "@canva/app-ui-kit": "^5.5.0",
     "@canva/intents": "^2.1.2",
     "@capacitor/android": "^8.1.0",
+    "@capacitor/ios": "^8.1.0",
     "@google-cloud/vision": "^5.3.4",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",

@@ -1,11 +1,8 @@
-'use server'
+import { createClient } from '@/app/lib/supabase/client' // <--- Use Client Import
 
-import { createClient } from '@/app/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
-
-// Helper function for logging admin actions
+// Helper function for logging admin actions (Now runs on client)
 async function logAction(adminEmail: string, type: string, targetId: string, details: any) {
-  const supabase = await createClient()
+  const supabase = createClient()
   await supabase.from('audit_logs').insert({
     admin_email: adminEmail,
     action_type: type,
@@ -15,14 +12,17 @@ async function logAction(adminEmail: string, type: string, targetId: string, det
 }
 
 export async function updateUserRole(userId: string, newRole: string) {
-  const supabase = await createClient()
+  const supabase = createClient()
   
   // 1. Security Check
   const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) throw new Error('Not authenticated')
+
   const { data: adminProfile } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user?.id)
+    .eq('id', user.id)
     .single()
 
   if (adminProfile?.role !== 'admin') {
@@ -36,23 +36,26 @@ export async function updateUserRole(userId: string, newRole: string) {
     .eq('id', userId)
 
   if (!error) {
-    // 3. Log and Revalidate
-    await logAction(user?.email!, 'ROLE_UPDATE', userId, { new_role: newRole })
-    revalidatePath('/admin')
+    // 3. Log (No revalidatePath needed)
+    await logAction(user.email!, 'ROLE_UPDATE', userId, { new_role: newRole })
+    return true // Return success status so the UI knows to update
   } else {
     throw error
   }
 }
 
 export async function deleteUser(userId: string) {
-  const supabase = await createClient()
+  const supabase = createClient()
 
   // 1. Security Check
   const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) throw new Error('Not authenticated')
+
   const { data: adminProfile } = await supabase
     .from('profiles')
     .select('role')
-    .eq('id', user?.id)
+    .eq('id', user.id)
     .single()
 
   if (adminProfile?.role !== 'admin') {
@@ -66,9 +69,9 @@ export async function deleteUser(userId: string) {
     .eq('id', userId)
 
   if (!error) {
-    // 3. Log and Revalidate
-    await logAction(user?.email!, 'USER_DELETE', userId, {})
-    revalidatePath('/admin')
+    // 3. Log
+    await logAction(user.email!, 'USER_DELETE', userId, {})
+    return true // Return success status
   } else {
     throw error
   }

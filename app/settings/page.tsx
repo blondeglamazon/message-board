@@ -1,161 +1,191 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+import { createClient } from '@/app/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function SettingsPage() {
-  const [loading, setLoading] = useState(false)
-  const [username, setUsername] = useState('')
-  const [bio, setBio] = useState('')
+  const supabase = createClient()
+  const router = useRouter()
+
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
+  
+  // Form State
+  const [formData, setFormData] = useState({
+    username: '',
+    bio: '',
+    spotify_playlist_id: '',
+    canva_design_id: '',
+    soundcloud_url: ''
+  })
 
+  // 1. Load Data
   useEffect(() => {
-    async function getProfile() {
+    async function loadProfile() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('username, bio')
-          .eq('id', user.id)
-          .single()
-
-        if (data) {
-          setUsername(data.username || '')
-          setBio(data.bio || '')
-        }
+      if (!user) {
+        router.push('/login')
+        return
       }
-    }
-    getProfile()
-  }, [])
 
-  async function handleSave() {
-    setLoading(true)
-    setMessage({ type: '', text: '' })
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      setMessage({ type: 'error', text: 'You must be logged in to save settings.' })
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (data) {
+        setFormData({
+          username: data.homepage_slug || '', // Note: using homepage_slug as username
+          bio: data.bio || '',
+          spotify_playlist_id: data.spotify_playlist_id || '',
+          canva_design_id: data.canva_design_id || '',
+          soundcloud_url: data.soundcloud_url || ''
+        })
+      }
       setLoading(false)
-      return
     }
+    loadProfile()
+  }, [router, supabase])
 
-    // Clean username one last time before saving
-    const finalUsername = username.trim().toLowerCase()
+  // 2. Handle Save
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setMessage({ type: '', text: '' })
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
 
     const { error } = await supabase
       .from('profiles')
-      .upsert({ 
-        id: user.id, 
-        username: finalUsername, 
-        bio: bio.trim()
+      .update({
+        homepage_slug: formData.username,
+        bio: formData.bio,
+        spotify_playlist_id: formData.spotify_playlist_id,
+        canva_design_id: formData.canva_design_id,
+        soundcloud_url: formData.soundcloud_url
       })
+      .eq('id', user.id)
 
     if (error) {
-      console.error('Update error:', error)
-      setMessage({ type: 'error', text: `Error: ${error.message}` })
+      setMessage({ type: 'error', text: 'Error: ' + error.message })
     } else {
-      setMessage({ type: 'success', text: 'Profile updated successfully!' })
+      setMessage({ type: 'success', text: 'Settings saved successfully!' })
+      router.refresh()
     }
-    
-    setLoading(false)
+    setSaving(false)
   }
 
+  // Helper to update state
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value })
+  }
+
+  if (loading) return <div style={{padding: '40px', color: 'white'}}>Loading settings...</div>
+
   return (
-    <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto', fontFamily: 'sans-serif', color: 'white' }}>
-      <h1 style={{ marginBottom: '20px' }}>User Settings</h1>
+    <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto', fontFamily: 'sans-serif', color: '#111827' }}>
+      <h1 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: 'bold' }}>Profile Settings</h1>
       
       {message.text && (
         <div style={{ 
           padding: '10px', 
           borderRadius: '5px', 
           marginBottom: '20px', 
+          color: 'white',
           backgroundColor: message.type === 'success' ? '#10b981' : '#ef4444' 
         }}>
           {message.text}
         </div>
       )}
 
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Username</label>
-        <input 
-          style={{ 
-            display: 'block', 
-            width: '100%', 
-            padding: '10px', 
-            borderRadius: '5px', 
-            border: '1px solid #444',
-            backgroundColor: '#111',
-            color: 'white' 
-          }}
-          value={username} 
-          onChange={(e) => setUsername(e.target.value.replace(/\s/g, "").toLowerCase())} 
-          placeholder="Enter username"
-          pattern="^[a-z0-9_]+$"
-          title="Usernames can only contain lowercase letters, numbers, and underscores."
-        />
-        <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
-          Only lowercase letters, numbers, and underscores. No spaces allowed.
-        </p>
-      </div>
+      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Username (Slug)</label>
+          <input 
+            name="username"
+            value={formData.username} 
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="username"
+          />
+        </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Bio</label>
-        <textarea 
-          style={{ 
-            display: 'block', 
-            width: '100%', 
-            padding: '10px', 
-            borderRadius: '5px', 
-            border: '1px solid #444',
-            backgroundColor: '#111',
-            color: 'white',
-            minHeight: '100px'
-          }}
-          value={bio} 
-          onChange={(e) => setBio(e.target.value)} 
-          placeholder="Tell us about yourself"
-        />
-      </div>
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Bio</label>
+          <textarea 
+            name="bio"
+            value={formData.bio} 
+            onChange={handleChange}
+            style={{ ...inputStyle, minHeight: '100px' }}
+            placeholder="Tell us about yourself..."
+          />
+        </div>
 
-      <button 
-        onClick={handleSave}
-        disabled={loading}
-        style={{ 
-          padding: '12px 24px', 
-          background: '#0070f3', 
-          color: 'white', 
-          border: 'none', 
-          borderRadius: '5px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: '16px',
-          width: '100%'
-        }}
-      >
-        {loading ? 'Saving Changes...' : 'Save Settings'}
-      </button>
+        <div>
+          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Spotify Playlist ID</label>
+          <input 
+            name="spotify_playlist_id"
+            value={formData.spotify_playlist_id} 
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="e.g. 37i9dQZF1DXcBWIGoYBM5M"
+          />
+        </div>
 
-      <hr style={{ margin: '40px 0', borderColor: '#333' }} />
-      
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ marginBottom: '15px', color: '#aaa' }}>Customize your profile banner or featured images:</p>
-        <a 
-          href="https://www.canva.com/developers/app/AAHAAAsgl1s" 
-          target="_blank" 
-          rel="noopener noreferrer"
+        <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>SoundCloud URL</label>
+            <input 
+              name="soundcloud_url"
+              value={formData.soundcloud_url} 
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="https://soundcloud.com/..."
+            />
+        </div>
+
+        <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Canva Design ID</label>
+            <input 
+              name="canva_design_id"
+              value={formData.canva_design_id} 
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="Canva Embed ID"
+            />
+        </div>
+
+        <button 
+          type="submit"
+          disabled={saving}
           style={{ 
-            textDecoration: 'none',
-            padding: '10px 20px',
-            border: '2px solid #00d4ff',
-            color: '#00d4ff',
-            borderRadius: '5px',
+            padding: '12px 24px', 
+            background: '#6366f1', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            fontSize: '16px',
             fontWeight: 'bold',
-            display: 'inline-block'
+            marginTop: '10px'
           }}
         >
-          Design on Canva
-        </a>
-      </div>
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+      </form>
     </div>
   )
+}
+
+const inputStyle = {
+  display: 'block', 
+  width: '100%', 
+  padding: '10px', 
+  borderRadius: '6px', 
+  border: '1px solid #ccc',
+  fontSize: '16px'
 }

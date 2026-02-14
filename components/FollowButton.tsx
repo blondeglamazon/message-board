@@ -1,8 +1,8 @@
-// app/u/[slug]/FollowButton.tsx
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+// 1. Change import to createClient
+import { createClient } from '@/app/lib/supabase/client'
 
 interface FollowButtonProps {
   profileId: string
@@ -12,14 +12,16 @@ interface FollowButtonProps {
 
 export default function FollowButton({ profileId, initialIsFollowing, userId }: FollowButtonProps) {
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
+  // 2. Initialize supabase
+  const supabase = createClient()
 
   const handleToggle = async () => {
     if (isFollowing) {
-      await supabase.from('follows').delete().match({ follower_id: userId, following_id: profileId })
-      setIsFollowing(false)
+      const { error } = await supabase.from('follows').delete().match({ follower_id: userId, following_id: profileId })
+      if (!error) setIsFollowing(false)
     } else {
-      await supabase.from('follows').insert({ follower_id: userId, following_id: profileId })
-      setIsFollowing(true)
+      const { error } = await supabase.from('follows').insert({ follower_id: userId, following_id: profileId })
+      if (!error) setIsFollowing(true)
     }
   }
 

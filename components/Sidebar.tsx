@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/app/lib/supabase/client'
+// 1. UPDATE IMPORT
+import { createClient } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 export default function Sidebar() {
+  // 2. INITIALIZE CLIENT
+  const supabase = createClient()
+
   const [user, setUser] = useState<any>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
@@ -24,7 +28,6 @@ export default function Sidebar() {
       }
     }
 
-    // Run once on mount
     handleResize()
     
     window.addEventListener('resize', handleResize)
@@ -59,14 +62,14 @@ export default function Sidebar() {
     })
 
     return () => { authListener.subscription.unsubscribe() }
-  }, [])
+    // Added supabase to dependency array to satisfy linter
+  }, [supabase])
 
-  // Smart Links
   const profileLink = user ? '/profile' : '/'
+  // Fixed logic for links to ensure they work with the feed filter
   const followingLink = user ? '/?feed=following' : '/'
   const friendsLink = user ? '/?feed=friends' : '/'
 
-  // Determine what to show in the big circle
   const renderMainButtonContent = () => {
     if (!user) return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>V</span>
     if (avatarUrl) return <img src={avatarUrl} alt="Profile" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -74,7 +77,6 @@ export default function Sidebar() {
     return <span style={{ fontSize: '20px', fontWeight: 'bold' }}>{initial}</span>
   }
 
-  // Styles for the Sidebar Container
   const sidebarStyle: React.CSSProperties = {
     position: 'fixed', 
     left: 0, 
@@ -85,19 +87,17 @@ export default function Sidebar() {
     display: 'flex', 
     flexDirection: 'column',
     alignItems: 'center', 
-    paddingTop: '60px', // Added padding for the toggle button space
+    paddingTop: '60px',
     gap: '25px',
     borderRight: '1px solid #e5e7eb', 
     zIndex: 50,
     transition: 'transform 0.3s ease-in-out',
-    // Mobile Logic: Slide out if mobile and closed, otherwise show
     transform: isMobile && !isOpen ? 'translateX(-100%)' : 'translateX(0)',
     boxShadow: isMobile && isOpen ? '2px 0 10px rgba(0,0,0,0.1)' : 'none'
   }
 
   return (
     <>
-      {/* === MOBILE TOGGLE BUTTON === */}
       {isMobile && (
         <button 
           onClick={() => setIsOpen(!isOpen)}
@@ -115,12 +115,10 @@ export default function Sidebar() {
           }}
         >
           {isOpen ? (
-            // Close Icon (X)
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
           ) : (
-            // Hamburger Menu Icon
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
@@ -128,10 +126,8 @@ export default function Sidebar() {
         </button>
       )}
 
-      {/* === SIDEBAR === */}
       <div style={sidebarStyle}>
         
-        {/* 1. MAIN PROFILE / HOME BUTTON */}
         <Link href={profileLink} style={{ textDecoration: 'none' }} onClick={() => isMobile && setIsOpen(false)}>
           <div style={{
             width: '40px', height: '40px', borderRadius: '50%',
@@ -145,7 +141,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* 2. HOME */}
         <Link href="/" onClick={() => isMobile && setIsOpen(false)}>
           <div style={{ cursor: 'pointer', color: pathname === '/' ? '#6366f1' : '#111827', padding: '10px' }} title="Global Feed">
              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -154,7 +149,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* 3. NOTIFICATIONS (NEW) */}
         {user && (
           <Link href="/notifications" onClick={() => isMobile && setIsOpen(false)}>
             <div style={{ cursor: 'pointer', color: pathname === '/notifications' ? '#6366f1' : '#111827', padding: '10px' }} title="Notifications">
@@ -165,7 +159,6 @@ export default function Sidebar() {
           </Link>
         )}
 
-        {/* 4. FOLLOWING */}
         <Link href={followingLink} onClick={() => isMobile && setIsOpen(false)}>
           <div style={{ cursor: 'pointer', color: '#111827', padding: '10px' }} title="Following">
              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -177,7 +170,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* 5. FRIENDS (Mutual) */}
         <Link href={friendsLink} onClick={() => isMobile && setIsOpen(false)}>
           <div style={{ cursor: 'pointer', color: '#111827', padding: '10px' }} title="Friends (Mutual)">
              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -186,7 +178,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* 6. SEARCH */}
         <Link href="/?search=true" onClick={() => isMobile && setIsOpen(false)}>
           <div style={{ cursor: 'pointer', color: '#111827', padding: '10px' }} title="Search">
              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -195,7 +186,6 @@ export default function Sidebar() {
           </div>
         </Link>
 
-        {/* 7. CREATE POST */}
         <Link href="/?create=true" onClick={() => isMobile && setIsOpen(false)}>
           <div style={{ 
             cursor: 'pointer', color: '#6366f1', border: '2px solid #6366f1', borderRadius: '8px', 
