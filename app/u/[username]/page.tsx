@@ -1,247 +1,164 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useParams } from 'next/navigation' 
 import Link from 'next/link'
-import DOMPurify from 'isomorphic-dompurify'
-import BlockButton from '@/components/BlockButton' // Added Import
+import BlockButton from '@/components/BlockButton'
+import CanvaButton from '@/components/CanvaButton'
+import ReportButton from '@/components/ReportButton' 
 
-function ProfileContent() {
+export default function UserProfile() {
   const supabase = createClient()
+  const params = useParams()
+  const usernameParam = params?.username as string
 
-  const [loading, setLoading] = useState(true)
-  const [profileUser, setProfileUser] = useState<any>(null)
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [posts, setPosts] = useState<any[]>([])
-  
-  const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({ 
-      display_name: '', 
-      avatar_url: '', 
-      background_url: '', 
-      music_embed: '', 
-      bio: '' 
-  })
-
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const targetId = searchParams.get('id')
+  const [loading, setLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   useEffect(() => {
-    async function loadProfile() {
-      setLoading(true)
-      
-      const { data: { user: loggedInUser } } = await supabase.auth.getUser()
-      setCurrentUser(loggedInUser)
+    async function fetchData() {
+      const { data: { user } } = await supabase.auth.getUser()
+      setCurrentUser(user)
 
-      const userIdToFetch = targetId || loggedInUser?.id
-      if (!userIdToFetch) { setLoading(false); return }
+      if (!usernameParam) return
 
-      const { data: profileData } = await supabase
+      const cleanUsername = decodeURIComponent(usernameParam)
+
+      // 1. Fetch Profile by USERNAME
+      const { data: profileData, error } = await supabase
         .from('profiles')
-        .select('display_name, avatar_url, background_url, music_embed, bio, email, id')
-        .eq('id', userIdToFetch)
+        .select('*')
+        .eq('username', cleanUsername)
         .single()
 
-      let email = profileData?.email || 'Unknown User'
-      let memberSince = new Date().toLocaleDateString()
-
-      const { data: userPosts } = await supabase
-        .from('posts')
-        .select('email, created_at')
-        .eq('user_id', userIdToFetch)
-        .not('email', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-
-      const { data: firstPost } = await supabase
-        .from('posts')
-        .select('created_at')
-        .eq('user_id', userIdToFetch)
-        .order('created_at', { ascending: true })
-        .limit(1)
-
-      if (userPosts && userPosts.length > 0) email = userPosts[0].email
-      if (firstPost && firstPost.length > 0) memberSince = new Date(firstPost[0].created_at).toLocaleDateString()
-
-      setProfileUser({ 
-          id: userIdToFetch, 
-          email, 
-          memberSince,
-          display_name: profileData?.display_name || '',
-          avatar_url: profileData?.avatar_url || '',
-          background_url: profileData?.background_url || '',
-          music_embed: profileData?.music_embed || '',
-          bio: profileData?.bio || ''
-      })
-      
-      if (loggedInUser && loggedInUser.id === userIdToFetch) {
-          setEditForm({
-              display_name: profileData?.display_name || '',
-              avatar_url: profileData?.avatar_url || '',
-              background_url: profileData?.background_url || '',
-              music_embed: profileData?.music_embed || '',
-              bio: profileData?.bio || ''
-          })
+      if (error || !profileData) {
+        setLoading(false)
+        return
       }
 
-      const { data: history } = await supabase
+      setProfile(profileData)
+
+      // 2. Fetch User Posts
+      const { data: postsData } = await supabase
         .from('posts')
         .select('*')
-        .eq('user_id', userIdToFetch)
+        .eq('user_id', profileData.id)
         .order('created_at', { ascending: false })
-        
-      if (history) setPosts(history)
-      
+
+      if (postsData) setPosts(postsData)
       setLoading(false)
     }
-    loadProfile()
-  }, [targetId, supabase])
 
-  async function handleSaveProfile() {
-      if (!currentUser) return
-      
-      const { error } = await supabase.from('profiles').upsert({
-          id: currentUser.id,
-          display_name: editForm.display_name,
-          avatar_url: editForm.avatar_url,
-          background_url: editForm.background_url,
-          music_embed: editForm.music_embed,
-          bio: editForm.bio
-      })
+    fetchData()
+  }, [usernameParam, supabase])
 
-      if (error) {
-          alert("Error saving profile: " + error.message)
-      } else {
-          setProfileUser({ ...profileUser, ...editForm })
-          setIsEditing(false)
-      }
+  const renderMedia = (mediaUrl: string) => {
+    if (!mediaUrl) return null
+    const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i)
+    return (
+      <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'black' }}>
+        {isVideo ? (
+          <video src={mediaUrl} controls playsInline style={{ maxWidth: '100%', display: 'block' }} />
+        ) : (
+          <img src={mediaUrl} alt="Post media" style={{ maxWidth: '100%', display: 'block' }} />
+        )}
+      </div>
+    )
   }
 
-  async function handleDelete(postId: string) {
-      if (!confirm("Are you sure?")) return
-      const { error } = await supabase.from('posts').delete().eq('id', postId)
-      if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
+  if (loading) return <div style={{ padding: '60px 20px', textAlign: 'center', color: '#6b7280' }}>Loading profile...</div>
+
+  if (!profile) {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <h2>User not found</h2>
+        <p>This user may have changed their name or does not exist.</p>
+        <Link href="/" style={{ color: '#6366f1' }}>Go Home</Link>
+      </div>
+    )
   }
 
-  const renderSafeHTML = (html: string) => {
-      if (!html) return null;
-      const clean = DOMPurify.sanitize(html, {
-          ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
-          ALLOWED_ATTR: [
-            'src', 'width', 'height', 'style', 'title', 'class', 'id',
-            'allow', 'allowfullscreen', 'frameborder', 'scrolling', 
-            'loading', 'referrerpolicy'
-          ],
-          ADD_TAGS: ['iframe', 'link']
-      })
-      return <div dangerouslySetInnerHTML={{ __html: clean }} />
-  }
-
-  const renderPostContent = (post: any) => {
-    if (post.post_type === 'embed') return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>
-    return <p style={{lineHeight:'1.5'}}>{post.content}</p>
-  }
-
-  if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
-
-  const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
-  const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
+  const isOwnProfile = currentUser?.id === profile.id
 
   return (
-    <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          {isEmbedBackground ? (
-              <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
-                  {renderSafeHTML(profileUser.background_url)}
-              </div>
+    <div style={{ 
+      maxWidth: '600px', margin: '0 auto', 
+      paddingTop: 'calc(60px + env(safe-area-inset-top))', 
+      paddingLeft: '20px', paddingRight: '20px', paddingBottom: '80px',
+      fontFamily: 'sans-serif', color: '#111827'
+    }}>
+      
+      {/* HEADER */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '30px' }}>
+        
+        {/* Avatar */}
+        <div style={{ 
+          width: '100px', height: '100px', borderRadius: '50%', 
+          backgroundColor: '#e0e7ff', overflow: 'hidden', marginBottom: '15px',
+          border: '4px solid white', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          {profile.avatar_url ? (
+            <img src={profile.avatar_url} alt={profile.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
-              <div style={{ width: '100%', height: '100%', backgroundImage: profileUser?.background_url ? `url(${profileUser.background_url})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center' }} />
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', color: '#6366f1' }}>
+              {profile.username?.charAt(0).toUpperCase()}
+            </div>
           )}
-      </div>
+        </div>
 
-      <div style={{ position: 'relative', zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', minHeight: '100vh', padding: '20px' }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-                    {isMyProfile ? 'My Profile' : 'User Profile'}
-                </h1>
-                <Link href="/" style={{ padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
-                    ← Back to Feed
-                </Link>
-            </header>
+        <h1 style={{ fontSize: '24px', fontWeight: '800', margin: '0' }}>{profile.display_name || profile.username}</h1>
+        <p style={{ color: '#6b7280', margin: '5px 0 0 0' }}>@{profile.username}</p>
 
-            {isEditing && (
-                <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
-                    <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
-                    <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Display Name" />
-                    <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Avatar URL" />
-                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Background URL or Embed" />
-                    <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Music Embed Code" />
-                    <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
-                    <div style={{display:'flex', gap:'10px'}}>
-                        <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
-                        <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
-                    </div>
-                </div>
+        {profile.bio && (
+          <p style={{ marginTop: '15px', textAlign: 'center', lineHeight: '1.5', maxWidth: '400px' }}>
+            {profile.bio}
+          </p>
+        )}
+
+        {/* Action Buttons */}
+        <div style={{ marginTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            
+            {profile.canva_design_id && <CanvaButton designId={profile.canva_design_id} />}
+            
+            {!isOwnProfile && currentUser && (
+                <BlockButton userId={profile.id} username={profile.username} />
             )}
 
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', overflow: 'hidden' }}>
-                        {profileUser?.avatar_url ? (
-                            <img src={profileUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                            (profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
-                        {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
-                    </div>
-                    
-                    {/* Action Area: Edit or Block */}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        {isMyProfile ? (
-                            !isEditing && (
-                                <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' }}>✏️ Edit</button>
-                            )
-                        ) : (
-                            <BlockButton userId={profileUser?.id} />
-                        )}
-                    </div>
-                </div>
-                {profileUser?.music_embed && (
-                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
-                        {renderSafeHTML(profileUser.music_embed)}
-                    </div>
-                )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                {posts.map(post => (
-                    <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
-                            <span>{new Date(post.created_at).toLocaleString()}</span>
-                            {isMyProfile && <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>}
-                        </div>
-                        {renderPostContent(post)}
-                        {post.media_url && post.post_type === 'image' && <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} alt="Post media" />}
-                    </div>
-                ))}
-            </div>
+            {isOwnProfile && (
+                <Link href="/settings" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#374151', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
+                    Edit Profile
+                </Link>
+            )}
         </div>
       </div>
-    </div>
-  )
-}
 
-export default function ProfilePage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ProfileContent />
-    </Suspense>
+      <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', marginBottom: '30px' }} />
+
+      {/* POSTS LIST */}
+      <div>
+        <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px' }}>Recent Posts</h3>
+        {posts.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#9ca3af' }}>No posts yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {posts.map(post => (
+              <div key={post.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                   <span style={{ fontSize: '12px', color: '#9ca3af' }}>{new Date(post.created_at).toLocaleDateString()}</span>
+                   {!isOwnProfile && <ReportButton postId={post.id} />}
+                </div>
+
+                <p style={{ lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{post.content}</p>
+                {post.media_url && renderMedia(post.media_url)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+    </div>
   )
 }

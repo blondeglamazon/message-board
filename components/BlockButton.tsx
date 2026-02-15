@@ -3,18 +3,16 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 
-export default function BlockButton({ userId }: { userId: string }) {
+export default function BlockButton({ userId, username }: { userId: string, username?: string }) {
   const [blocked, setBlocked] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
     async function checkBlockStatus() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+      if (!user) return
+      setCurrentUserId(user.id)
 
       const { data } = await supabase
         .from('blocks')
@@ -24,46 +22,57 @@ export default function BlockButton({ userId }: { userId: string }) {
         .single()
 
       if (data) setBlocked(true)
-      setLoading(false)
     }
     checkBlockStatus()
   }, [userId, supabase])
 
   const toggleBlock = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return alert("Please login to block users.")
+    if (!currentUserId) return alert("Please login to block users.")
 
-    setLoading(true)
     if (blocked) {
-      await supabase.from('blocks').delete().eq('blocker_id', user.id).eq('blocked_id', userId)
-      setBlocked(false)
+      const { error } = await supabase
+        .from('blocks')
+        .delete()
+        .match({ blocker_id: currentUserId, blocked_id: userId })
+        
+      if (!error) setBlocked(false)
     } else {
-      if (confirm("Block this user? You will no longer see their posts in your feed.")) {
-        await supabase.from('blocks').insert({ blocker_id: user.id, blocked_id: userId })
-        setBlocked(true)
-        window.location.reload() // Refresh to clear the feed of their posts
+      if (confirm(`Are you sure you want to block ${username || 'this user'}?`)) {
+        const { error } = await supabase
+            .from('blocks')
+            .insert({ blocker_id: currentUserId, blocked_id: userId })
+        
+        if (!error) {
+            setBlocked(true)
+            alert("User blocked.")
+        }
       }
     }
-    setLoading(false)
   }
 
-  if (loading) return null
+  if (!currentUserId) return null
 
   return (
     <button 
       onClick={toggleBlock}
       style={{
-        padding: '8px 16px',
-        borderRadius: '8px',
+        height: '44px', // Apple Compliance
+        padding: '0 20px',
+        borderRadius: '22px', 
         fontSize: '14px',
         fontWeight: 'bold',
         cursor: 'pointer',
-        border: '1px solid #ef4444',
-        backgroundColor: blocked ? '#ef4444' : 'transparent',
-        color: blocked ? 'white' : '#ef4444'
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid',
+        borderColor: blocked ? '#d1d5db' : '#fee2e2',
+        backgroundColor: blocked ? 'white' : '#fee2e2',
+        color: blocked ? '#374151' : '#b91c1c',
+        transition: 'all 0.2s'
       }}
     >
-      {blocked ? 'Unblock User' : 'Block User'}
+      {blocked ? 'Unblock' : 'Block User'}
     </button>
   )
 }
