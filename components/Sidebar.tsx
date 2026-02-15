@@ -11,7 +11,6 @@ export default function Sidebar() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
-  // Default to collapsed (false) so it doesn't cover the feed on load
   const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
@@ -53,19 +52,19 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Collapsible Toggle Handle (Always Visible) */}
+      {/* Collapsible Toggle Handle */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
-          left: isOpen ? '75px' : '0', // Moves with the sidebar
+          left: isOpen ? '75px' : '0', 
           top: 'calc(20px + env(safe-area-inset-top))',
           width: '44px', height: '44px',
           backgroundColor: '#ffffff',
           border: '1px solid #e5e7eb',
           borderLeft: 'none',
           borderRadius: '0 8px 8px 0',
-          zIndex: 60, // Above sidebar (50)
+          zIndex: 60, 
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '18px', cursor: 'pointer',
           color: '#111827',
@@ -83,7 +82,7 @@ export default function Sidebar() {
         backgroundColor: '#ffffff', display: 'flex', flexDirection: 'column',
         alignItems: 'center', padding: 'calc(20px + env(safe-area-inset-top)) 0 20px 0',
         borderRight: '1px solid #e5e7eb', zIndex: 50,
-        transform: isOpen ? 'translateX(0)' : 'translateX(-100%)', // Slide effect
+        transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
         transition: 'transform 0.3s ease',
         boxShadow: isOpen ? '4px 0 12px rgba(0,0,0,0.1)' : 'none'
       }}>
@@ -109,6 +108,11 @@ export default function Sidebar() {
         {/* Navigation Items */}
         <Link href="/"><div style={iconStyle(pathname === '/')}>🏠</div></Link>
         <Link href="/search"><div style={iconStyle(pathname === '/search')}>🔍</div></Link>
+        
+        {/* RESTORED: Following Button */}
+        <Link href="/following"><div style={iconStyle(pathname === '/following')}>👣</div></Link>
+
+        {/* RESTORED: Friends Button */}
         <Link href="/friends"><div style={iconStyle(pathname === '/friends')}>👥</div></Link>
         
         <div style={{ flex: 1 }} />

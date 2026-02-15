@@ -6,44 +6,48 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
+import Sidebar from '@/components/Sidebar'
 
 export const dynamicParams = false;
 
-// MAX FILE SIZE: 50MB (Make sure Supabase Bucket settings match this!)
+// MAX FILE SIZE: 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024 
 
 function MessageBoardContent() {
   const supabase = createClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
+  // --- STATE ---
   const [messages, setMessages] = useState<any[]>([])
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
   const [newMessage, setNewMessage] = useState('')
+  
+  // Media / Upload State
   const [mediaFile, setMediaFile] = useState<File | null>(null)
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null) // NEW: For draft preview
-  const [hasNewNotifications, setHasNewNotifications] = useState(false)
-  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
-  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
-  const [searchQuery, setSearchQuery] = useState('')
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null)
+  const [isEmbedMode, setIsEmbedMode] = useState(false)
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
+  
+  // User / UI State
   const [user, setUser] = useState<any>(null)
   const [isMobile, setIsMobile] = useState(false)
   
-  // Filters
+  // Comments / Interaction State
+  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [blockedIds, setBlockedIds] = useState<string[]>([])
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
-
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const router = useRouter()
-  const searchParams = useSearchParams()
   
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
-  useEffect(() => {
-    if (urlSearchQuery) setSearchQuery(urlSearchQuery)
-  }, [urlSearchQuery])
+  // Refs
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const micInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -55,8 +59,8 @@ function MessageBoardContent() {
   // --- DATA FETCHING ---
   useEffect(() => {
     async function initData() {
-      const { data: { user } } = await supabase.auth.getUser()
-      setUser(user)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      setUser(authUser)
 
       // Fetch Profiles
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
@@ -67,34 +71,35 @@ function MessageBoardContent() {
       let myFollowingIds = new Set<string>()
       let myBlockedIds: string[] = []
 
-      if (user) {
-        const { data: blocks } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id)
+      if (authUser) {
+        // UGC POLICY: Fetch Blocked Users
+        const { data: blocks } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', authUser.id)
         myBlockedIds = blocks?.map(b => b.blocked_id) || []
         setBlockedIds(myBlockedIds)
 
-        const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', user.id)
+        const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', authUser.id)
         myFollowingIds = new Set(follows?.map(f => f.following_id) || [])
         setFollowingIds(myFollowingIds)
-        
-        checkNotifications(user.id)
       }
 
+      // Build Query
       let query = supabase
         .from('posts')
         .select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
         .order('created_at', { ascending: false })
 
+      // UGC POLICY: Filter out Blocked Users
       if (myBlockedIds.length > 0) {
         query = query.not('user_id', 'in', `(${myBlockedIds.join(',')})`)
       }
 
-      if (user && currentFeed === 'following') {
+      if (authUser && currentFeed === 'following') {
          const ids = Array.from(myFollowingIds)
          if (ids.length > 0) query = query.in('user_id', ids)
          else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
       } 
-      else if (user && currentFeed === 'friends') {
-         const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', user.id)
+      else if (authUser && currentFeed === 'friends') {
+         const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', authUser.id)
          const theirIds = new Set(followsMe?.map(f => f.follower_id) || [])
          const friendIds = Array.from(myFollowingIds).filter(id => theirIds.has(id))
          if (friendIds.length > 0) query = query.in('user_id', friendIds)
@@ -107,9 +112,11 @@ function MessageBoardContent() {
     
     initData()
     
+    // Realtime Subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
+        // UGC POLICY: Ignore realtime posts from blocked users
         if (!blockedIds.includes(payload.new.user_id)) {
             setMessages((prev) => [{ ...payload.new, likes: [], comments: [] }, ...prev])
         }
@@ -119,17 +126,11 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase, blockedIds])
 
-  // --- ACTIONS ---
+  // --- HANDLERS ---
 
-  async function checkNotifications(userId: string) {
-      const lastCheck = localStorage.getItem('lastNotificationCheck') || new Date(0).toISOString()
-      const { data: newLikes } = await supabase
-        .from('likes')
-        .select('created_at, posts!inner(user_id)')
-        .eq('posts.user_id', userId)
-        .gt('created_at', lastCheck)
-      
-      if (newLikes && newLikes.length > 0) setHasNewNotifications(true)
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    window.location.reload()
   }
 
   async function handleLike(postId: string, isLiked: boolean) {
@@ -156,7 +157,7 @@ function MessageBoardContent() {
     setCommentText(prev => ({ ...prev, [postId]: '' }))
   }
 
-  // 2. FILE HANDLING & PREVIEW
+  // File Handling
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
@@ -165,8 +166,15 @@ function MessageBoardContent() {
         return
       }
       setMediaFile(file)
+      setIsEmbedMode(false)
       
-      // Generate Preview URL
+      // Determine Type
+      if (file.type.startsWith('image/')) setPostType('image')
+      else if (file.type.startsWith('video/')) setPostType('video')
+      else if (file.type.startsWith('audio/')) setPostType('audio')
+      else setPostType('file')
+
+      // Preview
       const objectUrl = URL.createObjectURL(file)
       setMediaPreview(objectUrl)
     }
@@ -176,25 +184,29 @@ function MessageBoardContent() {
     setMediaFile(null)
     if (mediaPreview) URL.revokeObjectURL(mediaPreview)
     setMediaPreview(null)
+    setPostType('text')
+    // Reset all inputs
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (micInputRef.current) micInputRef.current.value = ''
   }
 
   const handlePost = async () => {
-    if (!user) return alert("Please login to post!")
+    if (!user) { router.push('/login'); return; }
     if (!newMessage.trim() && !mediaFile) return
+    
     setUploading(true)
     try {
         let publicUrl = null
+        let finalPostType = isEmbedMode ? 'embed' : postType
+
         if (mediaFile) {
-            // Unique Filename to prevent overwrites
             const fileExt = mediaFile.name.split('.').pop()
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-            
-            const { error: uploadError } = await supabase.storage.from('uploads').upload(fileName, mediaFile)
+            const fileName = `${user.id}-${Date.now()}.${fileExt}`
+            const { error: uploadError } = await supabase.storage.from('posts').upload(fileName, mediaFile)
             if (uploadError) throw uploadError
 
-            // Get Public URL
-            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName)
+            const { data } = supabase.storage.from('posts').getPublicUrl(fileName)
             publicUrl = data.publicUrl
         }
 
@@ -202,15 +214,16 @@ function MessageBoardContent() {
             content: newMessage, 
             user_id: user.id, 
             email: user.email, 
-            post_type: postType, 
+            post_type: finalPostType, 
             media_url: publicUrl 
         }])
 
         setNewMessage('')
-        clearFile() // Clear preview
-        setPostType('text')
+        clearFile()
+        setIsEmbedMode(false)
         
         if (isCreate) router.push('/')
+        else window.location.reload()
 
     } catch (e: any) { 
         alert("Upload Error: " + e.message) 
@@ -218,29 +231,36 @@ function MessageBoardContent() {
     setUploading(false)
   }
 
+  // --- RENDER HELPERS ---
+
+  const renderSafeHTML = (html: string) => {
+    if (!html) return null;
+    const clean = DOMPurify.sanitize(html, {
+        ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
+        ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'frameborder', 'allow', 'allowfullscreen', 'scrolling', 'href', 'target', 'rel', 'title', 'class', 'id', 'loading', 'referrerpolicy'],
+        ADD_TAGS: ['iframe', 'link']
+    })
+    return <div style={{ width: '100%', overflow: 'hidden', marginTop: '10px', borderRadius: '12px' }} dangerouslySetInnerHTML={{ __html: clean }} />
+  }
+
   const renderContent = (msg: any) => {
-    if (msg.post_type === 'embed') {
-        const clean = DOMPurify.sanitize(msg.content, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
-        return <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: clean }} />
+    // Embed / HTML
+    if (msg.post_type === 'embed' || (typeof msg.content === 'string' && msg.content.trim().startsWith('<'))) {
+        return renderSafeHTML(msg.content)
     }
     
-    // Render Images/Videos
+    // Text & Media
     return (
         <div>
-           <p style={{ color: '#111827', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+           <p style={{ color: '#111827', lineHeight: '1.6', whiteSpace: 'pre-wrap', fontSize: '16px', margin: 0 }}>{msg.content}</p>
            {msg.media_url && (
-             <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden' }}>
-                {/* Check extension for Video vs Image */}
+             <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
                 {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-                  <video src={msg.media_url} controls playsInline style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} />
+                  <video src={msg.media_url} controls playsInline style={{ width: '100%', display: 'block' }} />
+                ) : msg.media_url.match(/\.(mp3|wav|m4a)$/i) ? (
+                  <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>
                 ) : (
-                  <img 
-                    src={msg.media_url} 
-                    alt="Post media" 
-                    referrerPolicy="no-referrer" 
-                    style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} 
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} // Hide broken images
-                  />
+                  <img src={msg.media_url} alt="Post media" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />
                 )}
              </div>
            )}
@@ -249,7 +269,7 @@ function MessageBoardContent() {
   }
 
   const filteredMessages = messages.filter(msg => {
-    const query = urlSearchQuery || searchQuery
+    const query = urlSearchQuery
     if (!query) return true;
     const lowerQ = query.toLowerCase();
     const profile = profilesMap[msg.user_id];
@@ -257,143 +277,196 @@ function MessageBoardContent() {
   });
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#ffffff', color: '#111827', fontFamily: 'sans-serif' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+      <Sidebar />
+
+      {/* Floating Auth Buttons */}
+      <div style={{ 
+        position: 'fixed', top: '20px', right: '20px', 
+        zIndex: 100, display: 'flex', gap: '10px' 
+      }}>
+        {user ? (
+          <button onClick={handleSignOut} style={{ 
+            height: '44px', padding: '0 20px', borderRadius: '22px', 
+            border: '2px solid #111827', backgroundColor: 'white', 
+            fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+            color: '#111827'
+          }}>
+            Log Out
+          </button>
+        ) : (
+          <Link href="/login" style={{ 
+            height: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
+            borderRadius: '22px', backgroundColor: 'white', color: '#111827', 
+            fontWeight: 'bold', textDecoration: 'none', border: '2px solid #111827',
+            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+          }}>
+            Log In
+          </Link>
+        )}
+      </div>
       
       <main style={{ 
-        flex: 1, 
-        maxWidth: '700px', 
-        margin: '0 auto', 
-        paddingTop: isMobile ? 'calc(60px + env(safe-area-inset-top))' : '40px',
-        paddingLeft: '20px',
-        paddingRight: '20px',
-        paddingBottom: '80px' 
+        maxWidth: '600px', margin: '0 auto', 
+        paddingTop: 'calc(20px + env(safe-area-inset-top))',
+        paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px'
       }}>
          
-         {/* HEADER */}
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '800' }}>{currentFeed.toUpperCase()} FEED</h2>
-            {user && !isCreate && (
-              <button 
-                onClick={() => router.push('/?create=true')}
-                style={{ padding: '8px 16px', backgroundColor: '#6366f1', color: 'white', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: '600' }}
-              >
-                + Post
-              </button>
-            )}
+         {/* FEED HEADER */}
+         <div style={{ marginBottom: '20px', marginTop: '40px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#111827' }}>{currentFeed.toUpperCase()} FEED</h2>
          </div>
 
-         {/* 3. CREATE POST UI (Mobile Optimized) */}
-         {(isCreate || (!isMobile && currentFeed === 'global')) && user && (
-           <div style={{ marginBottom: '30px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+         {/* POST CREATION UI */}
+         {user && (
+           <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
              <textarea
                value={newMessage}
                onChange={(e) => setNewMessage(e.target.value)}
-               placeholder="What's on your mind?"
-               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '10px', minHeight: '80px', backgroundColor: 'white', fontSize: '16px', color: '#111827' }}
+               placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind?"}
+               style={{ 
+                  width: '100%', padding: '12px', borderRadius: '12px', 
+                  border: '1px solid #d1d5db', marginBottom: '15px', minHeight: '80px', 
+                  backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', 
+                  color: isEmbedMode ? '#00ff00' : '#111827',
+                  fontSize: '16px', resize: 'none'
+               }}
              />
              
-             {/* Draft Preview (NEW!) */}
+             {/* Media Preview */}
              {mediaPreview && (
-               <div style={{ marginBottom: '15px', position: 'relative' }}>
-                 {mediaFile?.type.startsWith('video') ? (
-                    <video src={mediaPreview} controls style={{ maxHeight: '200px', borderRadius: '8px' }} />
+               <div style={{ marginBottom: '15px', position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                 {postType === 'video' ? (
+                    <video src={mediaPreview} controls style={{ width: '100%', display: 'block' }} />
+                 ) : postType === 'audio' ? (
+                    <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={mediaPreview} style={{width:'100%'}} /></div>
                  ) : (
-                    <img src={mediaPreview} alt="Preview" style={{ maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }} />
+                    <img src={mediaPreview} alt="Preview" style={{ width: '100%', display: 'block' }} />
                  )}
                  <button 
                     onClick={clearFile}
-                    style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer' }}
+                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                  >✕</button>
                </div>
              )}
 
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,video/*" hidden />
-                   <button 
-                     onClick={() => fileInputRef.current?.click()} 
-                     style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                   >
-                     <span>📷</span> <span style={{fontSize: '14px', fontWeight: '600', color: '#374151'}}>Media</span>
-                   </button>
-                </div>
+             {/* Action Buttons Row - COMPLIANT TOUCH TARGETS (44px) */}
+             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {/* 1. Camera */}
+                <button onClick={() => cameraInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Camera">📷</button>
+                <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*,video/*" capture="environment" hidden />
+
+                {/* 2. Mic */}
+                <button onClick={() => micInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Microphone">🎤</button>
+                <input type="file" ref={micInputRef} onChange={handleFileSelect} accept="audio/*" capture hidden />
+
+                {/* 3. Files */}
+                <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Upload">📁</button>
+                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="*/*" hidden />
+
+                {/* 4. Embed Mode */}
+                <button 
+                    onClick={() => setIsEmbedMode(!isEmbedMode)} 
+                    style={{ 
+                        flex: 1, minHeight: '44px', borderRadius: '8px', 
+                        border: isEmbedMode ? '2px solid #6366f1' : '1px solid #e5e7eb', 
+                        backgroundColor: isEmbedMode ? '#e0e7ff' : 'white', 
+                        cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' 
+                    }}>
+                    mb
+                </button>
+
+                {/* Post */}
                 <button 
                   onClick={handlePost}
                   disabled={uploading}
                   style={{ 
-                    padding: '8px 24px', backgroundColor: uploading ? '#9ca3af' : '#6366f1', 
-                    color: 'white', borderRadius: '8px', border: 'none', cursor: uploading ? 'default' : 'pointer', fontWeight: 'bold' 
+                    minHeight: '44px', padding: '0 24px', backgroundColor: uploading ? '#9ca3af' : '#111827', 
+                    color: 'white', borderRadius: '22px', border: 'none', cursor: uploading ? 'default' : 'pointer', fontWeight: 'bold', marginLeft: 'auto'
                   }}
                 >
-                  {uploading ? 'Uploading...' : 'Post'}
+                  {uploading ? '...' : 'Post'}
                 </button>
              </div>
            </div>
          )}
 
-         {/* FEED */}
+         {/* FEED ITEMS */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.map((msg) => {
-                    const profile = profilesMap[msg.user_id]
-                    const username = profile?.username || 'Anonymous';
-                    const displayName = profile?.display_name || username;
-                    const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
-                    return (
-                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                            <div style={{ marginBottom: '10px', display: 'flex', gap:'10px', alignItems:'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden' }}>
-                                        {profile?.avatar_url && <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                                    </div>
-                                    <div style={{display:'flex', flexDirection:'column'}}>
-                                        <Link href={`/u/${username}`} style={{ fontWeight: 'bold', color: '#111827', textDecoration: 'none' }}>{displayName}</Link>
-                                        <span style={{ color: '#9ca3af', fontSize: '12px' }}>{new Date(msg.created_at).toLocaleDateString()}</span>
-                                    </div>
+                const profile = profilesMap[msg.user_id]
+                const username = profile?.username || 'Anonymous';
+                const displayName = profile?.display_name || username;
+                const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
+                
+                return (
+                    <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        {/* Post Header */}
+                        <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Link href={`/u/${username}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                                    <img src={profile?.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 </div>
-                                <ReportButton postId={msg.id} />
-                            </div>
-                            {renderContent(msg)}
-                            
-                            <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
-                                <button 
-                                  onClick={() => handleLike(msg.id, !!isLiked)} 
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
-                                  <span style={{ fontSize: '18px' }}>{isLiked ? '❤️' : '🤍'}</span> 
-                                  <span style={{ fontWeight: '600' }}>{msg.likes?.length || 0}</span>
-                                </button>
-                                <button 
-                                  onClick={() => toggleComments(msg.id)} 
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
-                                  <span style={{ fontSize: '18px' }}>💬</span> 
-                                  <span style={{ fontWeight: '600' }}>{msg.comments?.length || 0}</span>
-                                </button>
-                            </div>
-
-                            {openComments.has(msg.id) && (
-                                <div style={{ marginTop: '10px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px' }}>
-                                    {msg.comments?.map((c: any) => {
-                                        const commenter = profilesMap[c.user_id]
-                                        const commenterName = commenter?.username || 'User'
-                                        const commentDate = new Date(c.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
-                                        return (
-                                            <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                   <span style={{ fontWeight: 'bold', color: '#374151' }}>{commenterName}</span>
-                                                   <span style={{ fontSize: '11px', color: '#9ca3af' }}>{commentDate}</span>
-                                                </div>
-                                                <div style={{ color: '#4b5563', lineHeight: '1.4' }}>{c.content}</div>
-                                            </div>
-                                        )
-                                    })}
-                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                        <input type="text" placeholder="Add a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px' }} />
-                                        <button onClick={() => handlePostComment(msg.id)} style={{ padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', minHeight: '44px' }}>Send</button>
-                                    </div>
+                                <div>
+                                    <div style={{ fontWeight: 'bold', color: '#111827', fontSize: '15px' }}>{displayName}</div>
+                                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{new Date(msg.created_at).toLocaleDateString()}</div>
                                 </div>
-                            )}
+                            </Link>
+                            {/* UGC POLICY: Reporting */}
+                            <ReportButton postId={msg.id} />
                         </div>
-                    )
-                })}
+
+                        {/* Content */}
+                        {renderContent(msg)}
+                        
+                        {/* Interactions */}
+                        <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
+                            <button 
+                              onClick={() => handleLike(msg.id, !!isLiked)} 
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
+                              <span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> 
+                              <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.likes?.length || 0}</span>
+                            </button>
+                            <button 
+                              onClick={() => toggleComments(msg.id)} 
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
+                              <span style={{ fontSize: '20px' }}>💬</span> 
+                              <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.comments?.length || 0}</span>
+                            </button>
+                        </div>
+
+                        {/* Comments Section */}
+                        {openComments.has(msg.id) && (
+                            <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
+                                {msg.comments?.map((c: any) => {
+                                    const commenter = profilesMap[c.user_id]
+                                    return (
+                                        <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px' }}>
+                                            <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>{commenter?.username || 'User'}</span>
+                                            <span style={{ color: '#4b5563' }}>{c.content}</span>
+                                        </div>
+                                    )
+                                })}
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Add a comment..." 
+                                      value={commentText[msg.id] || ''} 
+                                      onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
+                                      style={{ flex: 1, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px' }} 
+                                    />
+                                    <button 
+                                      onClick={() => handlePostComment(msg.id)} 
+                                      style={{ height: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                      Post
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
          </div>
       </main>
     </div>
@@ -402,7 +475,7 @@ function MessageBoardContent() {
 
 export default function MessageBoard() {
   return (
-    <Suspense fallback={<div style={{color: '#111827', padding: '20px'}}>Loading...</div>}>
+    <Suspense fallback={<div style={{color: '#111827', padding: '20px', textAlign:'center'}}>Loading...</div>}>
       <MessageBoardContent />
     </Suspense>
   )
