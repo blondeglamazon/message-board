@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import Script from 'next/script' // Optimized script loader
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
 
@@ -11,13 +12,15 @@ export const metadata: Metadata = {
 }
 
 // CRITICAL FOR MOBILE APPS
-// This handles the "Notch" and prevents annoying auto-zoom on inputs
+// This handles the "Notch", prevents auto-zoom on inputs, 
+// and locks the UI scale to feel like a native app.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover', // Extends content behind the notch/status bar
+  viewportFit: 'cover',
+  themeColor: '#ffffff', // Sets the Android status bar color
 }
 
 export default function RootLayout({
@@ -27,12 +30,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* REQUIRED: Loads the Canva Button SDK */}
-        <script src="https://sdk.canva.com/designbutton/v2/api.js" async></script>
-      </head>
-      
       <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
+        
+        {/* REQUIRED: Loads the Canva Button SDK efficiently */}
+        <Script 
+          src="https://sdk.canva.com/designbutton/v2/api.js" 
+          strategy="afterInteractive" 
+        />
         
         {/* The Sidebar (Navigation) */}
         <Sidebar />

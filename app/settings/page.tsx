@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import CanvaDesignButton from '@/components/CanvaDesignButton'
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -80,6 +81,20 @@ export default function SettingsPage() {
     setSaving(false)
   }
 
+  // 3. Helper for Canva Button
+  const handleCanvaSave = (url: string) => {
+    // Extract ID if URL is provided, otherwise ignore
+    if (!url) return
+    const parts = url.split('/')
+    // Basic check to see if we can find an ID in the standard position
+    // Canva URLs are usually like: https://www.canva.com/design/DAFxyz/view
+    // [0]https: [1] [2]www.canva.com [3]design [4]DAFxyz
+    const designId = parts.length > 4 ? parts[4] : url
+    
+    setFormData(prev => ({ ...prev, canva_design_id: designId }))
+    setMessage({ type: 'success', text: 'Design attached! Click Save below to finish.' })
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
@@ -132,6 +147,20 @@ export default function SettingsPage() {
         <div>
             <label style={labelStyle}>SoundCloud URL</label>
             <input name="soundcloud_url" value={formData.soundcloud_url} onChange={handleChange} style={inputStyle} placeholder="https://soundcloud.com/..." />
+        </div>
+
+        {/* --- CANVA SECTION --- */}
+        <div>
+            <label style={labelStyle}>Canva Design ID</label>
+            <input 
+              name="canva_design_id"
+              value={formData.canva_design_id} 
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="Design ID will appear here..."
+            />
+            {/* The Design Button */}
+            <CanvaDesignButton onSave={handleCanvaSave} />
         </div>
 
         <button 
