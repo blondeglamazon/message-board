@@ -54,7 +54,6 @@ export default function UserProfile() {
     }
   }
 
-  // RESTORED: Full Media Logic for Post Photos/Videos
   const renderMedia = (mediaUrl: string) => {
     if (!mediaUrl) return null
     const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i)
@@ -100,12 +99,14 @@ export default function UserProfile() {
       backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'
     }}>
       <div style={{ 
-        maxWidth: '600px', margin: '0 auto', 
+        maxWidth: '100%', // Restore full width
+        margin: '0 auto', 
         paddingTop: 'calc(80px + env(safe-area-inset-top))', 
         paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px'
       }}>
         
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.95)', padding: '30px', borderRadius: '24px', border: '2px solid #111827' }}>
+        {/* Header Section */}
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.95)', padding: '30px', borderRadius: '24px', border: '2px solid #111827' }}>
           
           <div style={{ width: '110px', height: '110px', borderRadius: '50%', overflow: 'hidden', border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: '15px' }}>
             <img src={profile.avatar_url || '/default-avatar.png'} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -114,10 +115,8 @@ export default function UserProfile() {
           <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#111827', margin: 0 }}>{profile.display_name || profile.username}</h1>
           {profile.bio && <p style={{ marginTop: '10px', color: '#111827', fontSize: '16px', fontWeight: '700' }}>{profile.bio}</p>}
 
-          {/* Spotify Player */}
           {profile.music_embed && renderSafeHTML(profile.music_embed)}
 
-          {/* Canva Embed (Automatic Portfolio) */}
           {profile.canva_design_id && renderSafeHTML(`
             <div style="position: relative; width: 100%; height: 0; padding-top: 56.25%; overflow: hidden; border-radius: 12px;">
               <iframe loading="lazy" style="position: absolute; width: 100%; height: 100%; top: 0; left: 0; border: none;"
@@ -133,11 +132,25 @@ export default function UserProfile() {
                 </button>
               )}
               {!isOwnProfile && currentUser && <BlockButton userId={profile.id} username={profile.display_name} />}
-              {isOwnProfile && <Link href="/settings" style={{ textDecoration: 'none', padding: '0 24px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#111827', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>Edit Profile</Link>}
+              
+              {/* Edit Profile Button Restored */}
+              {isOwnProfile && (
+                <Link href="/settings" style={{ textDecoration: 'none', padding: '0 24px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#111827', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
+                  Edit Profile
+                </Link>
+              )}
+
+              {/* Create Post Button Restored */}
+              {isOwnProfile && (
+                <Link href="/create" style={{ textDecoration: 'none', padding: '0 24px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#6366f1', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
+                  + Post
+                </Link>
+              )}
           </div>
         </div>
 
-        <div style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {/* Feed Section - Wide Feed Restored */}
+        <div style={{ maxWidth: '800px', margin: '40px auto 0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#111827', textShadow: '0 1px 2px white' }}>Recent Posts</h3>
           {posts.map(post => (
             <div key={post.id} style={{ padding: '24px', borderRadius: '20px', border: '2px solid #111827', backgroundColor: 'rgba(255,255,255,0.95)' }}>
