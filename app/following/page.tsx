@@ -12,15 +12,37 @@ export default function FollowingPage() {
   useEffect(() => {
     async function loadFollowing() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+      if (!user) {
+        setLoading(false)
+        return
+      }
 
-      // Fetch people I follow
-      const { data } = await supabase
+      // Step 1: Get the IDs of everyone I follow
+      const { data: connections, error } = await supabase
         .from('followers')
-        .select('profiles!followers_following_id_fkey(username, display_name, avatar_url)')
+        .select('following_id')
         .eq('follower_id', user.id)
 
-      setFollowing(data?.map(d => d.profiles) || [])
+      if (error) {
+        console.error("Error loading following:", error)
+        setLoading(false)
+        return
+      }
+
+      // Step 2: Fetch profile details for those IDs
+      if (connections && connections.length > 0) {
+        const ids = connections.map(c => c.following_id)
+        
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('username, display_name, avatar_url')
+          .in('id', ids)
+
+        setFollowing(profiles || [])
+      } else {
+        setFollowing([])
+      }
+      
       setLoading(false)
     }
     loadFollowing()
@@ -34,16 +56,26 @@ export default function FollowingPage() {
       
       <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
         {following.length === 0 ? (
-          <p style={{ color: '#111827', fontStyle: 'italic' }}>You aren't following anyone yet.</p>
+          <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
+            <p style={{ fontSize: '18px', marginBottom: '10px' }}>You aren't following anyone yet.</p>
+            <Link href="/search" style={{ color: '#6366f1', fontWeight: 'bold', textDecoration: 'none' }}>
+              Find people to follow →
+            </Link>
+          </div>
         ) : (
-          following.map((user: any) => (
+          following.map(user => (
             <Link key={user.username} href={`/u/${user.username}`} style={{ textDecoration: 'none' }}>
               <div style={{ 
                 display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', 
-                borderRadius: '12px', border: '1px solid #111827', backgroundColor: 'white' 
+                borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
               }}>
-                <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
-                <span style={{ color: '#111827', fontWeight: 'bold' }}>{user.display_name || user.username}</span>
+                <div style={{ width: '50px', height: '50px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                  <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+                <span style={{ color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>
+                  {user.display_name || user.username}
+                </span>
               </div>
             </Link>
           ))
