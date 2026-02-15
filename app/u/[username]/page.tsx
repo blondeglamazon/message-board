@@ -43,6 +43,11 @@ export default function UserProfile() {
     fetchData()
   }, [usernameParam, supabase])
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
+
   const toggleFollow = async () => {
     if (!currentUser || !profile) return
     if (isFollowing) {
@@ -79,7 +84,7 @@ export default function UserProfile() {
         width: '100%', 
         borderRadius: '16px', 
         overflow: 'hidden', 
-        marginTop: '20px', 
+        marginTop: '15px', 
         border: isEmbed ? 'none' : '2px solid #111827'
       }} 
       dangerouslySetInnerHTML={{ __html: clean }} 
@@ -98,22 +103,37 @@ export default function UserProfile() {
       backgroundImage: profile.background_url ? `url(${profile.background_url})` : 'none',
       backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'
     }}>
+      {/* Top Navigation Bar */}
       <div style={{ 
-        maxWidth: '100%', // Restore full width
-        margin: '0 auto', 
+        position: 'fixed', top: 0, width: '100%', height: '60px', 
+        backgroundColor: 'rgba(255,255,255,0.9)', borderBottom: '1px solid #e5e7eb',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 20px', zIndex: 100 
+      }}>
+        {currentUser ? (
+          <button onClick={handleSignOut} style={{ height: '40px', padding: '0 15px', borderRadius: '20px', border: '1px solid #111827', backgroundColor: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Log Out</button>
+        ) : (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Link href="/login" style={{ textDecoration: 'none', color: '#111827', fontWeight: 'bold' }}>Log In</Link>
+            <Link href="/signup" style={{ textDecoration: 'none', padding: '5px 15px', borderRadius: '15px', backgroundColor: '#111827', color: 'white', fontWeight: 'bold' }}>Sign Up</Link>
+          </div>
+        )}
+      </div>
+
+      <div style={{ 
+        maxWidth: '800px', margin: '0 auto', 
         paddingTop: 'calc(80px + env(safe-area-inset-top))', 
         paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px'
       }}>
         
-        {/* Header Section */}
-        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.95)', padding: '30px', borderRadius: '24px', border: '2px solid #111827' }}>
+        {/* Shortened Profile Header */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.95)', padding: '20px', borderRadius: '24px', border: '2px solid #111827' }}>
           
-          <div style={{ width: '110px', height: '110px', borderRadius: '50%', overflow: 'hidden', border: '4px solid white', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', marginBottom: '15px' }}>
+          <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', marginBottom: '10px' }}>
             <img src={profile.avatar_url || '/default-avatar.png'} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
 
-          <h1 style={{ fontSize: '28px', fontWeight: '800', color: '#111827', margin: 0 }}>{profile.display_name || profile.username}</h1>
-          {profile.bio && <p style={{ marginTop: '10px', color: '#111827', fontSize: '16px', fontWeight: '700' }}>{profile.bio}</p>}
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0 }}>{profile.display_name || profile.username}</h1>
+          {profile.bio && <p style={{ marginTop: '5px', color: '#111827', fontSize: '15px', fontWeight: '600' }}>{profile.bio}</p>}
 
           {profile.music_embed && renderSafeHTML(profile.music_embed)}
 
@@ -125,40 +145,33 @@ export default function UserProfile() {
             </div>
           `, true)}
 
-          <div style={{ marginTop: '25px', display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <div style={{ marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
               {!isOwnProfile && currentUser && (
-                <button onClick={toggleFollow} style={{ height: '44px', padding: '0 24px', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: isFollowing ? '#ffffff' : '#111827', color: isFollowing ? '#111827' : '#ffffff', border: '2px solid #111827' }}>
+                <button onClick={toggleFollow} style={{ height: '44px', padding: '0 20px', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer', backgroundColor: isFollowing ? '#ffffff' : '#111827', color: isFollowing ? '#111827' : '#ffffff', border: '2px solid #111827' }}>
                   {isFollowing ? 'Following' : 'Follow'}
                 </button>
               )}
               {!isOwnProfile && currentUser && <BlockButton userId={profile.id} username={profile.display_name} />}
               
-              {/* Edit Profile Button Restored */}
               {isOwnProfile && (
-                <Link href="/settings" style={{ textDecoration: 'none', padding: '0 24px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#111827', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
-                  Edit Profile
-                </Link>
-              )}
-
-              {/* Create Post Button Restored */}
-              {isOwnProfile && (
-                <Link href="/create" style={{ textDecoration: 'none', padding: '0 24px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#6366f1', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
-                  + Post
-                </Link>
+                <>
+                  <Link href="/settings" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#111827', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>Edit Profile</Link>
+                  <Link href="/create" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#6366f1', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>+ Post</Link>
+                </>
               )}
           </div>
         </div>
 
-        {/* Feed Section - Wide Feed Restored */}
-        <div style={{ maxWidth: '800px', margin: '40px auto 0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <h3 style={{ fontSize: '22px', fontWeight: '900', color: '#111827', textShadow: '0 1px 2px white' }}>Recent Posts</h3>
+        {/* Feed Section - High Contrast #111827 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '30px' }}>
+          <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#111827', textShadow: '0 1px 1px white' }}>Recent Posts</h3>
           {posts.map(post => (
-            <div key={post.id} style={{ padding: '24px', borderRadius: '20px', border: '2px solid #111827', backgroundColor: 'rgba(255,255,255,0.95)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div key={post.id} style={{ padding: '20px', borderRadius: '20px', border: '2px solid #111827', backgroundColor: 'rgba(255,255,255,0.95)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                  <span style={{ fontSize: '12px', color: '#111827', fontWeight: '900' }}>{new Date(post.created_at).toLocaleDateString()}</span>
                  {!isOwnProfile && <ReportButton postId={post.id} />}
               </div>
-              <p style={{ color: '#111827', fontSize: '17px', margin: 0, lineHeight: '1.5', fontWeight: '600' }}>{post.content}</p>
+              <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{post.content}</p>
               {post.media_url && renderMedia(post.media_url)}
             </div>
           ))}
