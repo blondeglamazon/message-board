@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
-import { useParams } from 'next/navigation' 
+import { useParams, useRouter } from 'next/navigation' 
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 import BlockButton from '@/components/BlockButton'
@@ -11,6 +11,7 @@ import ReportButton from '@/components/ReportButton'
 export default function UserProfile() {
   const supabase = createClient()
   const params = useParams()
+  const router = useRouter()
   const usernameParam = params?.username as string
 
   const [profile, setProfile] = useState<any>(null)
@@ -18,6 +19,16 @@ export default function UserProfile() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isFollowing, setIsFollowing] = useState(false)
+
+  // RESTORED: Edit Mode State
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({ 
+      display_name: '', 
+      avatar_url: '', 
+      background_url: '', 
+      music_embed: '', 
+      bio: '' 
+  })
 
   useEffect(() => {
     async function fetchData() {
@@ -30,6 +41,16 @@ export default function UserProfile() {
       
       if (profileData) {
         setProfile(profileData)
+        
+        // Initialize Edit Form with current data
+        setEditForm({
+            display_name: profileData.display_name || '',
+            avatar_url: profileData.avatar_url || '',
+            background_url: profileData.background_url || '',
+            music_embed: profileData.music_embed || '',
+            bio: profileData.bio || ''
+        })
+
         const { data: postsData } = await supabase.from('posts').select('*').eq('user_id', profileData.id).order('created_at', { ascending: false })
         setPosts(postsData || [])
 
@@ -59,6 +80,28 @@ export default function UserProfile() {
     }
   }
 
+  // RESTORED: Save Profile Function
+  async function handleSaveProfile() {
+      if (!currentUser) return
+      
+      const { error } = await supabase.from('profiles').upsert({
+          id: currentUser.id,
+          username: profile.username, // Maintain username
+          display_name: editForm.display_name,
+          avatar_url: editForm.avatar_url,
+          background_url: editForm.background_url,
+          music_embed: editForm.music_embed,
+          bio: editForm.bio
+      })
+
+      if (error) {
+          alert("Error saving profile: " + error.message)
+      } else {
+          setProfile({ ...profile, ...editForm })
+          setIsEditing(false)
+      }
+  }
+
   const renderMedia = (mediaUrl: string) => {
     if (!mediaUrl) return null
     const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i)
@@ -76,8 +119,9 @@ export default function UserProfile() {
   const renderSafeHTML = (html: string, isEmbed: boolean = false) => {
     if (!html) return null;
     const clean = DOMPurify.sanitize(html, {
-        ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a'],
-        ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'frameborder', 'allow', 'allowfullscreen', 'scrolling', 'href', 'target', 'rel']
+        ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
+        ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'frameborder', 'allow', 'allowfullscreen', 'scrolling', 'href', 'target', 'rel', 'title', 'class', 'id', 'loading', 'referrerpolicy'],
+        ADD_TAGS: ['iframe', 'link']
     })
     return (
       <div style={{ 
@@ -92,17 +136,43 @@ export default function UserProfile() {
     )
   }
 
+  // FIX: Handle "Post showing as code"
+  const renderPostContent = (post: any) => {
+    // If content looks like HTML (starts with <) or is an embed type, render safely
+    if (post.post_type === 'embed' || (typeof post.content === 'string' && post.content.trim().startsWith('<'))) {
+       return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content, true)}</div>
+    }
+    return <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{post.content}</p>
+  }
+
   if (loading) return <div style={{ padding: '100px', textAlign: 'center', color: '#111827', fontWeight: 'bold' }}>Loading...</div>
   if (!profile) return <div style={{ padding: '100px', textAlign: 'center', color: '#111827' }}>User not found.</div>
 
   const isOwnProfile = currentUser?.id === profile.id
+  // FIX: Check if background is an embed code or URL
+  const isEmbedBackground = profile?.background_url && profile.background_url.trim().startsWith('<');
 
   return (
     <div style={{ 
       minHeight: '100vh',
-      backgroundImage: profile.background_url ? `url(${profile.background_url})` : 'none',
-      backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed'
+      position: 'relative' 
     }}>
+      {/* Background Layer */}
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, overflow: 'hidden', pointerEvents: 'none' }}>
+          {isEmbedBackground ? (
+              <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
+                  {renderSafeHTML(profile.background_url, true)}
+              </div>
+          ) : (
+              <div style={{ 
+                  width: '100%', height: '100%', 
+                  backgroundImage: profile.background_url ? `url(${profile.background_url})` : 'none', 
+                  backgroundSize: 'cover', backgroundPosition: 'center',
+                  backgroundColor: '#f3f4f6'
+               }} />
+          )}
+      </div>
+
       {/* Top Navigation Bar */}
       <div style={{ 
         position: 'fixed', top: 0, width: '100%', height: '60px', 
@@ -135,9 +205,37 @@ export default function UserProfile() {
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0 }}>{profile.display_name || profile.username}</h1>
           {profile.bio && <p style={{ marginTop: '5px', color: '#111827', fontSize: '15px', fontWeight: '600' }}>{profile.bio}</p>}
 
-          {profile.music_embed && renderSafeHTML(profile.music_embed)}
+          {/* EDIT FORM - RESTORED */}
+          {isEditing && (
+            <div style={{ width: '100%', marginBottom: '20px', backgroundColor: '#f3f4f6', padding: '20px', borderRadius: '12px', border: '1px solid #111827', marginTop: '20px', textAlign: 'left' }}>
+                <h3 style={{ color: '#111827', marginTop: 0, marginBottom: '15px' }}>Edit Profile</h3>
+                
+                <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Display Name</label>
+                <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
+                
+                <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Avatar URL</label>
+                <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
+                
+                <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Background (URL or Embed)</label>
+                <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
+                
+                <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Spotify/Music Embed Code</label>
+                <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', height:'80px', fontSize:'16px'}} />
+                
+                <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Bio</label>
+                <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', height:'80px', fontSize:'16px'}} />
+                
+                <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
+                    <button onClick={handleSaveProfile} style={{backgroundColor:'#111827', color:'white', border:'none', padding:'10px 20px', borderRadius:'22px', cursor:'pointer', fontWeight:'bold', height:'44px'}}>Save Changes</button>
+                    <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#ffffff', color:'#111827', border:'2px solid #111827', padding:'10px 20px', borderRadius:'22px', cursor:'pointer', fontWeight:'bold', height:'44px'}}>Cancel</button>
+                </div>
+            </div>
+          )}
 
-          {profile.canva_design_id && renderSafeHTML(`
+          {/* Spotify & Canva Embeds */}
+          {!isEditing && profile.music_embed && renderSafeHTML(profile.music_embed)}
+
+          {!isEditing && profile.canva_design_id && renderSafeHTML(`
             <div style="position: relative; width: 100%; height: 0; padding-top: 56.25%; overflow: hidden; border-radius: 12px;">
               <iframe loading="lazy" style="position: absolute; width: 100%; height: 100%; top: 0; left: 0; border: none;"
                 src="https://www.canva.com/design/${profile.canva_design_id}/view?embed" allowfullscreen="allowfullscreen" allow="fullscreen">
@@ -153,16 +251,21 @@ export default function UserProfile() {
               )}
               {!isOwnProfile && currentUser && <BlockButton userId={profile.id} username={profile.display_name} />}
               
-              {isOwnProfile && (
+              {isOwnProfile && !isEditing && (
                 <>
-                  <Link href="/settings" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#111827', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>Edit Profile</Link>
-                  <Link href="/create" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#6366f1', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>+ Post</Link>
+                  {/* EDIT BUTTON RESTORED */}
+                  <button onClick={() => setIsEditing(true)} style={{ height: '44px', padding: '0 20px', borderRadius: '22px', border: 'none', backgroundColor: '#111827', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                     ✏️ Edit Profile
+                  </button>
+                  <Link href="/create" style={{ textDecoration: 'none', padding: '0 20px', height: '44px', display:'flex', alignItems:'center', backgroundColor: '#6366f1', color: 'white', borderRadius: '22px', fontSize: '14px', fontWeight: 'bold' }}>
+                    + Post
+                  </Link>
                 </>
               )}
           </div>
         </div>
 
-        {/* Feed Section - High Contrast #111827 */}
+        {/* Feed Section - High Contrast */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '30px' }}>
           <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#111827', textShadow: '0 1px 1px white' }}>Recent Posts</h3>
           {posts.map(post => (
@@ -171,7 +274,10 @@ export default function UserProfile() {
                  <span style={{ fontSize: '12px', color: '#111827', fontWeight: '900' }}>{new Date(post.created_at).toLocaleDateString()}</span>
                  {!isOwnProfile && <ReportButton postId={post.id} />}
               </div>
-              <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{post.content}</p>
+              
+              {/* Render Embeds or Text Properly */}
+              {renderPostContent(post)}
+
               {post.media_url && renderMedia(post.media_url)}
             </div>
           ))}
