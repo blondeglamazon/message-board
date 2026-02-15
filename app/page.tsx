@@ -26,6 +26,7 @@ function MessageBoardContent() {
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   const [adminIds, setAdminIds] = useState<Set<string>>(new Set())
   const [blockedIds, setBlockedIds] = useState<string[]>([])
+  const [isMobile, setIsMobile] = useState(false) // Track mobile state for layout
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -38,6 +39,14 @@ function MessageBoardContent() {
     if (urlSearchQuery) setSearchQuery(urlSearchQuery)
   }, [urlSearchQuery])
 
+  // --- RESPONSIVE CHECK ---
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   // --- DATA FETCHING ---
   useEffect(() => {
     async function initData() {
@@ -47,6 +56,7 @@ function MessageBoardContent() {
       const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
       setAdminIds(new Set(admins?.map(a => a.id) || []))
 
+      // Fetch all profiles to map IDs to Usernames
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach(p => { pMap[p.id] = p })
@@ -179,21 +189,26 @@ function MessageBoardContent() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#ffffff', color: '#111827', fontFamily: 'sans-serif' }}>
-      <nav style={{ width: '250px', borderRight: '1px solid #e5e7eb', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'sticky', top: 0, height: '100vh', backgroundColor: '#f9fafb' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: '900' }}>💎 VIMciety</h1>
-        <Link href="/" style={{ textDecoration: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold' }}>🏠 Home</Link>
-        <button onClick={() => router.push('/?feed=following')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left' }}>👣 Following</button>
-        <button onClick={() => router.push('/?feed=friends')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left' }}>👥 Friends</button>
-        <button onClick={() => router.push('/?search=true')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left' }}>🔍 Search</button>
-        <button onClick={() => router.push('/?create=true')} style={{ background: 'none', border: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left' }}>➕ Create Post</button>
-        <Link href="/profile" style={{ textDecoration: 'none', color: '#374151', fontSize: '18px', fontWeight: 'bold' }}>👤 Profile</Link>
-        {user && <button onClick={() => { setHasNewNotifications(false); localStorage.setItem('lastNotificationCheck', new Date().toISOString()); router.push('/notifications') }} style={{ background: 'none', border: 'none', color: hasNewNotifications ? '#ef4444' : '#374151', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', textAlign: 'left' }}>Notifications</button>}
-        <div style={{ flex: 1 }}></div>
-        {user ? <button onClick={() => supabase.auth.signOut()} style={{ background: '#e5e7eb', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer' }}>Sign Out</button> : <Link href="/login" style={{ backgroundColor: '#6366f1', color: 'white', padding: '10px', borderRadius: '8px', textDecoration: 'none', textAlign: 'center' }}>Login</Link>}
-      </nav>
-
-      <main style={{ flex: 1, maxWidth: '700px', margin: '0 auto', padding: '40px 20px' }}>
-         <h2 style={{ marginBottom: '20px' }}>{currentFeed.toUpperCase()} FEED</h2>
+      
+      {/* Main Content Container
+          NOTE: We removed the desktop sidebar <nav> from here because it's now in layout.tsx.
+          If you want to keep it here for desktop, ensure layout.tsx doesn't double-render it.
+          Assuming layout.tsx handles the Sidebar, we focus on the feed here.
+      */}
+      
+      <main style={{ 
+        flex: 1, 
+        maxWidth: '700px', 
+        margin: '0 auto', 
+        // CRITICAL MOBILE FIX: Add padding for Notch + Hamburger Button
+        paddingTop: isMobile ? 'calc(60px + env(safe-area-inset-top))' : '40px',
+        paddingLeft: '20px',
+        paddingRight: '20px',
+        paddingBottom: '80px' // Space for scrolling past bottom
+      }}>
+         
+         <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: '800' }}>{currentFeed.toUpperCase()} FEED</h2>
+         
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.map((msg) => {
                     const profile = profilesMap[msg.user_id]
@@ -201,7 +216,7 @@ function MessageBoardContent() {
                     const displayName = profile?.display_name || username;
                     const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
                     return (
-                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }}>
+                        <div key={msg.id} style={{ padding: '20px', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                             <div style={{ marginBottom: '10px', display: 'flex', gap:'10px', alignItems:'center', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e0e7ff', overflow: 'hidden' }}>
@@ -215,18 +230,79 @@ function MessageBoardContent() {
                                 <ReportButton postId={msg.id} />
                             </div>
                             {renderContent(msg)}
-                            <div style={{ marginTop: '15px', display: 'flex', gap: '20px' }}>
-                                <button onClick={() => handleLike(msg.id, !!isLiked)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#9ca3af' }}>{isLiked ? '❤️' : '🤍'} {msg.likes?.length || 0}</button>
-                                <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>💬 {msg.comments?.length || 0}</button>
+                            
+                            {/* ACTION BUTTONS: Increased Touch Targets (min 44px) */}
+                            <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
+                                <button 
+                                  onClick={() => handleLike(msg.id, !!isLiked)} 
+                                  style={{ 
+                                    background: 'none', border: 'none', cursor: 'pointer', 
+                                    color: isLiked ? '#ef4444' : '#6b7280',
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    minWidth: '44px', minHeight: '44px' // Apple Compliance
+                                  }}>
+                                  <span style={{ fontSize: '18px' }}>{isLiked ? '❤️' : '🤍'}</span> 
+                                  <span style={{ fontWeight: '600' }}>{msg.likes?.length || 0}</span>
+                                </button>
+
+                                <button 
+                                  onClick={() => toggleComments(msg.id)} 
+                                  style={{ 
+                                    background: 'none', border: 'none', cursor: 'pointer', 
+                                    color: '#6b7280',
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    minWidth: '44px', minHeight: '44px' // Apple Compliance
+                                  }}>
+                                  <span style={{ fontSize: '18px' }}>💬</span> 
+                                  <span style={{ fontWeight: '600' }}>{msg.comments?.length || 0}</span>
+                                </button>
                             </div>
+
                             {openComments.has(msg.id) && (
-                                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-                                    {msg.comments?.map((c: any) => (
-                                        <div key={c.id} style={{ marginBottom: '5px', fontSize: '14px' }}><strong>{c.email}:</strong> {c.content}</div>
-                                    ))}
-                                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                        <input type="text" placeholder="Comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, padding: '8px', borderRadius: '5px', border: '1px solid #ccc' }} />
-                                        <button onClick={() => handlePostComment(msg.id)} style={{ padding: '8px 15px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '5px' }}>Send</button>
+                                <div style={{ marginTop: '10px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px' }}>
+                                    {msg.comments?.map((c: any) => {
+                                        const commenter = profilesMap[c.user_id]
+                                        const commenterName = commenter?.username || 'User'
+                                        const commentDate = new Date(c.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                                        
+                                        return (
+                                            <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                   <span style={{ fontWeight: 'bold', color: '#374151' }}>{commenterName}</span>
+                                                   <span style={{ fontSize: '11px', color: '#9ca3af' }}>{commentDate}</span>
+                                                </div>
+                                                <div style={{ color: '#4b5563', lineHeight: '1.4' }}>{c.content}</div>
+                                            </div>
+                                        )
+                                    })}
+                                    
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                                        <input 
+                                          type="text" 
+                                          placeholder="Add a comment..." 
+                                          value={commentText[msg.id] || ''} 
+                                          onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
+                                          style={{ 
+                                            flex: 1, 
+                                            padding: '12px', // Larger touch area for input
+                                            borderRadius: '8px', 
+                                            border: '1px solid #d1d5db',
+                                            fontSize: '16px' // PREVENTS iOS ZOOM
+                                          }} 
+                                        />
+                                        <button 
+                                          onClick={() => handlePostComment(msg.id)} 
+                                          style={{ 
+                                            padding: '0 20px', 
+                                            backgroundColor: '#6366f1', 
+                                            color: 'white', 
+                                            border: 'none', 
+                                            borderRadius: '8px',
+                                            fontWeight: '600',
+                                            minHeight: '44px' // Apple Compliance
+                                          }}>
+                                          Send
+                                        </button>
                                     </div>
                                 </div>
                             )}
