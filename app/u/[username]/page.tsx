@@ -100,6 +100,27 @@ export default function UserProfile() {
       }
   }
 
+  // Helper to clean Canva ID
+  const getCleanCanvaId = (input: string) => {
+    if (!input) return null
+    if (input.includes('canva.com')) {
+       const match = input.match(/design\/([A-Za-z0-9_-]+)/)
+       return match ? match[1] : null
+    }
+    if (input.includes('<') || input.includes(' ')) return null
+    return input
+  }
+
+  // Force Full Height for Background Embeds
+  const getFullHeightEmbed = (embedCode: string) => {
+    if (!embedCode) return ''
+    let clean = embedCode
+      .replace(/height:\s*0;?/g, 'height: 100%;')
+      .replace(/padding-top:\s*[^;]+;?/g, '')
+      .replace(/position:\s*relative;?/g, 'position: absolute;')
+    return clean
+  }
+
   const renderMedia = (mediaUrl: string) => {
     if (!mediaUrl) return null
     const isVideo = mediaUrl.match(/\.(mp4|webm|ogg|mov)$/i)
@@ -124,9 +145,10 @@ export default function UserProfile() {
     return (
       <div style={{ 
         width: '100%', 
-        borderRadius: '16px', 
+        height: isEmbed ? '100%' : 'auto',
+        borderRadius: isEmbed ? '0' : '16px', 
         overflow: 'hidden', 
-        marginTop: '15px', 
+        marginTop: isEmbed ? '0' : '15px', 
         border: isEmbed ? 'none' : '2px solid #111827'
       }} 
       dangerouslySetInnerHTML={{ __html: clean }} 
@@ -136,7 +158,7 @@ export default function UserProfile() {
 
   const renderPostContent = (post: any) => {
     if (post.post_type === 'embed' || (typeof post.content === 'string' && post.content.trim().startsWith('<'))) {
-       return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content, true)}</div>
+       return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content, false)}</div>
     }
     return <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{post.content}</p>
   }
@@ -146,6 +168,7 @@ export default function UserProfile() {
 
   const isOwnProfile = currentUser?.id === profile.id
   const isEmbedBackground = profile?.background_url && profile.background_url.trim().startsWith('<');
+  const canvaId = getCleanCanvaId(profile.canva_design_id)
 
   return (
     <div style={{ 
@@ -155,8 +178,8 @@ export default function UserProfile() {
       {/* Background Layer */}
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, overflow: 'hidden', pointerEvents: 'none' }}>
           {isEmbedBackground ? (
-              <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
-                  {renderSafeHTML(profile.background_url, true)}
+              <div style={{ width: '100%', height: '100%', opacity: 1 }}> 
+                  {renderSafeHTML(getFullHeightEmbed(profile.background_url), true)}
               </div>
           ) : (
               <div style={{ 
@@ -168,7 +191,7 @@ export default function UserProfile() {
           )}
       </div>
 
-      {/* Floating Action Buttons (Replaces Full Top Bar) */}
+      {/* Floating Action Buttons */}
       <div style={{ 
         position: 'fixed', top: '20px', right: '20px', 
         zIndex: 100, display: 'flex', gap: '10px' 
@@ -249,10 +272,11 @@ export default function UserProfile() {
 
           {!isEditing && profile.music_embed && renderSafeHTML(profile.music_embed)}
 
-          {!isEditing && profile.canva_design_id && renderSafeHTML(`
+          {/* Canva Embed (Clean ID) */}
+          {!isEditing && canvaId && renderSafeHTML(`
             <div style="position: relative; width: 100%; height: 0; padding-top: 56.25%; overflow: hidden; border-radius: 12px;">
               <iframe loading="lazy" style="position: absolute; width: 100%; height: 100%; top: 0; left: 0; border: none;"
-                src="https://www.canva.com/design/${profile.canva_design_id}/view?embed" allowfullscreen="allowfullscreen" allow="fullscreen">
+                src="https://www.canva.com/design/${canvaId}/view?embed" allowfullscreen="allowfullscreen" allow="fullscreen">
               </iframe>
             </div>
           `, true)}
