@@ -52,11 +52,11 @@ export default function BlockButton({ userId, username }: { userId: string, user
 
   if (!currentUserId) return null
 
-  return (
+ return (
     <button 
       onClick={toggleBlock}
       style={{
-        height: '44px', // Apple Compliance
+        height: '44px', // Apple/Android Compliance (44pt touch target)
         padding: '0 20px',
         borderRadius: '22px', 
         fontSize: '14px',
@@ -65,14 +65,18 @@ export default function BlockButton({ userId, username }: { userId: string, user
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        border: '1px solid',
-        borderColor: blocked ? '#d1d5db' : '#fee2e2',
-        backgroundColor: blocked ? 'white' : '#fee2e2',
-        color: blocked ? '#374151' : '#b91c1c',
-        transition: 'all 0.2s'
+        border: '2px solid', // Slightly thicker for better visibility
+        
+        // IMPROVED CONTRAST LOGIC
+        // Blocked (Red/Pink): High contrast red text on light pink
+        // Unblocked (Dark): Dark gray border/text to clearly signal "Active"
+        borderColor: blocked ? '#374151' : '#b91c1c',
+        backgroundColor: blocked ? '#374151' : '#fef2f2',
+        color: blocked ? '#ffffff' : '#b91c1c',
+        
+        transition: 'all 0.2s ease-in-out'
       }}
     >
-      {blocked ? 'Unblock' : 'Block User'}
+      {blocked ? 'Unblock User' : 'Block User'}
     </button>
-  )
-}
+  )}
