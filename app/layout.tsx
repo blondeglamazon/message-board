@@ -10,13 +10,14 @@ export const metadata: Metadata = {
   description: 'A message board for visionaries.',
 }
 
-// NEW: This tells mobile browsers to use the full screen (including notch area)
+// CRITICAL FOR MOBILE APPS
+// This handles the "Notch" and prevents annoying auto-zoom on inputs
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  viewportFit: 'cover', // <--- CRITICAL FOR IPHONE NOTCH
+  viewportFit: 'cover', // Extends content behind the notch/status bar
 }
 
 export default function RootLayout({
@@ -26,11 +27,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#000' }}>
+      <head>
+        {/* REQUIRED: Loads the Canva Button SDK */}
+        <script src="https://sdk.canva.com/designbutton/v2/api.js" async></script>
+      </head>
+      
+      <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
+        
+        {/* The Sidebar (Navigation) */}
         <Sidebar />
+
+        {/* Main Content Wrapper */}
         <main className="main-content">
           {children}
         </main>
+
       </body>
     </html>
   )
