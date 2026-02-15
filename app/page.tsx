@@ -9,6 +9,9 @@ import ReportButton from '@/components/ReportButton'
 
 export const dynamicParams = false;
 
+// MAX FILE SIZE: 50MB (Make sure Supabase Bucket settings match this!)
+const MAX_FILE_SIZE = 50 * 1024 * 1024 
+
 function MessageBoardContent() {
   const supabase = createClient()
 
@@ -16,6 +19,7 @@ function MessageBoardContent() {
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
   const [newMessage, setNewMessage] = useState('')
   const [mediaFile, setMediaFile] = useState<File | null>(null)
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null) // NEW: For draft preview
   const [hasNewNotifications, setHasNewNotifications] = useState(false)
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
@@ -23,10 +27,11 @@ function MessageBoardContent() {
   const [postType, setPostType] = useState<string>('text') 
   const [uploading, setUploading] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
-  const [adminIds, setAdminIds] = useState<Set<string>>(new Set())
+  const [isMobile, setIsMobile] = useState(false)
+  
+  // Filters
   const [blockedIds, setBlockedIds] = useState<string[]>([])
-  const [isMobile, setIsMobile] = useState(false) // Track mobile state for layout
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -34,12 +39,12 @@ function MessageBoardContent() {
   
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
+  const isCreate = searchParams.get('create') === 'true'
 
   useEffect(() => {
     if (urlSearchQuery) setSearchQuery(urlSearchQuery)
   }, [urlSearchQuery])
 
-  // --- RESPONSIVE CHECK ---
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
     handleResize()
@@ -53,10 +58,7 @@ function MessageBoardContent() {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
-      const { data: admins } = await supabase.from('profiles').select('id').eq('role', 'admin')
-      setAdminIds(new Set(admins?.map(a => a.id) || []))
-
-      // Fetch all profiles to map IDs to Usernames
+      // Fetch Profiles
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach(p => { pMap[p.id] = p })
@@ -154,6 +156,29 @@ function MessageBoardContent() {
     setCommentText(prev => ({ ...prev, [postId]: '' }))
   }
 
+  // 2. FILE HANDLING & PREVIEW
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`File too large! Max size is ${MAX_FILE_SIZE / (1024 * 1024)}MB.`)
+        return
+      }
+      setMediaFile(file)
+      
+      // Generate Preview URL
+      const objectUrl = URL.createObjectURL(file)
+      setMediaPreview(objectUrl)
+    }
+  }
+
+  const clearFile = () => {
+    setMediaFile(null)
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview)
+    setMediaPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const handlePost = async () => {
     if (!user) return alert("Please login to post!")
     if (!newMessage.trim() && !mediaFile) return
@@ -161,13 +186,35 @@ function MessageBoardContent() {
     try {
         let publicUrl = null
         if (mediaFile) {
-            const fileName = `${Date.now()}.${mediaFile.name.split('.').pop()}`
-            await supabase.storage.from('uploads').upload(fileName, mediaFile)
-            publicUrl = supabase.storage.from('uploads').getPublicUrl(fileName).data.publicUrl
+            // Unique Filename to prevent overwrites
+            const fileExt = mediaFile.name.split('.').pop()
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+            
+            const { error: uploadError } = await supabase.storage.from('uploads').upload(fileName, mediaFile)
+            if (uploadError) throw uploadError
+
+            // Get Public URL
+            const { data } = supabase.storage.from('uploads').getPublicUrl(fileName)
+            publicUrl = data.publicUrl
         }
-        await supabase.from('posts').insert([{ content: newMessage, user_id: user.id, email: user.email, post_type: postType, media_url: publicUrl }])
-        setNewMessage(''); setMediaFile(null); setPostType('text'); router.push('/')
-    } catch (e: any) { alert(e.message) }
+
+        await supabase.from('posts').insert([{ 
+            content: newMessage, 
+            user_id: user.id, 
+            email: user.email, 
+            post_type: postType, 
+            media_url: publicUrl 
+        }])
+
+        setNewMessage('')
+        clearFile() // Clear preview
+        setPostType('text')
+        
+        if (isCreate) router.push('/')
+
+    } catch (e: any) { 
+        alert("Upload Error: " + e.message) 
+    }
     setUploading(false)
   }
 
@@ -176,7 +223,29 @@ function MessageBoardContent() {
         const clean = DOMPurify.sanitize(msg.content, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
         return <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: clean }} />
     }
-    return <p style={{ color: '#111827', lineHeight: '1.6' }}>{msg.content}</p>
+    
+    // Render Images/Videos
+    return (
+        <div>
+           <p style={{ color: '#111827', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+           {msg.media_url && (
+             <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden' }}>
+                {/* Check extension for Video vs Image */}
+                {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+                  <video src={msg.media_url} controls playsInline style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} />
+                ) : (
+                  <img 
+                    src={msg.media_url} 
+                    alt="Post media" 
+                    referrerPolicy="no-referrer" 
+                    style={{ maxWidth: '100%', borderRadius: '8px', display: 'block' }} 
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} // Hide broken images
+                  />
+                )}
+             </div>
+           )}
+        </div>
+    )
   }
 
   const filteredMessages = messages.filter(msg => {
@@ -190,25 +259,79 @@ function MessageBoardContent() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#ffffff', color: '#111827', fontFamily: 'sans-serif' }}>
       
-      {/* Main Content Container
-          NOTE: We removed the desktop sidebar <nav> from here because it's now in layout.tsx.
-          If you want to keep it here for desktop, ensure layout.tsx doesn't double-render it.
-          Assuming layout.tsx handles the Sidebar, we focus on the feed here.
-      */}
-      
       <main style={{ 
         flex: 1, 
         maxWidth: '700px', 
         margin: '0 auto', 
-        // CRITICAL MOBILE FIX: Add padding for Notch + Hamburger Button
         paddingTop: isMobile ? 'calc(60px + env(safe-area-inset-top))' : '40px',
         paddingLeft: '20px',
         paddingRight: '20px',
-        paddingBottom: '80px' // Space for scrolling past bottom
+        paddingBottom: '80px' 
       }}>
          
-         <h2 style={{ marginBottom: '20px', fontSize: '24px', fontWeight: '800' }}>{currentFeed.toUpperCase()} FEED</h2>
-         
+         {/* HEADER */}
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '800' }}>{currentFeed.toUpperCase()} FEED</h2>
+            {user && !isCreate && (
+              <button 
+                onClick={() => router.push('/?create=true')}
+                style={{ padding: '8px 16px', backgroundColor: '#6366f1', color: 'white', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: '600' }}
+              >
+                + Post
+              </button>
+            )}
+         </div>
+
+         {/* 3. CREATE POST UI (Mobile Optimized) */}
+         {(isCreate || (!isMobile && currentFeed === 'global')) && user && (
+           <div style={{ marginBottom: '30px', padding: '15px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+             <textarea
+               value={newMessage}
+               onChange={(e) => setNewMessage(e.target.value)}
+               placeholder="What's on your mind?"
+               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', marginBottom: '10px', minHeight: '80px', backgroundColor: 'white', fontSize: '16px', color: '#111827' }}
+             />
+             
+             {/* Draft Preview (NEW!) */}
+             {mediaPreview && (
+               <div style={{ marginBottom: '15px', position: 'relative' }}>
+                 {mediaFile?.type.startsWith('video') ? (
+                    <video src={mediaPreview} controls style={{ maxHeight: '200px', borderRadius: '8px' }} />
+                 ) : (
+                    <img src={mediaPreview} alt="Preview" style={{ maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }} />
+                 )}
+                 <button 
+                    onClick={clearFile}
+                    style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '24px', height: '24px', cursor: 'pointer' }}
+                 >✕</button>
+               </div>
+             )}
+
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,video/*" hidden />
+                   <button 
+                     onClick={() => fileInputRef.current?.click()} 
+                     style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                   >
+                     <span>📷</span> <span style={{fontSize: '14px', fontWeight: '600', color: '#374151'}}>Media</span>
+                   </button>
+                </div>
+                <button 
+                  onClick={handlePost}
+                  disabled={uploading}
+                  style={{ 
+                    padding: '8px 24px', backgroundColor: uploading ? '#9ca3af' : '#6366f1', 
+                    color: 'white', borderRadius: '8px', border: 'none', cursor: uploading ? 'default' : 'pointer', fontWeight: 'bold' 
+                  }}
+                >
+                  {uploading ? 'Uploading...' : 'Post'}
+                </button>
+             </div>
+           </div>
+         )}
+
+         {/* FEED */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredMessages.map((msg) => {
                     const profile = profilesMap[msg.user_id]
@@ -231,28 +354,16 @@ function MessageBoardContent() {
                             </div>
                             {renderContent(msg)}
                             
-                            {/* ACTION BUTTONS: Increased Touch Targets (min 44px) */}
                             <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
                                 <button 
                                   onClick={() => handleLike(msg.id, !!isLiked)} 
-                                  style={{ 
-                                    background: 'none', border: 'none', cursor: 'pointer', 
-                                    color: isLiked ? '#ef4444' : '#6b7280',
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    minWidth: '44px', minHeight: '44px' // Apple Compliance
-                                  }}>
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
                                   <span style={{ fontSize: '18px' }}>{isLiked ? '❤️' : '🤍'}</span> 
                                   <span style={{ fontWeight: '600' }}>{msg.likes?.length || 0}</span>
                                 </button>
-
                                 <button 
                                   onClick={() => toggleComments(msg.id)} 
-                                  style={{ 
-                                    background: 'none', border: 'none', cursor: 'pointer', 
-                                    color: '#6b7280',
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    minWidth: '44px', minHeight: '44px' // Apple Compliance
-                                  }}>
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
                                   <span style={{ fontSize: '18px' }}>💬</span> 
                                   <span style={{ fontWeight: '600' }}>{msg.comments?.length || 0}</span>
                                 </button>
@@ -264,7 +375,6 @@ function MessageBoardContent() {
                                         const commenter = profilesMap[c.user_id]
                                         const commenterName = commenter?.username || 'User'
                                         const commentDate = new Date(c.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
-                                        
                                         return (
                                             <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -275,34 +385,9 @@ function MessageBoardContent() {
                                             </div>
                                         )
                                     })}
-                                    
                                     <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                        <input 
-                                          type="text" 
-                                          placeholder="Add a comment..." 
-                                          value={commentText[msg.id] || ''} 
-                                          onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
-                                          style={{ 
-                                            flex: 1, 
-                                            padding: '12px', // Larger touch area for input
-                                            borderRadius: '8px', 
-                                            border: '1px solid #d1d5db',
-                                            fontSize: '16px' // PREVENTS iOS ZOOM
-                                          }} 
-                                        />
-                                        <button 
-                                          onClick={() => handlePostComment(msg.id)} 
-                                          style={{ 
-                                            padding: '0 20px', 
-                                            backgroundColor: '#6366f1', 
-                                            color: 'white', 
-                                            border: 'none', 
-                                            borderRadius: '8px',
-                                            fontWeight: '600',
-                                            minHeight: '44px' // Apple Compliance
-                                          }}>
-                                          Send
-                                        </button>
+                                        <input type="text" placeholder="Add a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '16px' }} />
+                                        <button onClick={() => handlePostComment(msg.id)} style={{ padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', minHeight: '44px' }}>Send</button>
                                     </div>
                                 </div>
                             )}
