@@ -20,7 +20,7 @@ export default function UserProfile() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isFollowing, setIsFollowing] = useState(false)
 
-  // RESTORED: Edit Mode State
+  // Edit Mode State
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
       display_name: '', 
@@ -42,7 +42,6 @@ export default function UserProfile() {
       if (profileData) {
         setProfile(profileData)
         
-        // Initialize Edit Form with current data
         setEditForm({
             display_name: profileData.display_name || '',
             avatar_url: profileData.avatar_url || '',
@@ -80,13 +79,12 @@ export default function UserProfile() {
     }
   }
 
-  // RESTORED: Save Profile Function
   async function handleSaveProfile() {
       if (!currentUser) return
       
       const { error } = await supabase.from('profiles').upsert({
           id: currentUser.id,
-          username: profile.username, // Maintain username
+          username: profile.username,
           display_name: editForm.display_name,
           avatar_url: editForm.avatar_url,
           background_url: editForm.background_url,
@@ -136,9 +134,7 @@ export default function UserProfile() {
     )
   }
 
-  // FIX: Handle "Post showing as code"
   const renderPostContent = (post: any) => {
-    // If content looks like HTML (starts with <) or is an embed type, render safely
     if (post.post_type === 'embed' || (typeof post.content === 'string' && post.content.trim().startsWith('<'))) {
        return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content, true)}</div>
     }
@@ -149,7 +145,6 @@ export default function UserProfile() {
   if (!profile) return <div style={{ padding: '100px', textAlign: 'center', color: '#111827' }}>User not found.</div>
 
   const isOwnProfile = currentUser?.id === profile.id
-  // FIX: Check if background is an embed code or URL
   const isEmbedBackground = profile?.background_url && profile.background_url.trim().startsWith('<');
 
   return (
@@ -173,19 +168,39 @@ export default function UserProfile() {
           )}
       </div>
 
-      {/* Top Navigation Bar */}
+      {/* Floating Action Buttons (Replaces Full Top Bar) */}
       <div style={{ 
-        position: 'fixed', top: 0, width: '100%', height: '60px', 
-        backgroundColor: 'rgba(255,255,255,0.9)', borderBottom: '1px solid #e5e7eb',
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 20px', zIndex: 100 
+        position: 'fixed', top: '20px', right: '20px', 
+        zIndex: 100, display: 'flex', gap: '10px' 
       }}>
         {currentUser ? (
-          <button onClick={handleSignOut} style={{ height: '40px', padding: '0 15px', borderRadius: '20px', border: '1px solid #111827', backgroundColor: 'white', fontWeight: 'bold', cursor: 'pointer' }}>Log Out</button>
+          <button onClick={handleSignOut} style={{ 
+            height: '44px', padding: '0 20px', borderRadius: '22px', 
+            border: '2px solid #111827', backgroundColor: 'white', 
+            fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+            color: '#111827'
+          }}>
+            Log Out
+          </button>
         ) : (
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <Link href="/login" style={{ textDecoration: 'none', color: '#111827', fontWeight: 'bold' }}>Log In</Link>
-            <Link href="/signup" style={{ textDecoration: 'none', padding: '5px 15px', borderRadius: '15px', backgroundColor: '#111827', color: 'white', fontWeight: 'bold' }}>Sign Up</Link>
-          </div>
+          <>
+            <Link href="/login" style={{ 
+              height: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
+              borderRadius: '22px', backgroundColor: 'white', color: '#111827', 
+              fontWeight: 'bold', textDecoration: 'none', border: '2px solid #111827',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+            }}>
+              Log In
+            </Link>
+            <Link href="/signup" style={{ 
+              height: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
+              borderRadius: '22px', backgroundColor: '#111827', color: 'white', 
+              fontWeight: 'bold', textDecoration: 'none', border: '2px solid #111827',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+            }}>
+              Sign Up
+            </Link>
+          </>
         )}
       </div>
 
@@ -195,7 +210,7 @@ export default function UserProfile() {
         paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px'
       }}>
         
-        {/* Shortened Profile Header */}
+        {/* Profile Card */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.95)', padding: '20px', borderRadius: '24px', border: '2px solid #111827' }}>
           
           <div style={{ width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', marginBottom: '10px' }}>
@@ -205,7 +220,7 @@ export default function UserProfile() {
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0 }}>{profile.display_name || profile.username}</h1>
           {profile.bio && <p style={{ marginTop: '5px', color: '#111827', fontSize: '15px', fontWeight: '600' }}>{profile.bio}</p>}
 
-          {/* EDIT FORM - RESTORED */}
+          {/* EDIT FORM */}
           {isEditing && (
             <div style={{ width: '100%', marginBottom: '20px', backgroundColor: '#f3f4f6', padding: '20px', borderRadius: '12px', border: '1px solid #111827', marginTop: '20px', textAlign: 'left' }}>
                 <h3 style={{ color: '#111827', marginTop: 0, marginBottom: '15px' }}>Edit Profile</h3>
@@ -232,7 +247,6 @@ export default function UserProfile() {
             </div>
           )}
 
-          {/* Spotify & Canva Embeds */}
           {!isEditing && profile.music_embed && renderSafeHTML(profile.music_embed)}
 
           {!isEditing && profile.canva_design_id && renderSafeHTML(`
@@ -253,7 +267,6 @@ export default function UserProfile() {
               
               {isOwnProfile && !isEditing && (
                 <>
-                  {/* EDIT BUTTON RESTORED */}
                   <button onClick={() => setIsEditing(true)} style={{ height: '44px', padding: '0 20px', borderRadius: '22px', border: 'none', backgroundColor: '#111827', color: 'white', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                      ✏️ Edit Profile
                   </button>
@@ -265,7 +278,7 @@ export default function UserProfile() {
           </div>
         </div>
 
-        {/* Feed Section - High Contrast */}
+        {/* Feed Section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '30px' }}>
           <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#111827', textShadow: '0 1px 1px white' }}>Recent Posts</h3>
           {posts.map(post => (
@@ -274,10 +287,7 @@ export default function UserProfile() {
                  <span style={{ fontSize: '12px', color: '#111827', fontWeight: '900' }}>{new Date(post.created_at).toLocaleDateString()}</span>
                  {!isOwnProfile && <ReportButton postId={post.id} />}
               </div>
-              
-              {/* Render Embeds or Text Properly */}
               {renderPostContent(post)}
-
               {post.media_url && renderMedia(post.media_url)}
             </div>
           ))}
