@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function DeleteAccount() {
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 20px', fontFamily: 'sans-serif', lineHeight: '1.6', color: '#111827' }}>
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 20px', fontFamily: 'sans-serif', lineHeight: '1.6', color: '#5b7cc2' }}>
       <h1 style={{ fontSize: '32px', fontWeight: 'bold', marginBottom: '20px' }}>Delete Your Account</h1>
       
       <p>At VIMciety, we respect your privacy and your right to control your data. If you wish to delete your account and permanently remove all associated data, please follow the instructions below.</p>
