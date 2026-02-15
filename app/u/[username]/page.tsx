@@ -20,7 +20,7 @@ export default function UserProfile() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isFollowing, setIsFollowing] = useState(false)
   
-  // NEW: Stats State
+  // Stats State
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
 
@@ -45,7 +45,6 @@ export default function UserProfile() {
       
       if (profileData) {
         setProfile(profileData)
-        
         setEditForm({
             display_name: profileData.display_name || '',
             avatar_url: profileData.avatar_url || '',
@@ -62,7 +61,7 @@ export default function UserProfile() {
           setIsFollowing(!!followData)
         }
 
-        // NEW: Fetch Following/Follower Counts
+        // Fetch Following/Follower Counts
         const { count: followers } = await supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', profileData.id)
         const { count: following } = await supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', profileData.id)
         
@@ -103,8 +102,7 @@ export default function UserProfile() {
           music_embed: editForm.music_embed,
           bio: editForm.bio
       })
-
-      if (error) { alert("Error saving profile: " + error.message) } 
+      if (error) alert("Error: " + error.message)
       else { setProfile({ ...profile, ...editForm }); setIsEditing(false); }
   }
 
