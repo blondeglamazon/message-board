@@ -1,27 +1,26 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-// 1. Correct import to use the client-side createClient
 import { createClient } from '@/app/lib/supabase/client'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export default function NotificationsPage() {
-  // 2. Initialize the supabase client inside the component
   const supabase = createClient()
+  const router = useRouter()
 
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadNotifications() {
-      // 3. Get Current User
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setLoading(false)
         return
       }
 
-      // 4. Fetch Notifications + The Info of the Person who interacted (Actor)
+      // 1. Fetch Notifications
       const { data, error } = await supabase
         .from('notifications')
         .select(`
@@ -35,15 +34,29 @@ export default function NotificationsPage() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (data) setNotifications(data)
-      if (error) console.error("Error fetching notifications:", error)
+      if (data) {
+        setNotifications(data)
+        
+        // 2. NEW: Mark Unread Notifications as Read
+        const unreadIds = data.filter((n: any) => !n.is_read).map((n: any) => n.id)
+        
+        if (unreadIds.length > 0) {
+          await supabase
+            .from('notifications')
+            .update({ is_read: true })
+            .in('id', unreadIds)
+          
+          // Refresh the router to ensure any server components or layouts know about the change
+          router.refresh()
+        }
+      }
       
+      if (error) console.error("Error fetching notifications:", error)
       setLoading(false)
     }
 
     loadNotifications()
-    // Add supabase to dependencies for best practice
-  }, [supabase])
+  }, [supabase, router])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -74,8 +87,8 @@ export default function NotificationsPage() {
               <div key={n.id} style={{ 
                   display: 'flex', alignItems: 'center', gap: '15px', 
                   padding: '15px', borderRadius: '12px', 
-                  backgroundColor: n.is_read ? '#fff' : '#f3f4f6', 
-                  border: '1px solid #e5e7eb',
+                  backgroundColor: n.is_read ? '#ffffff' : '#f0f9ff', // Subtle blue tint for unread/just read
+                  border: n.is_read ? '1px solid #e5e7eb' : '1px solid #bfdbfe',
                   transition: 'background 0.2s'
               }}>
                 <Link href={`/u/${n.actor?.username}`} style={{ textDecoration: 'none' }}>
@@ -100,9 +113,9 @@ export default function NotificationsPage() {
                 </div>
 
                 {n.post_id && (
-                  <div style={{ color: '#9ca3af' }}>
+                  <Link href={`/p/${n.post_id}`} style={{ color: '#9ca3af', display: 'flex', alignItems: 'center' }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-                  </div>
+                  </Link>
                 )}
               </div>
             ))}
