@@ -15,13 +15,18 @@ export default function Sidebar() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
 
+  // 1. NEW: Auto-close sidebar on mobile when navigating to a new page
+  useEffect(() => {
+    setIsOpen(false)
+  }, [pathname])
+
   useEffect(() => {
     async function getData() {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
 
       if (authUser) {
-        // 1. Get Profile
+        // Get Profile
         const { data: profileData } = await supabase
           .from('profiles')
           .select('username, avatar_url')
@@ -29,7 +34,7 @@ export default function Sidebar() {
           .single()
         setProfile(profileData)
 
-        // 2. Get Unread Notifications Count
+        // Get Unread Notifications Count
         const { count } = await supabase
           .from('notifications')
           .select('*', { count: 'exact', head: true })
@@ -41,7 +46,7 @@ export default function Sidebar() {
     }
     getData()
     
-    // Realtime Subscription: Update badge instantly when new notifications arrive
+    // Realtime Subscription
     const channel = supabase
       .channel('realtime_notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, 
@@ -74,7 +79,7 @@ export default function Sidebar() {
     textDecoration: 'none',
     transition: 'color 0.2s',
     fontWeight: active ? 'bold' : 'normal',
-    position: 'relative' as 'relative' // Needed for the badge positioning
+    position: 'relative' as 'relative'
   })
 
   // Badge Style for Counter
@@ -138,7 +143,7 @@ export default function Sidebar() {
         <Link href="/following"><div style={iconStyle(pathname === '/following')}>👣</div></Link>
         <Link href="/friends"><div style={iconStyle(pathname === '/friends')}>👥</div></Link>
         
-        {/* RESTORED: Notifications Button with Counter */}
+        {/* Notifications Button with Counter */}
         <Link href="/notifications">
             <div style={iconStyle(pathname === '/notifications')}>
                 🔔
