@@ -1,7 +1,9 @@
 import ProfileClient from './ProfileClient';
 
-
-
-export default function Page({ params }: { params: { username: string } }) {
-  return <ProfileClient username={params.username} />;
+// Next.js 16 requires params to be a Promise!
+export default async function Page({ params }: { params: Promise<{ username: string }> }) {
+  // We await the params before passing them to the client
+  const resolvedParams = await params;
+  
+  return <ProfileClient username={resolvedParams.username} />;
 }
