@@ -6,12 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@canva/app-ui-kit": "^5.5.0",
     "@canva/intents": "^2.1.2",
     "@capacitor-community/admob": "^8.0.0",
+    "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/android": "^8.1.0",
     "@capacitor/core": "^8.1.0",
     "@capacitor/ios": "^8.1.0",
@@ -21,6 +23,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "browser-image-compression": "^2.0.2",
     "isomorphic-dompurify": "^2.35.0",
+    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.563.0",
     "next": "16.1.5",
     "nsfwjs": "^4.2.1",
@@ -36,6 +39,8 @@
     "esbuild": "^0.27.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.5",
+    "patch-package": "^8.0.1",
+    "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

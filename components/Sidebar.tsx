@@ -6,8 +6,6 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 
 export default function Sidebar() {
-  // Move client creation outside or ensure your lib returns a singleton.
-  // Ideally, use a context provider, but this works if createClient is stable.
   const [supabase] = useState(() => createClient()) 
   
   const pathname = usePathname()
@@ -17,18 +15,16 @@ export default function Sidebar() {
   const [profile, setProfile] = useState<any>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isOpen, setIsOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(true) // Default to mobile to prevent hydration mismatch flashes
+  const [isMobile, setIsMobile] = useState(true)
 
   // 1. Handle Screen Resize (Responsive Logic)
   useEffect(() => {
     const checkScreenSize = () => {
       const mobile = window.innerWidth < 768
       setIsMobile(mobile)
-      // If we switch to desktop, ensure sidebar is open (or technically "visible" by default logic)
       if (!mobile) setIsOpen(false) 
     }
 
-    // Initial check
     checkScreenSize()
     
     window.addEventListener('resize', checkScreenSize)
@@ -53,10 +49,10 @@ export default function Sidebar() {
       setUser(authUser)
 
       if (authUser) {
-        // Get Profile
+        // Get Profile - ADDED THE NEW STORE AND CALENDAR URLS HERE
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('username, avatar_url')
+          .select('username, avatar_url, calendly_url, google_calendar_url, store_url')
           .eq('id', authUser.id)
           .single()
         
@@ -72,14 +68,13 @@ export default function Sidebar() {
         if (mounted) setUnreadCount(count || 0)
 
         // Realtime Subscription
-        // Only subscribe if we have a user
         const channel = supabase
           .channel('realtime_notifications')
           .on('postgres_changes', { 
             event: 'INSERT', 
             schema: 'public', 
             table: 'notifications',
-            filter: `user_id=eq.${authUser.id}` // Filter on server side for better performance
+            filter: `user_id=eq.${authUser.id}` 
           }, 
             (payload) => {
                setUnreadCount((prev) => prev + 1)
@@ -94,8 +89,7 @@ export default function Sidebar() {
     getData()
     
     return () => { mounted = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Removed 'supabase' and 'user.id' to prevent loops. Auth state handles the user check.
+  }, [])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -116,7 +110,7 @@ export default function Sidebar() {
     transition: 'all 0.2s',
     fontWeight: active ? 'bold' : 'normal',
     position: 'relative' as 'relative',
-    backgroundColor: active ? '#f3f4f6' : 'transparent', // Add hover/active background
+    backgroundColor: active ? '#f3f4f6' : 'transparent', 
     borderRadius: '8px',
     margin: '4px 0'
   })
@@ -138,20 +132,16 @@ export default function Sidebar() {
     border: '2px solid white'
   }
 
-  // Determine visibility logic
-  // Mobile: Hidden by default, toggled by isOpen
-  // Desktop: Always visible
   const sidebarTransform = isMobile 
     ? (isOpen ? 'translateX(0)' : 'translateX(-100%)') 
     : 'translateX(0)'
 
   return (
     <>
-      {/* Toggle Button (Only visible on Mobile) */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
         style={{
-          display: isMobile ? 'flex' : 'none', // HIDE on desktop
+          display: isMobile ? 'flex' : 'none',
           position: 'fixed', 
           left: isOpen ? '75px' : '0', 
           top: 'calc(20px + env(safe-area-inset-top))',
@@ -175,7 +165,6 @@ export default function Sidebar() {
         {isOpen ? '◀' : '▶'}
       </button>
 
-      {/* Sidebar Container */}
       <div style={{
         position: 'fixed', 
         left: 0, 
@@ -189,12 +178,11 @@ export default function Sidebar() {
         padding: 'calc(20px + env(safe-area-inset-top)) 0 20px 0',
         borderRight: '1px solid #e5e7eb', 
         zIndex: 50,
-        transform: sidebarTransform, // Use the computed transform
+        transform: sidebarTransform,
         transition: 'transform 0.3s ease',
         boxShadow: (isMobile && isOpen) ? '4px 0 12px rgba(0,0,0,0.1)' : 'none'
       }}>
         
-        {/* Avatar */}
         {user && profile && (
           <Link href={`/u/${profile.username}`} style={{ marginBottom: '20px', marginTop: '10px' }}>
             <div style={{ 
@@ -226,6 +214,34 @@ export default function Sidebar() {
                   {unreadCount > 0 && <span style={badgeStyle}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
               </div>
           </Link>
+
+          {/* ----- SELLER / BUSINESS ICONS ADDED HERE ----- */}
+          
+          {/* Scheduling Icon */}
+          {(profile?.calendly_url || profile?.google_calendar_url) && (
+            <a 
+              href={profile.calendly_url || profile.google_calendar_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              title="Book an Appointment"
+              style={iconStyle(false)}
+            >
+              📅
+            </a>
+          )}
+
+          {/* Store / Shop Icon */}
+          {profile?.store_url && (
+            <a 
+              href={profile.store_url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              title="Visit My Store"
+              style={iconStyle(false)}
+            >
+              🛍️
+            </a>
+          )}
         </div>
         
         <div style={{ flex: 1 }} />
