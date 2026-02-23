@@ -58,7 +58,7 @@ function ProfileContent() {
         profileData = data
       } else if (targetSlug) {
         // Find by Username Slug (This connects to your Feed links!)
-        const { data } = await supabase.from('profiles').select('*').eq('homepage_slug', targetSlug).single()
+        const { data } = await supabase.from('profiles').select('*').eq('username', targetSlug).single()
         profileData = data
       } else if (loggedInUser) {
         // Fallback to logged-in user's own profile

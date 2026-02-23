@@ -28,7 +28,7 @@ export default function UserClientComponent({ username }: { username: string }) 
       const { data: profileData, error } = await supabase
         .from('profiles')
         .select('*')
-        .ilike('homepage_slug', username)
+        .ilike('username', username)
         .maybeSingle()
 
       if (error || !profileData) {
