@@ -184,7 +184,7 @@ export default function Sidebar() {
       }}>
         
         {user && profile && (
-          <Link href={`/u/${profile.username}`} style={{ marginBottom: '20px', marginTop: '10px' }}>
+          <Link href={`/profile?u=${profile.username}`} style={{ marginBottom: '20px', marginTop: '10px' }}>
             <div style={{ 
               width: '40px', 
               height: '40px', 
