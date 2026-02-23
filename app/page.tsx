@@ -329,7 +329,7 @@ function MessageBoardContent() {
                   border: '1px solid #d1d5db', marginBottom: '15px', minHeight: '80px', 
                   backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', 
                   color: isEmbedMode ? '#00ff00' : '#111827',
-                  fontSize: '16px', resize: 'none'
+                  fontSize: '16px', resize: 'none', boxSizing: 'border-box'
                }}
              />
              
@@ -454,7 +454,7 @@ function MessageBoardContent() {
                                       placeholder="Add a comment..." 
                                       value={commentText[msg.id] || ''} 
                                       onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
-                                      style={{ flex: 1, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px' }} 
+                                      style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} 
                                     />
                                     <button 
                                       onClick={() => handlePostComment(msg.id)} 

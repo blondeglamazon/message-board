@@ -79,7 +79,7 @@ function ProfileContent() {
       const { data: userPosts } = await supabase
         .from('posts')
         .select('email, created_at')
-        .eq('user_id', userIdToFetch)
+        .ilike('user_id', userIdToFetch)
         .not('email', 'is', null)
         .order('created_at', { ascending: false })
         .limit(1)
