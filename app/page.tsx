@@ -404,7 +404,7 @@ function MessageBoardContent() {
                         {/* Post Header */}
                         <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             {/* UPDATED LINK FOR MOBILE COMPATIBILITY */}
-                            <Link href={`/user?u=${username}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Link href={`/profile?u=${username}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                                     <img src={profile?.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 </div>
