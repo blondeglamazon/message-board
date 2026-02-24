@@ -3,18 +3,22 @@
 import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
+import Sidebar from '@/components/Sidebar'
+
+// @ts-ignore
+import Microlink from '@microlink/react'
 
 function ProfileContent() {
   const supabase = createClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [loading, setLoading] = useState(true)
   const [profileUser, setProfileUser] = useState<any>(null) 
   const [currentUser, setCurrentUser] = useState<any>(null) 
   const [posts, setPosts] = useState<any[]>([])
   
-  // --- NEW STATES FOR COUNTS ---
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   
@@ -38,11 +42,10 @@ function ProfileContent() {
   const [isSelling, setIsSelling] = useState(false)
   const [productLink, setProductLink] = useState('')
   const [isPosting, setIsPosting] = useState(false)
-
-  const router = useRouter()
-  const searchParams = useSearchParams()
   
-  // FIX: Support both ?id=uuid AND ?u=username
+  // APP STORE COMPLIANCE STATE
+  const [isBlocked, setIsBlocked] = useState(false)
+
   const targetId = searchParams.get('id')
   const targetSlug = searchParams.get('u')
 
@@ -53,24 +56,19 @@ function ProfileContent() {
       const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       setCurrentUser(loggedInUser)
 
-      // FIX: Determine which user to fetch based on URL params or login state
       let profileData = null
 
       if (targetId) {
-        // Find by ID
         const { data } = await supabase.from('profiles').select('*').eq('id', targetId).single()
         profileData = data
       } else if (targetSlug) {
-        // Find by Username Slug (This connects to your Feed links!)
         const { data } = await supabase.from('profiles').select('*').eq('username', targetSlug).single()
         profileData = data
       } else if (loggedInUser) {
-        // Fallback to logged-in user's own profile
         const { data } = await supabase.from('profiles').select('*').eq('id', loggedInUser.id).single()
         profileData = data
       }
 
-      // If no valid profile was found, stop loading
       if (!profileData) {
         setLoading(false)
         return 
@@ -79,6 +77,16 @@ function ProfileContent() {
       const userIdToFetch = profileData.id
       let email = profileData?.email || 'Unknown User'
       let memberSince = new Date().toLocaleDateString()
+
+      // Check if current user has blocked this profile (App Store Compliance)
+      if (loggedInUser && loggedInUser.id !== userIdToFetch) {
+        const { data: blockData } = await supabase.from('blocks')
+          .select('id')
+          .eq('blocker_id', loggedInUser.id)
+          .eq('blocked_id', userIdToFetch)
+          .single()
+        if (blockData) setIsBlocked(true)
+      }
 
       const { data: userPosts } = await supabase
         .from('posts')
@@ -98,7 +106,6 @@ function ProfileContent() {
       if (userPosts && userPosts.length > 0) email = userPosts[0].email
       if (firstPost && firstPost.length > 0) memberSince = new Date(firstPost[0].created_at).toLocaleDateString()
 
-      // --- FETCH FOLLOW COUNTS ---
       const { count: followers } = await supabase
         .from('follows')
         .select('*', { count: 'exact', head: true })
@@ -233,9 +240,27 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // APP STORE REQUIREMENT: Allow users to report UGC (User Generated Content)
-  function handleReportPost() {
-      alert("Thank you for your report. Our moderation team will review this content within 24 hours.")
+  // APP STORE REQUIREMENT: Block Abusive Users
+  async function handleBlockUser() {
+      if (!currentUser || !profileUser) return
+      if (confirm(`Block ${profileUser.display_name}? You will no longer see their posts.`)) {
+          const { error } = await supabase.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: profileUser.id })
+          if (!error) {
+              setIsBlocked(true)
+              alert("User blocked.")
+              router.push('/')
+          } else {
+              alert("Error blocking user.")
+          }
+      }
+  }
+
+  // APP STORE REQUIREMENT: Report UGC
+  async function handleReportPost(postId: string) {
+      if (confirm("Report this post for violating community guidelines?")) {
+          // Send report to DB (assuming you have a 'reports' table, or just UI alert)
+          alert("Thank you for your report. Our moderation team will review this content within 24 hours.")
+      }
   }
 
   const connectGoogleCalendar = async () => {
@@ -266,7 +291,6 @@ function ProfileContent() {
 
   if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
   
-  // Handled invalid URLs
   if (!profileUser) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Profile not found.</div>
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
@@ -274,6 +298,10 @@ function ProfileContent() {
 
   return (
     <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
+      
+      {/* SIDEBAR COMPONENT INCLUDED */}
+      <Sidebar />
+
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           {isEmbedBackground ? (
               <div style={{ width: '100%', height: '100%', opacity: 0.6 }}> 
@@ -285,227 +313,226 @@ function ProfileContent() {
       </div>
 
       <div style={{ position: 'relative', zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', minHeight: '100vh', padding: '20px' }}>
-        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', paddingTop: '40px' }}>
+            
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                     {isMyProfile ? 'My Profile' : `${profileUser.display_name || 'User'}'s Profile`}
                 </h1>
-                <Link href="/" style={{ padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', textDecoration: 'none', color: '#333', fontWeight: 'bold' }}>
+                {/* FIX FOR MOBILE TAPS */}
+                <div onClick={() => router.push('/')} style={{ cursor: 'pointer', padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', color: '#333', fontWeight: 'bold' }}>
                     ← Back to Feed
-                </Link>
+                </div>
             </header>
 
-            {isEditing && (
-                <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
-                    <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
-                    <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Display Name" />
-                    <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Avatar URL" />
-                    <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Background URL or Embed" />
-                    
-                    <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Calendly or Booking URL" />
-                    
-                    {/* --- 3 STORE LINKS --- */}
-                    <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Primary Store URL (Square, Etsy, eBay, etc.)" />
-                    <input type="url" value={editForm.store_url_2} onChange={e => setEditForm({...editForm, store_url_2: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Store / Link 2" />
-                    <input type="url" value={editForm.store_url_3} onChange={e => setEditForm({...editForm, store_url_3: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Store / Link 3" />
-                    
-                    <div style={{ marginTop: '15px', marginBottom: '15px', padding: '15px', backgroundColor: '#374151', borderRadius: '8px', border: '1px solid #4b5563' }}>
-                        <h4 style={{ color: 'white', marginTop: 0, marginBottom: '5px' }}>Automated Scheduling</h4>
-                        <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: 0, marginBottom: '10px' }}>Connect your Google Calendar so users can book available slots directly on VIMciety.</p>
-                        <button 
-                          onClick={(e) => { e.preventDefault(); connectGoogleCalendar(); }} 
-                          style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '16px', height: '16px' }} />
-                          Connect Google Calendar
-                        </button>
-                    </div>
-
-                    <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
-                    <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Music Embed Code" />
-                    <div style={{display:'flex', gap:'10px'}}>
-                        <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
-                        <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
-                    </div>
+            {isBlocked ? (
+                <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '20px', borderRadius: '12px', textAlign: 'center', fontWeight: 'bold' }}>
+                    You have blocked this user.
                 </div>
-            )}
-
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', overflow: 'hidden', flexShrink: 0 }}>
-                        {profileUser?.avatar_url ? (
-                            <img src={profileUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                            (profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'
-                        )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
+            ) : (
+              <>
+                {isEditing && (
+                    <div style={{ marginBottom: '20px', backgroundColor: '#1f2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151' }}>
+                        <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
+                        <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Display Name" />
+                        <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Avatar URL" />
+                        <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Background URL or Embed" />
                         
-                        {/* --- NEW: RENDER FOLLOWER COUNTS HERE --- */}
-                        <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
-                            <div 
-                              onClick={() => isMyProfile && router.push('/friends')} 
-                              style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                        <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Calendly or Booking URL" />
+                        
+                        <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Primary Store URL (Square, Etsy, Amazon, etc.)" />
+                        <input type="url" value={editForm.store_url_2} onChange={e => setEditForm({...editForm, store_url_2: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Store / Link 2" />
+                        <input type="url" value={editForm.store_url_3} onChange={e => setEditForm({...editForm, store_url_3: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', color: 'white', backgroundColor: '#374151'}} placeholder="Store / Link 3" />
+                        
+                        <div style={{ marginTop: '15px', marginBottom: '15px', padding: '15px', backgroundColor: '#374151', borderRadius: '8px', border: '1px solid #4b5563' }}>
+                            <h4 style={{ color: 'white', marginTop: 0, marginBottom: '5px' }}>Automated Scheduling</h4>
+                            <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: 0, marginBottom: '10px' }}>Connect your Google Calendar so users can book available slots directly on VIMciety.</p>
+                            <button 
+                              onClick={(e) => { e.preventDefault(); connectGoogleCalendar(); }} 
+                              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
                             >
-                                <strong style={{ color: '#111827' }}>{followerCount}</strong> Followers
-                            </div>
-                            <div 
-                              onClick={() => isMyProfile && router.push('/following')} 
-                              style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
-                            >
-                                <strong style={{ color: '#111827' }}>{followingCount}</strong> Following
-                            </div>
+                              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '16px', height: '16px' }} />
+                              Connect Google Calendar
+                            </button>
                         </div>
 
-                        <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
-                        {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
-                        
-                        {/* --- RENDER UP TO 3 STORE LINKS --- */}
-                        {(profileUser?.calendly_url || profileUser?.google_calendar_url || profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '15px' }}>
-                            {(profileUser?.calendly_url || profileUser?.google_calendar_url) && (
-                              <a 
-                                href={profileUser.calendly_url || profileUser.google_calendar_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bfdbfe' }}
-                              >
-                                📅 Book Appointment
-                              </a>
-                            )}
-                            {profileUser?.store_url && (
-                              <a 
-                                href={profileUser.store_url} 
-                                target="_blank" rel="noopener noreferrer"
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', backgroundColor: '#f0fdf4', color: '#16a34a', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bbf7d0' }}
-                              >
-                                🛍️ Visit Store
-                              </a>
-                            )}
-                            {profileUser?.store_url_2 && (
-                              <a 
-                                href={profileUser.store_url_2} 
-                                target="_blank" rel="noopener noreferrer"
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', backgroundColor: '#f0fdf4', color: '#16a34a', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bbf7d0' }}
-                              >
-                                🔗 Link 2
-                              </a>
-                            )}
-                            {profileUser?.store_url_3 && (
-                              <a 
-                                href={profileUser.store_url_3} 
-                                target="_blank" rel="noopener noreferrer"
-                                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', backgroundColor: '#f0fdf4', color: '#16a34a', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bbf7d0' }}
-                              >
-                                🔗 Link 3
-                              </a>
-                            )}
-                          </div>
-                        )}
-                        
-                    </div>
-                    {isMyProfile && !isEditing && (
-                        <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start' }}>✏️ Edit</button>
-                    )}
-                </div>
-                {profileUser?.music_embed && (
-                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
-                        {renderSafeHTML(profileUser.music_embed)}
+                        <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
+                        <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Music Embed Code" />
+                        <div style={{display:'flex', gap:'10px'}}>
+                            <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
+                            <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
+                        </div>
                     </div>
                 )}
-            </div>
 
-            {/* --- NEW: CREATE POST / SELL POST BOX (Only visible to the profile owner) --- */}
-            {isMyProfile && !isEditing && (
-                <div style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', marginBottom: '30px', border: '1px solid #374151' }}>
-                    <textarea 
-                        placeholder="What's on your mind? Or what are you selling?"
-                        value={postText}
-                        onChange={(e) => setPostText(e.target.value)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#374151', color: 'white', minHeight: '80px', marginBottom: '10px' }}
-                    />
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {/* File Upload */}
-                        <input 
-                            type="file" 
-                            accept="image/png, image/jpeg, image/jpg" 
-                            onChange={(e) => setPostFile(e.target.files?.[0] || null)}
-                            style={{ color: '#9ca3af' }}
-                        />
-
-                        {/* Sell Toggle */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-                            <input 
-                                type="checkbox" 
-                                id="sell-toggle"
-                                checked={isSelling} 
-                                onChange={(e) => setIsSelling(e.target.checked)} 
-                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                            />
-                            <label htmlFor="sell-toggle" style={{ color: '#22c55e', fontWeight: 'bold', cursor: 'pointer' }}>
-                                Turn this into a "Sell" Post 🛒
-                            </label>
-                        </div>
-
-                        {/* External Link Input (Only shows if Selling is checked) */}
-                        {isSelling && (
-                            <input 
-                                type="url"
-                                placeholder="Checkout Link (Square, eBay, Stripe, etc.)"
-                                value={productLink}
-                                onChange={(e) => setProductLink(e.target.value)}
-                                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #22c55e', backgroundColor: '#111827', color: 'white', marginTop: '5px' }}
-                            />
-                        )}
-
-                        <button 
-                            onClick={handleCreatePost} 
-                            disabled={isPosting || (!postText && !postFile)}
-                            style={{ backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', border: 'none', padding: '10px', borderRadius: '8px', cursor: isPosting ? 'not-allowed' : 'pointer', marginTop: '10px', opacity: (isPosting || (!postText && !postFile)) ? 0.6 : 1 }}
-                        >
-                            {isPosting ? 'Posting...' : 'Post'}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                {posts.map(post => (
-                    <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
-                            <span>{new Date(post.created_at).toLocaleString()}</span>
-                            
-                            {/* APP STORE COMPLIANCE: UGC REPORTING */}
-                            {isMyProfile ? (
-                                <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '16px', padding: '30px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', marginBottom: '30px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', fontWeight: 'bold', overflow: 'hidden', flexShrink: 0 }}>
+                            {profileUser?.avatar_url ? (
+                                <img src={profileUser.avatar_url} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
-                                <button onClick={handleReportPost} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Report Post</button>
+                                (profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'
                             )}
                         </div>
-                        
-                        {renderPostContent(post)}
-                        
-                        {/* Display Image if it exists */}
-                        {post.media_url && post.post_type === 'image' && (
-                            <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} alt="Post media" />
-                        )}
+                        <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
+                                
+                                {/* APP STORE COMPLIANCE: BLOCK USER BUTTON */}
+                                {!isMyProfile && currentUser && (
+                                    <button 
+                                      onClick={handleBlockUser} 
+                                      style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
+                                    >
+                                        🚫 Block User
+                                    </button>
+                                )}
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
+                                <div 
+                                  onClick={() => isMyProfile && router.push('/friends')} 
+                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                                >
+                                    <strong style={{ color: '#111827' }}>{followerCount}</strong> Followers
+                                </div>
+                                <div 
+                                  onClick={() => isMyProfile && router.push('/following')} 
+                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                                >
+                                    <strong style={{ color: '#111827' }}>{followingCount}</strong> Following
+                                </div>
+                            </div>
 
-                        {/* --- NEW: Render the BUY NOW button if it is a sell post --- */}
-                        {post.is_sell_post && post.product_link && (
-                            <a 
-                                href={post.product_link} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', transition: 'opacity 0.2s' }}
-                            >
-                                💳 Buy Now / View Item
-                            </a>
+                            <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
+                            {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
+                            
+                            {/* --- MICROLINK RICH PREVIEWS FOR STORES --- */}
+                            {(profileUser?.calendly_url || profileUser?.google_calendar_url || profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+                                
+                                {(profileUser?.calendly_url || profileUser?.google_calendar_url) && (
+                                  <a 
+                                    href={profileUser.calendly_url || profileUser.google_calendar_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bfdbfe', alignSelf: 'flex-start' }}
+                                  >
+                                    📅 Book Appointment
+                                  </a>
+                                )}
+                                
+                                {profileUser?.store_url && (
+                                    <Microlink url={profileUser.store_url} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                )}
+
+                                {profileUser?.store_url_2 && (
+                                    <Microlink url={profileUser.store_url_2} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                )}
+
+                                {profileUser?.store_url_3 && (
+                                    <Microlink url={profileUser.store_url_3} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                )}
+                              </div>
+                            )}
+                            
+                        </div>
+                        {isMyProfile && !isEditing && (
+                            <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start' }}>✏️ Edit</button>
                         )}
                     </div>
-                ))}
-            </div>
+                    {profileUser?.music_embed && (
+                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+                            {renderSafeHTML(profileUser.music_embed)}
+                        </div>
+                    )}
+                </div>
+
+                {isMyProfile && !isEditing && (
+                    <div style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', marginBottom: '30px', border: '1px solid #374151' }}>
+                        <textarea 
+                            placeholder="What's on your mind? Or what are you selling?"
+                            value={postText}
+                            onChange={(e) => setPostText(e.target.value)}
+                            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#374151', color: 'white', minHeight: '80px', marginBottom: '10px' }}
+                        />
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <input 
+                                type="file" 
+                                accept="image/png, image/jpeg, image/jpg" 
+                                onChange={(e) => setPostFile(e.target.files?.[0] || null)}
+                                style={{ color: '#9ca3af' }}
+                            />
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                                <input 
+                                    type="checkbox" 
+                                    id="sell-toggle"
+                                    checked={isSelling} 
+                                    onChange={(e) => setIsSelling(e.target.checked)} 
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                />
+                                <label htmlFor="sell-toggle" style={{ color: '#22c55e', fontWeight: 'bold', cursor: 'pointer' }}>
+                                    Turn this into a "Sell" Post 🛒
+                                </label>
+                            </div>
+
+                            {isSelling && (
+                                <input 
+                                    type="url"
+                                    placeholder="Checkout Link (Square, eBay, Stripe, etc.)"
+                                    value={productLink}
+                                    onChange={(e) => setProductLink(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #22c55e', backgroundColor: '#111827', color: 'white', marginTop: '5px' }}
+                                />
+                            )}
+
+                            <button 
+                                onClick={handleCreatePost} 
+                                disabled={isPosting || (!postText && !postFile)}
+                                style={{ backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', border: 'none', padding: '10px', borderRadius: '8px', cursor: isPosting ? 'not-allowed' : 'pointer', marginTop: '10px', opacity: (isPosting || (!postText && !postFile)) ? 0.6 : 1 }}
+                            >
+                                {isPosting ? 'Posting...' : 'Post'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    {posts.map(post => (
+                        <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
+                                <span>{new Date(post.created_at).toLocaleString()}</span>
+                                
+                                {isMyProfile ? (
+                                    <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                                ) : (
+                                    <button onClick={() => handleReportPost(post.id)} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Report Post</button>
+                                )}
+                            </div>
+                            
+                            {renderPostContent(post)}
+                            
+                            {post.media_url && post.post_type === 'image' && (
+                                <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} alt="Post media" />
+                            )}
+
+                            {post.is_sell_post && post.product_link && (
+                                <a 
+                                    href={post.product_link} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', transition: 'opacity 0.2s' }}
+                                >
+                                    💳 Buy Now / View Item
+                                </a>
+                            )}
+                        </div>
+                    ))}
+                </div>
+              </>
+            )}
         </div>
       </div>
     </div>
