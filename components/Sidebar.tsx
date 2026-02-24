@@ -151,7 +151,7 @@ export default function Sidebar() {
           border: '1px solid #e5e7eb', 
           borderLeft: 'none', 
           borderRadius: '0 8px 8px 0',
-          zIndex: 60, 
+          zIndex: 9999, /* CHANGED THIS FROM 60 TO 9999 */
           alignItems: 'center', 
           justifyContent: 'center',
           fontSize: '14px', 
@@ -177,7 +177,7 @@ export default function Sidebar() {
         alignItems: 'center', 
         padding: 'calc(20px + env(safe-area-inset-top)) 0 20px 0',
         borderRight: '1px solid #e5e7eb', 
-        zIndex: 50,
+        zIndex: 9998, /* <--- CHANGED THIS TO 9998 */
         transform: sidebarTransform,
         transition: 'transform 0.3s ease',
         boxShadow: (isMobile && isOpen) ? '4px 0 12px rgba(0,0,0,0.1)' : 'none'
