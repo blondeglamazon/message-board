@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation' // Added useRouter for mobile taps
 
 export default function FriendsPage() {
   const [friends, setFriends] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const router = useRouter() // Initialize router
 
   useEffect(() => {
     async function loadFriends() {
@@ -52,15 +53,19 @@ export default function FriendsPage() {
           <p style={{ color: '#111827', fontStyle: 'italic' }}>No mutual friends yet.</p>
         ) : (
           friends.map((user: any) => (
-            <Link key={user.username} href={`/u/${user.username}`} style={{ textDecoration: 'none' }}>
-              <div style={{ 
+            /* FIX FOR MOBILE TAPS & CORRECT PROFILE ROUTE */
+            <div 
+              key={user.username} 
+              onClick={() => router.push(`/profile?u=${user.username}`)}
+              style={{ 
                 display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', 
-                borderRadius: '12px', border: '1px solid #111827', backgroundColor: 'white' 
-              }}>
-                <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
-                <span style={{ color: '#111827', fontWeight: 'bold' }}>{user.display_name || user.username}</span>
-              </div>
-            </Link>
+                borderRadius: '12px', border: '1px solid #111827', backgroundColor: 'white',
+                cursor: 'pointer' // Added pointer cursor
+              }}
+            >
+              <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover' }} />
+              <span style={{ color: '#111827', fontWeight: 'bold' }}>{user.display_name || user.username}</span>
+            </div>
           ))
         )}
       </div>

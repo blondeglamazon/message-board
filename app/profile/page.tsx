@@ -14,6 +14,10 @@ function ProfileContent() {
   const [currentUser, setCurrentUser] = useState<any>(null) 
   const [posts, setPosts] = useState<any[]>([])
   
+  // --- NEW STATES FOR COUNTS ---
+  const [followerCount, setFollowerCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
       display_name: '', 
@@ -93,6 +97,20 @@ function ProfileContent() {
 
       if (userPosts && userPosts.length > 0) email = userPosts[0].email
       if (firstPost && firstPost.length > 0) memberSince = new Date(firstPost[0].created_at).toLocaleDateString()
+
+      // --- FETCH FOLLOW COUNTS ---
+      const { count: followers } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', userIdToFetch)
+
+      const { count: following } = await supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('follower_id', userIdToFetch)
+
+      setFollowerCount(followers || 0)
+      setFollowingCount(following || 0)
 
       setProfileUser({ 
           id: userIdToFetch, 
@@ -323,6 +341,23 @@ function ProfileContent() {
                     </div>
                     <div style={{ flex: 1 }}>
                         <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
+                        
+                        {/* --- NEW: RENDER FOLLOWER COUNTS HERE --- */}
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
+                            <div 
+                              onClick={() => isMyProfile && router.push('/friends')} 
+                              style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                            >
+                                <strong style={{ color: '#111827' }}>{followerCount}</strong> Followers
+                            </div>
+                            <div 
+                              onClick={() => isMyProfile && router.push('/following')} 
+                              style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                            >
+                                <strong style={{ color: '#111827' }}>{followingCount}</strong> Following
+                            </div>
+                        </div>
+
                         <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
                         {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
                         

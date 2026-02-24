@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation' // Added useRouter for mobile-friendly taps
 
 export default function FollowingPage() {
   const [following, setFollowing] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+  const router = useRouter() // Initialize router
 
   useEffect(() => {
     async function loadFollowing() {
@@ -58,26 +59,30 @@ export default function FollowingPage() {
         {following.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
             <p style={{ fontSize: '18px', marginBottom: '10px' }}>You aren't following anyone yet.</p>
-            <Link href="/search" style={{ color: '#6366f1', fontWeight: 'bold', textDecoration: 'none' }}>
+            {/* FIX FOR MOBILE TAPS */}
+            <div onClick={() => router.push('/search')} style={{ color: '#6366f1', fontWeight: 'bold', cursor: 'pointer' }}>
               Find people to follow →
-            </Link>
+            </div>
           </div>
         ) : (
           following.map(user => (
-            <Link key={user.username} href={`/u/${user.username}`} style={{ textDecoration: 'none' }}>
-              <div style={{ 
+            /* FIX FOR MOBILE TAPS & CORRECT PROFILE ROUTE */
+            <div 
+              key={user.username} 
+              onClick={() => router.push(`/profile?u=${user.username}`)} 
+              style={{ 
                 display: 'flex', alignItems: 'center', gap: '15px', padding: '15px', 
                 borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-              }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb' }}>
-                  <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                </div>
-                <span style={{ color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>
-                  {user.display_name || user.username}
-                </span>
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)', cursor: 'pointer'
+              }}
+            >
+              <div style={{ width: '50px', height: '50px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb' }}>
+                <img src={user.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
-            </Link>
+              <span style={{ color: '#111827', fontWeight: 'bold', fontSize: '16px' }}>
+                {user.display_name || user.username}
+              </span>
+            </div>
           ))
         )}
       </div>
