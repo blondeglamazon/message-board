@@ -19,6 +19,9 @@ function ProfileContent() {
   const [currentUser, setCurrentUser] = useState<any>(null) 
   const [posts, setPosts] = useState<any[]>([])
   
+  // --- NEW: Map to hold commenter profiles ---
+  const [profilesMap, setProfilesMap] = useState<Record<string, any>>({})
+  
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   
@@ -43,6 +46,10 @@ function ProfileContent() {
   const [productLink, setProductLink] = useState('')
   const [isPosting, setIsPosting] = useState(false)
   
+  // Interactions State
+  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+
   // APP STORE COMPLIANCE STATE
   const [isBlocked, setIsBlocked] = useState(false)
 
@@ -55,6 +62,12 @@ function ProfileContent() {
       
       const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       setCurrentUser(loggedInUser)
+
+      // Fetch all profiles so we can show commenter names
+      const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
+      const pMap: Record<string, any> = {}
+      allProfiles?.forEach((p: any) => { pMap[p.id] = p })
+      setProfilesMap(pMap)
 
       let profileData = null
 
@@ -150,9 +163,10 @@ function ProfileContent() {
           })
       }
 
+      // --- FETCH POSTS WITH LIKES AND COMMENTS ---
       const { data: history } = await supabase
         .from('posts')
-        .select('*')
+        .select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
         .eq('user_id', userIdToFetch)
         .order('created_at', { ascending: false })
         
@@ -220,12 +234,13 @@ function ProfileContent() {
         product_link: isSelling ? productLink : null
     }
 
+    // Insert and attach empty likes/comments arrays so it renders properly right away
     const { data, error } = await supabase.from('posts').insert(newPost).select().single()
     
     if (error) {
         alert("Error creating post: " + error.message)
     } else if (data) {
-        setPosts([data, ...posts])
+        setPosts([{ ...data, likes: [], comments: [] }, ...posts])
         setPostText('')
         setPostFile(null)
         setIsSelling(false)
@@ -239,6 +254,76 @@ function ProfileContent() {
       const { error } = await supabase.from('posts').delete().eq('id', postId)
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
+
+  // --- RESTORED: LIKE LOGIC ---
+  async function handleLike(postId: string, isLiked: boolean) {
+    if (!currentUser) return alert("Please login to like posts.")
+    
+    setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== currentUser.id) : [...(msg.likes || []), { user_id: currentUser.id }] } : msg))
+    
+    if (isLiked) {
+      await supabase.from('likes').delete().match({ user_id: currentUser.id, post_id: postId })
+    } else {
+      await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId })
+      
+      if (profileUser && profileUser.id !== currentUser.id) { 
+        await supabase.from('notifications').insert({
+          user_id: profileUser.id,
+          actor_id: currentUser.id,
+          type: 'like',
+          post_id: postId
+        });
+      }
+    }
+  }
+
+  // --- RESTORED: COMMENT LOGIC ---
+  const toggleComments = (postId: string) => {
+    const newSet = new Set(openComments)
+    if (newSet.has(postId)) newSet.delete(postId)
+    else newSet.add(postId)
+    setOpenComments(newSet)
+  }
+
+  async function handlePostComment(postId: string) {
+    if (!currentUser) return alert("Please login to comment.")
+    const text = commentText[postId]?.trim()
+    if (!text) return
+    
+    const { data: newComment, error } = await supabase.from('comments').insert({ post_id: postId, user_id: currentUser.id, email: currentUser.email, content: text }).select().single()
+    if (error) return alert("Error: " + error.message)
+    
+    setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
+    setCommentText(prev => ({ ...prev, [postId]: '' }))
+
+    if (profileUser && profileUser.id !== currentUser.id) { 
+      await supabase.from('notifications').insert({
+        user_id: profileUser.id,
+        actor_id: currentUser.id,
+        type: 'comment',
+        post_id: postId
+      });
+    }
+  }
+
+  // --- NEW: SHARE LOGIC (Native Mobile Share) ---
+  const handleShare = async (postId: string) => {
+      const url = `${window.location.origin}/?post=${postId}`;
+      if (navigator.share) {
+          try {
+              await navigator.share({
+                  title: 'Check out this post on VIMciety',
+                  url: url
+              });
+          } catch (err) {
+              console.log('User cancelled share');
+          }
+      } else {
+          // Fallback for desktop browsers
+          navigator.clipboard.writeText(url);
+          alert("Link copied to clipboard!");
+      }
+  };
 
   // APP STORE REQUIREMENT: Block Abusive Users
   async function handleBlockUser() {
@@ -258,7 +343,6 @@ function ProfileContent() {
   // APP STORE REQUIREMENT: Report UGC
   async function handleReportPost(postId: string) {
       if (confirm("Report this post for violating community guidelines?")) {
-          // Send report to DB (assuming you have a 'reports' table, or just UI alert)
           alert("Thank you for your report. Our moderation team will review this content within 24 hours.")
       }
   }
@@ -382,7 +466,7 @@ function ProfileContent() {
                                 {!isMyProfile && currentUser && (
                                     <button 
                                       onClick={handleBlockUser} 
-                                      style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold' }}
+                                      style={{ backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontWeight: 'bold', minHeight: '44px' }}
                                     >
                                         🚫 Block User
                                     </button>
@@ -438,7 +522,7 @@ function ProfileContent() {
                             
                         </div>
                         {isMyProfile && !isEditing && (
-                            <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start' }}>✏️ Edit</button>
+                            <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', minHeight: '44px' }}>✏️ Edit</button>
                         )}
                     </div>
                     {profileUser?.music_embed && (
@@ -491,7 +575,7 @@ function ProfileContent() {
                             <button 
                                 onClick={handleCreatePost} 
                                 disabled={isPosting || (!postText && !postFile)}
-                                style={{ backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', border: 'none', padding: '10px', borderRadius: '8px', cursor: isPosting ? 'not-allowed' : 'pointer', marginTop: '10px', opacity: (isPosting || (!postText && !postFile)) ? 0.6 : 1 }}
+                                style={{ backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold', border: 'none', padding: '10px', borderRadius: '8px', cursor: isPosting ? 'not-allowed' : 'pointer', marginTop: '10px', opacity: (isPosting || (!postText && !postFile)) ? 0.6 : 1, minHeight: '44px' }}
                             >
                                 {isPosting ? 'Posting...' : 'Post'}
                             </button>
@@ -500,15 +584,18 @@ function ProfileContent() {
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {posts.map(post => (
+                    {posts.map(post => {
+                        const isLiked = currentUser && post.likes?.some((l: any) => l.user_id === currentUser.id);
+
+                        return (
                         <div key={post.id} style={{ backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', color: 'white', border: '1px solid #374151' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
                                 <span>{new Date(post.created_at).toLocaleString()}</span>
                                 
                                 {isMyProfile ? (
-                                    <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                                    <button onClick={() => handleDelete(post.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px' }}>Delete</button>
                                 ) : (
-                                    <button onClick={() => handleReportPost(post.id)} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Report Post</button>
+                                    <button onClick={() => handleReportPost(post.id)} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', minHeight: '44px' }}>Report Post</button>
                                 )}
                             </div>
                             
@@ -523,13 +610,70 @@ function ProfileContent() {
                                     href={post.product_link} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', transition: 'opacity 0.2s' }}
+                                    style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', transition: 'opacity 0.2s', minHeight: '44px' }}
                                 >
                                     💳 Buy Now / View Item
                                 </a>
                             )}
+
+                            {/* --- RESTORED: INTERACTION BUTTONS (LIKE, COMMENT, SHARE) --- */}
+                            <div style={{ marginTop: '15px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '15px' }}>
+                                <button 
+                                    onClick={() => handleLike(post.id, !!isLiked)} 
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: 0 }}>
+                                    <span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> 
+                                    <span style={{ fontWeight: '600', fontSize: '14px' }}>{post.likes?.length || 0}</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => toggleComments(post.id)} 
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: 0 }}>
+                                    <span style={{ fontSize: '20px' }}>💬</span> 
+                                    <span style={{ fontWeight: '600', fontSize: '14px' }}>{post.comments?.length || 0}</span>
+                                </button>
+
+                                <button 
+                                    onClick={() => handleShare(post.id)} 
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: 0 }}>
+                                    <span style={{ fontSize: '20px' }}>↗️</span> 
+                                    <span style={{ fontWeight: '600', fontSize: '14px' }}>Share</span>
+                                </button>
+                            </div>
+
+                            {/* --- RESTORED: COMMENTS SECTION --- */}
+                            {openComments.has(post.id) && (
+                                <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
+                                    {post.comments?.map((c: any) => {
+                                        const commenter = profilesMap[c.user_id]
+                                        return (
+                                            <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px' }}>
+                                                <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '8px' }}>
+                                                    {commenter?.display_name || commenter?.username || 'User'}
+                                                </span>
+                                                <span style={{ color: '#9ca3af' }}>{c.content}</span>
+                                            </div>
+                                        )
+                                    })}
+                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Add a comment..." 
+                                            value={commentText[post.id] || ''} 
+                                            onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} 
+                                            style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} 
+                                        />
+                                        <button 
+                                            onClick={() => handlePostComment(post.id)} 
+                                            style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}
+                                        >
+                                            Post
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
-                    ))}
+                    )})}
                 </div>
               </>
             )}
