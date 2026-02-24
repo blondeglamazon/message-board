@@ -132,7 +132,8 @@ function MessageBoardContent() {
     await supabase.auth.signOut()
     window.location.reload()
   }
-async function handleFollow(targetUserId: string) {
+
+  async function handleFollow(targetUserId: string) {
     if (!user) return alert("Please login to follow users.");
     if (user.id === targetUserId) return; // Can't follow yourself
 
@@ -145,14 +146,37 @@ async function handleFollow(targetUserId: string) {
     } else {
       newFollowing.add(targetUserId);
       await supabase.from('follows').insert({ follower_id: user.id, following_id: targetUserId });
+      
+      // --- THE MISSING NOTIFICATION CODE ---
+      await supabase.from('notifications').insert({
+        user_id: targetUserId, 
+        actor_id: user.id,     
+        type: 'follow'
+      });
     }
     setFollowingIds(newFollowing);
   }
+
   async function handleLike(postId: string, isLiked: boolean) {
     if (!user) return alert("Please login to like posts.")
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== user.id) : [...msg.likes, { user_id: user.id }] } : msg))
-    if (isLiked) await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
-    else await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
+    
+    if (isLiked) {
+      await supabase.from('likes').delete().match({ user_id: user.id, post_id: postId })
+    } else {
+      await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
+      
+      // --- THE MISSING NOTIFICATION CODE ---
+      const targetPost = messages.find(m => m.id === postId);
+      if (targetPost && targetPost.user_id !== user.id) { 
+        await supabase.from('notifications').insert({
+          user_id: targetPost.user_id,
+          actor_id: user.id,
+          type: 'like',
+          post_id: postId
+        });
+      }
+    }
   }
 
   const toggleComments = (postId: string) => {
@@ -166,10 +190,23 @@ async function handleFollow(targetUserId: string) {
     if (!user) return alert("Please login to comment.")
     const text = commentText[postId]?.trim()
     if (!text) return
+    
     const { data: newComment, error } = await supabase.from('comments').insert({ post_id: postId, user_id: user.id, email: user.email, content: text }).select().single()
     if (error) return alert("Error: " + error.message)
+    
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
     setCommentText(prev => ({ ...prev, [postId]: '' }))
+
+    // --- THE MISSING NOTIFICATION CODE ---
+    const targetPost = messages.find(m => m.id === postId);
+    if (targetPost && targetPost.user_id !== user.id) { 
+      await supabase.from('notifications').insert({
+        user_id: targetPost.user_id,
+        actor_id: user.id,
+        type: 'comment',
+        post_id: postId
+      });
+    }
   }
 
   // File Handling
