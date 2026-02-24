@@ -183,8 +183,14 @@ export default function Sidebar() {
         boxShadow: (isMobile && isOpen) ? '4px 0 12px rgba(0,0,0,0.1)' : 'none'
       }}>
         
-        {user && profile && (
-          <Link href={`/profile?u=${profile.username}`} style={{ marginBottom: '20px', marginTop: '10px' }}>
+       {user && profile && (
+          <div 
+            onClick={() => {
+              setIsOpen(false); // Close sidebar on mobile when clicked
+              router.push(`/profile?u=${profile.username}`);
+            }} 
+            style={{ cursor: 'pointer', marginBottom: '20px', marginTop: '10px' }}
+          >
             <div style={{ 
               width: '40px', 
               height: '40px', 
@@ -199,21 +205,18 @@ export default function Sidebar() {
                 style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} 
               />
             </div>
-          </Link>
+          </div>
         )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <Link href="/"><div style={iconStyle(pathname === '/')}>🏠</div></Link>
-          <Link href="/search"><div style={iconStyle(pathname === '/search')}>🔍</div></Link>
-          <Link href="/following"><div style={iconStyle(pathname === '/following')}>👣</div></Link>
-          <Link href="/friends"><div style={iconStyle(pathname === '/friends')}>👥</div></Link>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', alignItems: 'center' }}>
+          <div onClick={() => { setIsOpen(false); router.push('/'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/') }}>🏠</div>
+          <div onClick={() => { setIsOpen(false); router.push('/search'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/search') }}>🔍</div>
+          <div onClick={() => { setIsOpen(false); router.push('/following'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/following') }}>👣</div>
+          <div onClick={() => { setIsOpen(false); router.push('/friends'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/friends') }}>👥</div>
           
-          <Link href="/notifications">
-              <div style={iconStyle(pathname === '/notifications')}>
-                  🔔
-                  {unreadCount > 0 && <span style={badgeStyle}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
-              </div>
-          </Link>
+          <div onClick={() => { setIsOpen(false); router.push('/notifications'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/notifications') }}>
+              🔔
+              {unreadCount > 0 && <span style={badgeStyle}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
+          </div>
 
           {/* ----- SELLER / BUSINESS ICONS ADDED HERE ----- */}
           
@@ -246,7 +249,7 @@ export default function Sidebar() {
         
         <div style={{ flex: 1 }} />
         
-        <Link href="/settings"><div style={iconStyle(pathname === '/settings')}>⚙️</div></Link>
+        <div onClick={() => { setIsOpen(false); router.push('/settings'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/settings') }}>⚙️</div>
 
         {user && (
           <button 
@@ -256,8 +259,8 @@ export default function Sidebar() {
           >
             🚪
           </button>
-        )}
-      </div>
+        )} 
+        </div>
     </>
   )
 }

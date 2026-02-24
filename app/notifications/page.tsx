@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Sidebar from '@/components/Sidebar' // ADDED SIDEBAR
 
 export default function NotificationsPage() {
   const supabase = createClient()
@@ -17,6 +17,7 @@ export default function NotificationsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         setLoading(false)
+        router.push('/login')
         return
       }
 
@@ -37,7 +38,7 @@ export default function NotificationsPage() {
       if (data) {
         setNotifications(data)
         
-        // 2. NEW: Mark Unread Notifications as Read
+        // 2. Mark Unread Notifications as Read
         const unreadIds = data.filter((n: any) => !n.is_read).map((n: any) => n.id)
         
         if (unreadIds.length > 0) {
@@ -46,7 +47,6 @@ export default function NotificationsPage() {
             .update({ is_read: true })
             .in('id', unreadIds)
           
-          // Refresh the router to ensure any server components or layouts know about the change
           router.refresh()
         }
       }
@@ -71,8 +71,9 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', paddingLeft: '75px' }}>
-      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px 20px' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+      <Sidebar />
+      <div style={{ maxWidth: '600px', margin: '0 auto', paddingTop: '60px', paddingLeft: '20px', paddingRight: '20px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '30px', color: '#111827' }}>Notifications</h1>
 
         {loading ? (
@@ -87,12 +88,13 @@ export default function NotificationsPage() {
               <div key={n.id} style={{ 
                   display: 'flex', alignItems: 'center', gap: '15px', 
                   padding: '15px', borderRadius: '12px', 
-                  backgroundColor: n.is_read ? '#ffffff' : '#f0f9ff', // Subtle blue tint for unread/just read
+                  backgroundColor: n.is_read ? '#ffffff' : '#f0f9ff', 
                   border: n.is_read ? '1px solid #e5e7eb' : '1px solid #bfdbfe',
                   transition: 'background 0.2s'
               }}>
-                <Link href={`/u/${n.actor?.username}`} style={{ textDecoration: 'none' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e5e7eb', flexShrink: 0 }}>
+                {/* FIX FOR MOBILE TAPS */}
+                <div onClick={() => router.push(`/profile?u=${n.actor?.username}`)} style={{ cursor: 'pointer', flexShrink: 0 }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', backgroundColor: '#e5e7eb' }}>
                     {n.actor?.avatar_url ? (
                       <img src={n.actor.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
@@ -101,9 +103,9 @@ export default function NotificationsPage() {
                       </div>
                     )}
                   </div>
-                </Link>
+                </div>
 
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => n.post_id ? router.push(`/?post=${n.post_id}`) : router.push(`/profile?u=${n.actor?.username}`)}>
                   <p style={{ margin: 0, color: '#111827', fontSize: '14px' }}>
                     <span style={{ fontWeight: 'bold' }}>{n.actor?.display_name || n.actor?.username}</span> {getMessage(n.type)}
                   </p>
@@ -111,12 +113,6 @@ export default function NotificationsPage() {
                     {formatDate(n.created_at)}
                   </p>
                 </div>
-
-                {n.post_id && (
-                  <Link href={`/p/${n.post_id}`} style={{ color: '#9ca3af', display: 'flex', alignItems: 'center' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-                  </Link>
-                )}
               </div>
             ))}
           </div>

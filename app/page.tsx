@@ -132,7 +132,22 @@ function MessageBoardContent() {
     await supabase.auth.signOut()
     window.location.reload()
   }
+async function handleFollow(targetUserId: string) {
+    if (!user) return alert("Please login to follow users.");
+    if (user.id === targetUserId) return; // Can't follow yourself
 
+    const isFollowing = followingIds.has(targetUserId);
+    const newFollowing = new Set(followingIds);
+
+    if (isFollowing) {
+      newFollowing.delete(targetUserId);
+      await supabase.from('follows').delete().match({ follower_id: user.id, following_id: targetUserId });
+    } else {
+      newFollowing.add(targetUserId);
+      await supabase.from('follows').insert({ follower_id: user.id, following_id: targetUserId });
+    }
+    setFollowingIds(newFollowing);
+  }
   async function handleLike(postId: string, isLiked: boolean) {
     if (!user) return alert("Please login to like posts.")
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== user.id) : [...msg.likes, { user_id: user.id }] } : msg))
@@ -403,8 +418,11 @@ function MessageBoardContent() {
                     <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         {/* Post Header */}
                         <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            {/* UPDATED LINK FOR MOBILE COMPATIBILITY */}
-                            <Link href={`/profile?u=${username}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {/* FIX FOR MOBILE TAPS */}
+                            <div 
+                              onClick={() => router.push(`/profile?u=${username}`)} 
+                              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+                            >
                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                                     <img src={profile?.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 </div>
@@ -412,9 +430,31 @@ function MessageBoardContent() {
                                     <div style={{ fontWeight: 'bold', color: '#111827', fontSize: '15px' }}>{displayName}</div>
                                     <div style={{ fontSize: '12px', color: '#6b7280' }}>{new Date(msg.created_at).toLocaleDateString()}</div>
                                 </div>
-                            </Link>
-                            {/* UGC POLICY: Reporting */}
-                            <ReportButton postId={msg.id} />
+                            </div>
+                            
+                            {/* BUTTONS CONTAINER */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {/* THE RESTORED FOLLOW BUTTON */}
+                                {user && user.id !== msg.user_id && (
+                                    <button
+                                      onClick={() => handleFollow(msg.user_id)}
+                                      style={{
+                                          padding: '6px 14px',
+                                          borderRadius: '20px',
+                                          border: followingIds.has(msg.user_id) ? '1px solid #d1d5db' : 'none',
+                                          backgroundColor: followingIds.has(msg.user_id) ? 'white' : '#111827',
+                                          color: followingIds.has(msg.user_id) ? '#374151' : 'white',
+                                          fontWeight: 'bold',
+                                          cursor: 'pointer',
+                                          fontSize: '13px'
+                                      }}
+                                    >
+                                      {followingIds.has(msg.user_id) ? 'Following' : 'Follow'}
+                                    </button>
+                                )}
+                                {/* UGC POLICY: Reporting */}
+                                <ReportButton postId={msg.id} />
+                            </div>
                         </div>
 
                         {/* Content */}
