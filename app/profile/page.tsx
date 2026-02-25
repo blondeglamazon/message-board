@@ -341,7 +341,8 @@ function ProfileContent() {
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.events',
-        redirectTo: `${window.location.origin}/profile`
+        // Hardcode your actual domain here!
+        redirectTo: `https://www.vimciety.com/profile` 
       }
     })
     if (error) alert("Error connecting Google: " + error.message)
