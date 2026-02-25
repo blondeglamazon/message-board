@@ -5,6 +5,7 @@ import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DOMPurify from 'isomorphic-dompurify'
 import Sidebar from '@/components/Sidebar'
+import { App as CapacitorApp } from '@capacitor/app';
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -38,6 +39,24 @@ function ProfileContent() {
       store_url_3: ''
   })
 
+  // Listen for the app waking up from the Google Login
+  useEffect(() => {
+    const handleUrlOpen = (event: any) => {
+      // If the URL starts with our custom scheme
+      if (event.url.includes('vimciety://')) {
+        // Strip out the scheme and push the rest (e.g., /profile#access_token=...) to the router
+        const path = event.url.replace('vimciety://', '/');
+        router.push(path);
+      }
+    };
+    
+    CapacitorApp.addListener('appUrlOpen', handleUrlOpen);
+    
+    return () => {
+      CapacitorApp.removeAllListeners();
+    };
+  }, [router]);
+  
   // State for creating a Sell Post
   const [postText, setPostText] = useState('')
   const [postFile, setPostFile] = useState<File | null>(null)
@@ -341,8 +360,8 @@ function ProfileContent() {
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.events',
-        // Hardcode your actual domain here!
-        redirectTo: `https://www.vimciety.com/profile` 
+        // Change this to your new custom app scheme!
+        redirectTo: `vimciety://profile` 
       }
     })
     if (error) alert("Error connecting Google: " + error.message)
