@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vimciety.app",
+      "sha256_cert_fingerprints": [
+        "50:E0:47:20:30:AF:04:2D:CB:6D:D6:1D:62:A4:3A:39:A4:4F:88:1E:4B:DC:88:9D:7E:6B:43:9F:BD:98:DA:4B"
+      ]
+    }
+  }
+]
