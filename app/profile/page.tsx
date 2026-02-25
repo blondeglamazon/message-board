@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import DOMPurify from 'isomorphic-dompurify'
 import Sidebar from '@/components/Sidebar'
 import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -56,7 +57,7 @@ function ProfileContent() {
       CapacitorApp.removeAllListeners();
     };
   }, [router]);
-  
+
   // State for creating a Sell Post
   const [postText, setPostText] = useState('')
   const [postFile, setPostFile] = useState<File | null>(null)
@@ -356,12 +357,16 @@ function ProfileContent() {
   }
 
   const connectGoogleCalendar = async () => {
+    // Detect if the user is on the mobile app or the website
+    const redirectUrl = Capacitor.isNativePlatform() 
+        ? 'vimciety://profile' 
+        : `${window.location.origin}/profile`;
+
     const { data, error } = await supabase.auth.linkIdentity({
       provider: 'google',
       options: {
         scopes: 'https://www.googleapis.com/auth/calendar.events',
-        // Change this to your new custom app scheme!
-        redirectTo: `vimciety://profile` 
+        redirectTo: redirectUrl
       }
     })
     if (error) alert("Error connecting Google: " + error.message)
