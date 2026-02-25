@@ -12,6 +12,9 @@ import { Capacitor } from '@capacitor/core';
 import Microlink from '@microlink/react'
 
 function ProfileContent() {
+  // ✅ FIX 1: Moved this hook INSIDE the component so React doesn't crash!
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -74,6 +77,21 @@ function ProfileContent() {
 
   const targetId = searchParams.get('id')
   const targetSlug = searchParams.get('u')
+
+  // Detect if Google Calendar is already linked on page load
+  useEffect(() => {
+    const checkGoogleConnection = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Look through the user's identities to see if Google is there
+      if (user && user.identities) {
+        const hasGoogle = user.identities.some((identity) => identity.provider === 'google');
+        setIsGoogleLinked(hasGoogle);
+      }
+    };
+    
+    checkGoogleConnection();
+  }, [supabase.auth]);
 
   useEffect(() => {
     async function loadProfile() {
@@ -357,7 +375,6 @@ function ProfileContent() {
   }
 
   const connectGoogleCalendar = async () => {
-    // Detect if the user is on the mobile app or the website
     const redirectUrl = Capacitor.isNativePlatform() 
         ? 'vimciety://profile' 
         : `${window.location.origin}/profile`;
@@ -368,9 +385,21 @@ function ProfileContent() {
         scopes: 'https://www.googleapis.com/auth/calendar.events',
         redirectTo: redirectUrl
       }
-    })
-    if (error) alert("Error connecting Google: " + error.message)
-  }
+    });
+
+    if (error) {
+      // If Supabase says it's already linked, that's actually a success!
+      if (error.message.includes('already linked') || error.message.includes('already_exists')) {
+        setIsGoogleLinked(true);
+        alert("Your Google Calendar is successfully connected!");
+      } else {
+        alert("Error connecting Google: " + error.message);
+      }
+    } else {
+      // Worked perfectly on the very first try without an error!
+      setIsGoogleLinked(true);
+    }
+  };
 
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
@@ -443,13 +472,25 @@ function ProfileContent() {
                         <div style={{ marginTop: '15px', marginBottom: '15px', padding: '15px', backgroundColor: '#374151', borderRadius: '8px', border: '1px solid #4b5563' }}>
                             <h4 style={{ color: 'white', marginTop: 0, marginBottom: '5px' }}>Automated Scheduling</h4>
                             <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: 0, marginBottom: '10px' }}>Connect your Google Calendar so users can book available slots directly on VIMciety.</p>
-                            <button 
-                              onClick={(e) => { e.preventDefault(); connectGoogleCalendar(); }} 
-                              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', minHeight: '44px', borderRadius: '4px', cursor: 'pointer' }}
-                            >
-                              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '16px', height: '16px' }} />
-                              Connect Google Calendar
-                            </button>
+                            
+                            {/* ✅ FIX 2: Added the smart UI button logic right here! */}
+                            {isGoogleLinked ? (
+                              <button 
+                                disabled
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', border: 'none', padding: '8px 16px', minHeight: '44px', borderRadius: '4px', cursor: 'not-allowed', opacity: 0.9 }}
+                              >
+                                <span>✅</span> Google Calendar Connected
+                              </button>
+                            ) : (
+                              <button 
+                                onClick={(e) => { e.preventDefault(); connectGoogleCalendar(); }} 
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', minHeight: '44px', borderRadius: '4px', cursor: 'pointer' }}
+                              >
+                                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '16px', height: '16px' }} />
+                                Connect Google Calendar
+                              </button>
+                            )}
+
                         </div>
 
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
