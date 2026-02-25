@@ -46,6 +46,14 @@ We use the information we collect for the following purposes:
 * **Safety & Moderation:** To process reports and enforce community standards.
 * **Marketing & Promotions:** We may use your contact information to send you updates about new features, promotions, or news related to VIMciety.
 * **Analytics:** To understand how users interact with the app and improve the user experience.
+Google API Services User Data Policy (Limited Use)
+VIMciety's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements. Specifically regarding Google Calendar data:
+
+What we collect: We request read and write access to your Google Calendar events.
+
+How we use it: This data is used exclusively to allow other users to view your availability and book appointments directly through your VIMciety profile.
+
+Data Sharing: We do NOT share, sell, or transfer your Google Calendar data to any third-party marketing platforms, advertising networks, or data brokers.
 
 ## 5. Information Sharing and Disclosure
 While we do not currently sell your data to third parties, we disclose the following sharing practices for marketing and operational purposes:

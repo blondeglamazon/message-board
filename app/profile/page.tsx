@@ -19,7 +19,6 @@ function ProfileContent() {
   const [currentUser, setCurrentUser] = useState<any>(null) 
   const [posts, setPosts] = useState<any[]>([])
   
-  // --- NEW: Map to hold commenter profiles ---
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({})
   
   const [followerCount, setFollowerCount] = useState(0)
@@ -63,7 +62,6 @@ function ProfileContent() {
       const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       setCurrentUser(loggedInUser)
 
-      // Fetch all profiles so we can show commenter names
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach((p: any) => { pMap[p.id] = p })
@@ -91,7 +89,6 @@ function ProfileContent() {
       let email = profileData?.email || 'Unknown User'
       let memberSince = new Date().toLocaleDateString()
 
-      // Check if current user has blocked this profile (App Store Compliance)
       if (loggedInUser && loggedInUser.id !== userIdToFetch) {
         const { data: blockData } = await supabase.from('blocks')
           .select('id')
@@ -163,7 +160,6 @@ function ProfileContent() {
           })
       }
 
-      // --- FETCH POSTS WITH LIKES AND COMMENTS ---
       const { data: history } = await supabase
         .from('posts')
         .select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
@@ -234,7 +230,6 @@ function ProfileContent() {
         product_link: isSelling ? productLink : null
     }
 
-    // Insert and attach empty likes/comments arrays so it renders properly right away
     const { data, error } = await supabase.from('posts').insert(newPost).select().single()
     
     if (error) {
@@ -255,7 +250,6 @@ function ProfileContent() {
       if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
   }
 
-  // --- RESTORED: LIKE LOGIC ---
   async function handleLike(postId: string, isLiked: boolean) {
     if (!currentUser) return alert("Please login to like posts.")
     
@@ -277,7 +271,6 @@ function ProfileContent() {
     }
   }
 
-  // --- RESTORED: COMMENT LOGIC ---
   const toggleComments = (postId: string) => {
     const newSet = new Set(openComments)
     if (newSet.has(postId)) newSet.delete(postId)
@@ -306,7 +299,6 @@ function ProfileContent() {
     }
   }
 
-  // --- NEW: SHARE LOGIC (Native Mobile Share) ---
   const handleShare = async (postId: string) => {
       const url = `${window.location.origin}/?post=${postId}`;
       if (navigator.share) {
@@ -319,13 +311,11 @@ function ProfileContent() {
               console.log('User cancelled share');
           }
       } else {
-          // Fallback for desktop browsers
           navigator.clipboard.writeText(url);
           alert("Link copied to clipboard!");
       }
   };
 
-  // APP STORE REQUIREMENT: Block Abusive Users
   async function handleBlockUser() {
       if (!currentUser || !profileUser) return
       if (confirm(`Block ${profileUser.display_name}? You will no longer see their posts.`)) {
@@ -340,7 +330,6 @@ function ProfileContent() {
       }
   }
 
-  // APP STORE REQUIREMENT: Report UGC
   async function handleReportPost(postId: string) {
       if (confirm("Report this post for violating community guidelines?")) {
           alert("Thank you for your report. Our moderation team will review this content within 24 hours.")
@@ -383,7 +372,6 @@ function ProfileContent() {
   return (
     <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
       
-      {/* SIDEBAR COMPONENT INCLUDED */}
       <Sidebar />
 
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
@@ -403,8 +391,7 @@ function ProfileContent() {
                 <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                     {isMyProfile ? 'My Profile' : `${profileUser.display_name || 'User'}'s Profile`}
                 </h1>
-                {/* FIX FOR MOBILE TAPS */}
-                <div onClick={() => router.push('/')} style={{ cursor: 'pointer', padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', color: '#333', fontWeight: 'bold' }}>
+                <div onClick={() => router.push('/')} style={{ cursor: 'pointer', padding: '8px 16px', backgroundColor: 'white', borderRadius: '6px', color: '#333', fontWeight: 'bold', display: 'flex', alignItems: 'center', minHeight: '44px' }}>
                     ← Back to Feed
                 </div>
             </header>
@@ -433,7 +420,7 @@ function ProfileContent() {
                             <p style={{ color: '#9ca3af', fontSize: '12px', marginTop: 0, marginBottom: '10px' }}>Connect your Google Calendar so users can book available slots directly on VIMciety.</p>
                             <button 
                               onClick={(e) => { e.preventDefault(); connectGoogleCalendar(); }} 
-                              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
+                              style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', border: 'none', padding: '8px 16px', minHeight: '44px', borderRadius: '4px', cursor: 'pointer' }}
                             >
                               <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '16px', height: '16px' }} />
                               Connect Google Calendar
@@ -443,8 +430,8 @@ function ProfileContent() {
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Bio" />
                         <textarea value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={{width:'100%', padding:'8px', marginBottom:'10px', borderRadius:'4px', border:'none', height:'60px', color: 'white', backgroundColor: '#374151'}} placeholder="Music Embed Code" />
                         <div style={{display:'flex', gap:'10px'}}>
-                            <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
-                            <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
+                            <button onClick={handleSaveProfile} style={{backgroundColor:'#6366f1', color:'white', border:'none', padding:'8px 16px', minHeight: '44px', borderRadius:'4px', cursor:'pointer'}}>Save</button>
+                            <button onClick={() => setIsEditing(false)} style={{backgroundColor:'#4b5563', color:'white', border:'none', padding:'8px 16px', minHeight: '44px', borderRadius:'4px', cursor:'pointer'}}>Cancel</button>
                         </div>
                     </div>
                 )}
@@ -458,11 +445,10 @@ function ProfileContent() {
                                 (profileUser?.display_name || profileUser?.email)?.[0]?.toUpperCase() || '?'
                             )}
                         </div>
-                        <div style={{ flex: 1 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
                                 
-                                {/* APP STORE COMPLIANCE: BLOCK USER BUTTON */}
                                 {!isMyProfile && currentUser && (
                                     <button 
                                       onClick={handleBlockUser} 
@@ -476,57 +462,65 @@ function ProfileContent() {
                             <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
                                 <div 
                                   onClick={() => isMyProfile && router.push('/friends')} 
-                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px', minHeight: '44px', display: 'flex', alignItems: 'center' }}
                                 >
-                                    <strong style={{ color: '#111827' }}>{followerCount}</strong> Followers
+                                    <strong style={{ color: '#111827', marginRight: '4px' }}>{followerCount}</strong> Followers
                                 </div>
                                 <div 
                                   onClick={() => isMyProfile && router.push('/following')} 
-                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px' }}
+                                  style={{ cursor: isMyProfile ? 'pointer' : 'default', color: '#4b5563', fontSize: '15px', minHeight: '44px', display: 'flex', alignItems: 'center' }}
                                 >
-                                    <strong style={{ color: '#111827' }}>{followingCount}</strong> Following
+                                    <strong style={{ color: '#111827', marginRight: '4px' }}>{followingCount}</strong> Following
                                 </div>
                             </div>
 
                             <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
                             {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
                             
-                            {/* --- MICROLINK RICH PREVIEWS FOR STORES --- */}
+                            {/* --- MICROLINK RICH PREVIEWS FOR STORES (MOBILE OPTIMIZED) --- */}
                             {(profileUser?.calendly_url || profileUser?.google_calendar_url || profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', width: '100%', overflow: 'hidden' }}>
                                 
                                 {(profileUser?.calendly_url || profileUser?.google_calendar_url) && (
                                   <a 
                                     href={profileUser.calendly_url || profileUser.google_calendar_url} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 16px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: 'bold', fontSize: '14px', borderRadius: '8px', textDecoration: 'none', border: '1px solid #bfdbfe', alignSelf: 'flex-start' }}
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px 16px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: 'bold', fontSize: '14px', borderRadius: '10px', textDecoration: 'none', border: '1px solid #bfdbfe', width: '100%', minHeight: '44px', boxSizing: 'border-box' }}
                                   >
                                     📅 Book Appointment
                                   </a>
                                 )}
                                 
                                 {profileUser?.store_url && (
-                                    <Microlink url={profileUser.store_url} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+                                        <Microlink url={profileUser.store_url} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    </div>
                                 )}
 
                                 {profileUser?.store_url_2 && (
-                                    <Microlink url={profileUser.store_url_2} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+                                        <Microlink url={profileUser.store_url_2} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    </div>
                                 )}
 
                                 {profileUser?.store_url_3 && (
-                                    <Microlink url={profileUser.store_url_3} size="large" style={{ width: '100%', borderRadius: '12px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+                                        <Microlink url={profileUser.store_url_3} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: 'white' }} />
+                                    </div>
                                 )}
                               </div>
                             )}
                             
                         </div>
-                        {isMyProfile && !isEditing && (
-                            <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', minHeight: '44px' }}>✏️ Edit</button>
-                        )}
                     </div>
+
+                    {isMyProfile && !isEditing && (
+                        <button onClick={() => setIsEditing(true)} style={{ backgroundColor: '#374151', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', minHeight: '44px' }}>✏️ Edit</button>
+                    )}
+
                     {profileUser?.music_embed && (
-                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px' }}>
+                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px', width: '100%', overflow: 'hidden', marginTop: '15px' }}>
                             {renderSafeHTML(profileUser.music_embed)}
                         </div>
                     )}
@@ -546,10 +540,10 @@ function ProfileContent() {
                                 type="file" 
                                 accept="image/png, image/jpeg, image/jpg" 
                                 onChange={(e) => setPostFile(e.target.files?.[0] || null)}
-                                style={{ color: '#9ca3af' }}
+                                style={{ color: '#9ca3af', minHeight: '44px' }}
                             />
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', minHeight: '44px' }}>
                                 <input 
                                     type="checkbox" 
                                     id="sell-toggle"
@@ -568,7 +562,7 @@ function ProfileContent() {
                                     placeholder="Checkout Link (Square, eBay, Stripe, etc.)"
                                     value={productLink}
                                     onChange={(e) => setProductLink(e.target.value)}
-                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #22c55e', backgroundColor: '#111827', color: 'white', marginTop: '5px' }}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #22c55e', backgroundColor: '#111827', color: 'white', marginTop: '5px', minHeight: '44px' }}
                                 />
                             )}
 
@@ -616,7 +610,6 @@ function ProfileContent() {
                                 </a>
                             )}
 
-                            {/* --- RESTORED: INTERACTION BUTTONS (LIKE, COMMENT, SHARE) --- */}
                             <div style={{ marginTop: '15px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '15px' }}>
                                 <button 
                                     onClick={() => handleLike(post.id, !!isLiked)} 
@@ -640,7 +633,6 @@ function ProfileContent() {
                                 </button>
                             </div>
 
-                            {/* --- RESTORED: COMMENTS SECTION --- */}
                             {openComments.has(post.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
                                     {post.comments?.map((c: any) => {
