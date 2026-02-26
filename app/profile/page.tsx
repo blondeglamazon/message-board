@@ -248,11 +248,11 @@ function ProfileContent() {
         const filePath = `${currentUser.id}/${fileName}`
         
         const { error: uploadError } = await supabase.storage
-            .from('post_images') 
+            .from('posts') 
             .upload(filePath, postFile)
             
         if (!uploadError) {
-            const { data: publicUrlData } = supabase.storage.from('post_images').getPublicUrl(filePath)
+            const { data: publicUrlData } = supabase.storage.from('posts').getPublicUrl(filePath)
             mediaUrl = publicUrlData.publicUrl
         } else {
             alert("Error uploading image: " + uploadError.message)
