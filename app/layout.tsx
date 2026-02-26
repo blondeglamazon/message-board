@@ -6,9 +6,35 @@ import Sidebar from '@/components/Sidebar'
 
 const inter = Inter({ subsets: ['latin'] })
 
+
+
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.vimciety.com'), // 👈 ADD THIS EXACT LINE
   title: 'VIMciety',
-  description: 'A message board for visionaries.',
+  description: 'Everything was once imagined. Join the VIMciety community today!',
+  openGraph: {
+    title: 'VIMciety',
+    description: 'Everything was once imagined. Join the VIMciety community today!',
+    url: 'https://www.vimciety.com',
+    siteName: 'VIMciety',
+    images: [
+      {
+        // Replace this URL with a direct link to your actual VIMciety logo or banner!
+        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&h=630&fit=crop', 
+        width: 1200,
+        height: 630,
+        alt: 'VIMciety Preview Image',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'VIMciety',
+    description: 'Everything was once imagined. Join the VIMciety community today!',
+    images: ['https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&h=630&fit=crop'], // Use the same image URL here
+  },
 }
 
 // CRITICAL FOR MOBILE APPS

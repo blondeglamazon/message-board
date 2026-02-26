@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
+import Microlink from '@microlink/react';
 
 export default function SearchPage() {
   const supabase = createClient()
@@ -77,12 +78,53 @@ export default function SearchPage() {
     return <div dangerouslySetInnerHTML={{ __html: clean }} />
   }
 
-  const renderPostContent = (post: any) => {
-    if (post.post_type === 'embed' || (typeof post.content === 'string' && post.content.trim().startsWith('<'))) {
-       return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>
+ const renderPostContent = (post: any) => {
+    // 1. Handle explicit HTML Embeds
+    if (post.post_type === 'embed') {
+      return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>;
     }
-    return <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{post.content}</p>
+
+    // 2. Automatically detect URLs in the post text
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = post.content?.match(urlRegex);
+    const firstUrl = urls ? urls[0] : null;
+
+    // 3. Make the text link clickable 
+    const renderTextWithLinks = (text: string) => {
+      if (!text) return null;
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      });
+    };
+
+    return (
+      <div style={{ lineHeight: '1.5' }}>
+        {/* Render the post text (with clickable links) */}
+        <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{renderTextWithLinks(post.content)}</p>
+        
+        {/* If a URL was found, render a rich Microlink preview! */}
+        {firstUrl && (
+          <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
+              <Microlink 
+                url={firstUrl} 
+                size="large" 
+                style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #374151', backgroundColor: '#111827', color: 'white' }} 
+              />
+          </div>
+        )}
+      </div>
+    );
   }
+
+  
 
   return (
     <div style={{ 

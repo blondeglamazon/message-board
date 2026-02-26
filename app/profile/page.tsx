@@ -412,10 +412,52 @@ function ProfileContent() {
   }
 
   const renderPostContent = (post: any) => {
-    if (post.post_type === 'embed') return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>
-    return <p style={{lineHeight:'1.5'}}>{post.content}</p>
+    // 1. Handle explicit HTML Embeds
+    if (post.post_type === 'embed') {
+      return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>;
+    }
+
+    // 2. Automatically detect URLs in the post text
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = post.content?.match(urlRegex);
+    const firstUrl = urls ? urls[0] : null;
+
+    // 3. Make the text link clickable 
+    const renderTextWithLinks = (text: string) => {
+      if (!text) return null;
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      });
+    };
+
+    return (
+      <div style={{ lineHeight: '1.5' }}>
+        {/* Render the post text (with clickable links) */}
+        <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{renderTextWithLinks(post.content)}</p>
+        
+        {/* If a URL was found, render a rich Microlink preview! */}
+        {firstUrl && (
+          <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
+              <Microlink 
+                url={firstUrl} 
+                size="large" 
+                style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #374151', backgroundColor: '#111827', color: 'white' }} 
+              />
+          </div>
+        )}
+      </div>
+    );
   }
 
+  
   if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
   
   if (!profileUser) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Profile not found.</div>
