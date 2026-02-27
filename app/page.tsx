@@ -7,6 +7,8 @@ import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
+
+// @ts-ignore
 import Microlink from '@microlink/react'
 
 export const dynamicParams = false;
@@ -148,7 +150,7 @@ function MessageBoardContent() {
       newFollowing.add(targetUserId);
       await supabase.from('follows').insert({ follower_id: user.id, following_id: targetUserId });
       
-      // --- THE MISSING NOTIFICATION CODE ---
+      // Send Follow Notification
       await supabase.from('notifications').insert({
         user_id: targetUserId, 
         actor_id: user.id,     
@@ -167,7 +169,7 @@ function MessageBoardContent() {
     } else {
       await supabase.from('likes').insert({ user_id: user.id, post_id: postId })
       
-      // --- THE MISSING NOTIFICATION CODE ---
+      // Send Like Notification
       const targetPost = messages.find(m => m.id === postId);
       if (targetPost && targetPost.user_id !== user.id) { 
         await supabase.from('notifications').insert({
@@ -198,7 +200,7 @@ function MessageBoardContent() {
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
     setCommentText(prev => ({ ...prev, [postId]: '' }))
 
-    // --- THE MISSING NOTIFICATION CODE ---
+    // Send Comment Notification
     const targetPost = messages.find(m => m.id === postId);
     if (targetPost && targetPost.user_id !== user.id) { 
       await supabase.from('notifications').insert({
@@ -297,28 +299,67 @@ function MessageBoardContent() {
   }
 
   const renderContent = (msg: any) => {
-    // Embed / HTML
+    // 1. Handle explicit HTML Embeds or raw iframe code
     if (msg.post_type === 'embed' || (typeof msg.content === 'string' && msg.content.trim().startsWith('<'))) {
-        return renderSafeHTML(msg.content)
+      return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(msg.content)}</div>;
     }
-    
-    // Text & Media
+
+    // 2. Automatically detect URLs in the post text
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const urls = msg.content?.match(urlRegex);
+    const firstUrl = urls ? urls[0] : null;
+
+    // 3. Make the text link clickable 
+    const renderTextWithLinks = (text: string) => {
+      if (!text) return null;
+      const parts = text.split(urlRegex);
+      return parts.map((part, i) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      });
+    };
+
     return (
-        <div>
-           <p style={{ color: '#111827', lineHeight: '1.6', whiteSpace: 'pre-wrap', fontSize: '16px', margin: 0 }}>{msg.content}</p>
-           {msg.media_url && (
-             <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
-                {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-                  <video src={msg.media_url} controls playsInline style={{ width: '100%', display: 'block' }} />
-                ) : msg.media_url.match(/\.(mp3|wav|m4a)$/i) ? (
-                  <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>
-                ) : (
-                  <img src={msg.media_url} alt="Post media" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />
-                )}
-             </div>
-           )}
+      <div>
+        {/* Render the post text & Clickable Links */}
+        <div style={{ lineHeight: '1.6', color: '#111827', fontSize: '16px' }}>
+          {/* wordBreak: 'break-word' enforces mobile UI constraints so long URLs don't break the screen frame */}
+          <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
+            {renderTextWithLinks(msg.content)}
+          </p>
+          
+          {/* Render a rich Microlink preview if a URL is found! */}
+          {firstUrl && (
+            <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
+                <Microlink 
+                  url={firstUrl} 
+                  size="large" 
+                  style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#ffffff', color: '#111827' }} 
+                />
+            </div>
+          )}
         </div>
-    )
+
+        {/* Render Uploaded Media (Images, Videos, Audio) */}
+        {msg.media_url && (
+          <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
+            {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
+              <video src={msg.media_url} controls playsInline style={{ width: '100%', display: 'block' }} />
+            ) : msg.media_url.match(/\.(mp3|wav|m4a)$/i) ? (
+              <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>
+            ) : (
+              <img src={msg.media_url} alt="Post media" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />
+            )}
+          </div>
+        )}
+      </div>
+    );
   }
 
   const filteredMessages = messages.filter(msg => {
@@ -333,14 +374,14 @@ function MessageBoardContent() {
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       <Sidebar />
 
-      {/* Floating Auth Buttons */}
+      {/* Floating Auth Buttons - 44px min height for compliance */}
       <div style={{ 
         position: 'fixed', top: '20px', right: '20px', 
         zIndex: 100, display: 'flex', gap: '10px' 
       }}>
         {user ? (
           <button onClick={handleSignOut} style={{ 
-            height: '44px', padding: '0 20px', borderRadius: '22px', 
+            minHeight: '44px', padding: '0 20px', borderRadius: '22px', 
             border: '2px solid #111827', backgroundColor: 'white', 
             fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
             color: '#111827'
@@ -349,7 +390,7 @@ function MessageBoardContent() {
           </button>
         ) : (
           <Link href="/login" style={{ 
-            height: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
+            minHeight: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
             borderRadius: '22px', backgroundColor: 'white', color: '#111827', 
             fontWeight: 'bold', textDecoration: 'none', border: '2px solid #111827',
             boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
@@ -362,7 +403,8 @@ function MessageBoardContent() {
       <main style={{ 
         maxWidth: '600px', margin: '0 auto', 
         paddingTop: 'calc(20px + env(safe-area-inset-top))',
-        paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px'
+        paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px',
+        overflowX: 'hidden' 
       }}>
          
          {/* FEED HEADER */}
@@ -398,12 +440,12 @@ function MessageBoardContent() {
                  )}
                  <button 
                     onClick={clearFile}
-                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '44px', minWidth: '44px' }}
                  >✕</button>
                </div>
              )}
 
-             {/* Action Buttons Row - COMPLIANT TOUCH TARGETS (44px) */}
+             {/* Action Buttons Row - COMPLIANT TOUCH TARGETS (minHeight: 44px) */}
              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {/* 1. Camera */}
                 <button onClick={() => cameraInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Camera">📷</button>
@@ -453,10 +495,9 @@ function MessageBoardContent() {
                 const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
                 
                 return (
-                    <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                    <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
                         {/* Post Header */}
                         <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            {/* FIX FOR MOBILE TAPS */}
                             <div 
                               onClick={() => router.push(`/profile?u=${username}`)} 
                               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
@@ -472,12 +513,13 @@ function MessageBoardContent() {
                             
                             {/* BUTTONS CONTAINER */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                {/* THE RESTORED FOLLOW BUTTON */}
+                                {/* Follow Button */}
                                 {user && user.id !== msg.user_id && (
                                     <button
                                       onClick={() => handleFollow(msg.user_id)}
                                       style={{
                                           padding: '6px 14px',
+                                          minHeight: '44px', 
                                           borderRadius: '20px',
                                           border: followingIds.has(msg.user_id) ? '1px solid #d1d5db' : 'none',
                                           backgroundColor: followingIds.has(msg.user_id) ? 'white' : '#111827',
@@ -502,13 +544,13 @@ function MessageBoardContent() {
                         <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
                             <button 
                               onClick={() => handleLike(msg.id, !!isLiked)} 
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }}>
                               <span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> 
                               <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.likes?.length || 0}</span>
                             </button>
                             <button 
                               onClick={() => toggleComments(msg.id)} 
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px' }}>
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }}>
                               <span style={{ fontSize: '20px' }}>💬</span> 
                               <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.comments?.length || 0}</span>
                             </button>
@@ -520,7 +562,7 @@ function MessageBoardContent() {
                                 {msg.comments?.map((c: any) => {
                                     const commenter = profilesMap[c.user_id]
                                     return (
-                                        <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px' }}>
+                                        <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', wordBreak: 'break-word' }}>
                                             <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>{commenter?.username || 'User'}</span>
                                             <span style={{ color: '#4b5563' }}>{c.content}</span>
                                         </div>
@@ -536,7 +578,7 @@ function MessageBoardContent() {
                                     />
                                     <button 
                                       onClick={() => handlePostComment(msg.id)} 
-                                      style={{ height: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}
+                                      style={{ minHeight: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}
                                     >
                                       Post
                                     </button>
