@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     images: [
       {
         // Replace this URL with a direct link to your actual VIMciety logo or banner!
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&h=630&fit=crop', 
+        url: 'https://www.vimciety.com/logo.png', 
         width: 1200,
         height: 630,
         alt: 'VIMciety Preview Image',
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'VIMciety',
     description: 'Everything was once imagined. Join the VIMciety community today!',
-    images: ['https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&h=630&fit=crop'], // Use the same image URL here
+    images: ['https://www.vimciety.com/logo.png'], // Use the same image URL here
   },
 }
 
