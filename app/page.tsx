@@ -7,6 +7,7 @@ import Link from 'next/link'
 import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
+import Microlink from '@microlink/react'
 
 export const dynamicParams = false;
 

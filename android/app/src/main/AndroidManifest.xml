@@ -34,6 +34,15 @@
                 <data android:scheme="https" android:host="www.vimciety.com" />
                 <data android:scheme="https" android:host="vimciety.com" />
             </intent-filter>
+            
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="vimciety" android:host="profile" />
+            </intent-filter>
+
+
         </activity>
 
         <provider
