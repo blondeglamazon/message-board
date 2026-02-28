@@ -49,5 +49,5 @@ You acknowledge and agree that Apple, and Apple’s subsidiaries, are third-part
 ## 11. Contact Information
 If you have any questions, complaints, or claims with respect to the App, please contact us at:
 
-**[INSERT YOUR SUPPORT EMAIL]**
-**[INSERT YOUR CITY, STATE, COUNTRY]**
+**[help@vimciety.com]**
+**[Upper Darby, Pennsylvania, USA**

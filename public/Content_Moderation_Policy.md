@@ -37,7 +37,7 @@ Upon review, if content is found to violate our policy, we take one or more of t
 3.  **Termination:** Serious or repeat violations will result in a permanent ban.
 
 ### **C. Appeals**
-If you believe your content was removed in error, you may contact us at **[INSERT SUPPORT EMAIL]**.
+If you believe your content was removed in error, you may contact us at **[help@vimciety.com]**.
 
 ## 5. Community Guidelines
 By using VIMciety, you agree to treat all users with dignity and respect. We reserve the right to remove any content that we believe harms the integrity of our community, even if it does not explicitly violate the categories listed above.
