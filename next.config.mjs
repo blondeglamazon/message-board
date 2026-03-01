@@ -1,10 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // If we tell it we are building for Mobile, it exports statically. 
-  // Otherwise (like on Vercel), it leaves it alone!
-  output: process.env.VERCEL ? undefined : 'export',
+  // MANUAL TOGGLE:
+  // - Leave this as 'export' when building for mobile (Capacitor/Appflow)
+  // - Comment this out or delete it when pushing to Vercel for web!
+  output: 'export',
+  
   images: {
-    unoptimized: true, // This is also required for Capacitor!
+    unoptimized: true, // Always leave this on for mobile!
   }
 };
 

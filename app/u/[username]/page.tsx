@@ -1,16 +1,22 @@
 import { Metadata } from 'next';
 // Import your Supabase client here so we can fetch the image
-import { createClient } from '@supabase/supabase-js' 
-import UserClientComponent from './UserClientComponent'; // (Or whatever your file is named)
+import { createClient } from '@supabase/supabase-js';
+import UserClientComponent from './UserClientComponent'; // (Make sure this matches your actual file name!)
 
 // Initialize Supabase (Use your actual Supabase URL and Anon Key)
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 type Props = {
   params: { username: string }
   searchParams: { [key: string]: string | string[] | undefined } // 👈 This catches ?post=123
+};
+
+// 👇 THIS IS THE MISSING FIX: It gives Appflow a dummy page to build so it doesn't crash!
+export function generateStaticParams() {
+  return [{ username: 'placeholder' }];
 }
 
+// 👇 Your Social Media Link Preview Code (Runs on Web only)
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const username = params.username;
   const postId = searchParams.post as string; // Look for a ?post= query in the URL
@@ -78,6 +84,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   };
 }
 
+// 👇 Your Actual Page UI Component
 export default function Page({ params }: { params: { username: string } }) {
   // We just pass the username down to your Client Component!
   return <UserClientComponent username={params.username} />;
