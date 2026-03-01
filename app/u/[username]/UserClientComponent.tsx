@@ -62,6 +62,48 @@ export default function UserClientComponent({ username }: { username: string }) 
     loadData()
   }, [username, supabase])
 
+  // 👇 ADDED SHARE LOGIC: Profile Share
+  const handleShareProfile = async () => {
+    const shareUrl = `https://www.vimciety.com/u/${username}`;
+    const shareData = {
+      title: `${profile?.display_name || username} | VIMciety`,
+      text: `Check out @${username}'s profile on VIMciety!`,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log('Error sharing profile:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      alert('Profile link copied to clipboard!');
+    }
+  };
+
+  // 👇 ADDED SHARE LOGIC: Specific Post Share
+  const handleSharePost = async (postId: string, postContent: string) => {
+    const shareUrl = `https://www.vimciety.com/u/${username}?post=${postId}`;
+    const shareData = {
+      title: `Post by @${username} | VIMciety`,
+      text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post by @${username} on VIMciety!`,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log('Error sharing post:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      alert('Post link copied to clipboard!');
+    }
+  };
+
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
       const clean = DOMPurify.sanitize(html, {
@@ -150,16 +192,25 @@ export default function UserClientComponent({ username }: { username: string }) 
                             <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>@{profile.username}</p>
                             <p style={{ margin: '5px 0 0 0', color: '#9ca3af', fontSize: '12px' }}>Member since: {memberSince}</p>
                             
-                            {/* Follow Button */}
-                            {currentUser && currentUser.id !== profile.id && (
-                                <div style={{ marginTop: '10px' }}>
+                            <div style={{ marginTop: '10px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                {/* Follow Button */}
+                                {currentUser && currentUser.id !== profile.id && (
                                     <FollowButton 
                                         profileId={profile.id} 
                                         userId={currentUser.id} 
                                         initialIsFollowing={isFollowing} 
                                     />
-                                </div>
-                            )}
+                                )}
+
+                                {/* 👇 ADDED SHARE BUTTON: Profile */}
+                                <button 
+                                  onClick={handleShareProfile} 
+                                  style={{ padding: '6px 16px', backgroundColor: '#e5e7eb', color: '#374151', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                  Share Profile
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -184,6 +235,17 @@ export default function UserClientComponent({ username }: { username: string }) 
                             
                             {post.media_url && post.post_type === 'image' && <img src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
                             {post.media_url && post.post_type === 'video' && <video controls src={post.media_url} style={{maxWidth:'100%', borderRadius:'8px', marginTop:'10px'}} />}
+                            
+                            {/* 👇 ADDED SHARE BUTTON: Post */}
+                            <div style={{ borderTop: '1px solid #374151', marginTop: '15px', paddingTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+                                <button 
+                                  onClick={() => handleSharePost(post.id, post.content)} 
+                                  style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '14px', fontWeight: '500' }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                                  Share
+                                </button>
+                            </div>
                         </div>
                     ))}
                     {posts.length === 0 && (
