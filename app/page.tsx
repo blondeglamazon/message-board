@@ -47,6 +47,28 @@ function MessageBoardContent() {
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
+  // 👇 ADDED SHARE LOGIC: Home Feed Post Share
+  const handleSharePost = async (postId: string, postUsername: string, postContent: string) => {
+    // We use the specific user's username for this post to build the correct link
+    const shareUrl = `https://www.vimciety.com/u/${postUsername}?post=${postId}`;
+    const shareData = {
+      title: `Post by @${postUsername} | VIMciety`,
+      text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post by @${postUsername} on VIMciety!`,
+      url: shareUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log('Error sharing post:', err);
+      }
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      alert('Post link copied to clipboard!');
+    }
+  };
+
   // Refs
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const micInputRef = useRef<HTMLInputElement>(null)
@@ -541,7 +563,7 @@ function MessageBoardContent() {
                         {renderContent(msg)}
                         
                         {/* Interactions */}
-                        <div style={{ marginTop: '15px', display: 'flex', gap: '15px' }}>
+                        <div style={{ marginTop: '15px', display: 'flex', gap: '15px', alignItems: 'center' }}>
                             <button 
                               onClick={() => handleLike(msg.id, !!isLiked)} 
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: isLiked ? '#ef4444' : '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }}>
@@ -553,6 +575,14 @@ function MessageBoardContent() {
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }}>
                               <span style={{ fontSize: '20px' }}>💬</span> 
                               <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.comments?.length || 0}</span>
+                            </button>
+
+                            {/* 👇 ADDED SHARE BUTTON */}
+                            <button 
+                              onClick={() => handleSharePost(msg.id, username, msg.content)} 
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0', marginLeft: 'auto' }}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                              <span style={{ fontWeight: '600', fontSize: '14px' }}>Share</span>
                             </button>
                         </div>
 
