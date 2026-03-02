@@ -53,5 +53,7 @@
 	<string>VIMciety needs access to save photos to your library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>VIMciety needs access to your photo library so you can choose images to upload to your profile and posts.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VIMciety needs access to your microphone so you can record audio and video to share in your posts.</string>
 </dict>
 </plist>
