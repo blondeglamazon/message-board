@@ -1,23 +1,19 @@
 apply plugin: 'com.android.application'
-configurations.all {
-    resolutionStrategy {
-        force 'androidx.browser:browser:1.8.0'
-    }
-}
 
 android {
     namespace = "com.vimciety.app"
-    compileSdk = rootProject.ext.compileSdkVersion
+    // 👇 THE NUCLEAR OPTION: Hardcoded to 36 so nothing can override it
+    compileSdk = 36
     defaultConfig {
         applicationId "com.vimciety.app"
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion rootProject.ext.targetSdkVersion
+        // 👇 Hardcoded to 36 to match
+        targetSdkVersion 36
         versionCode 17
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
@@ -45,12 +41,6 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
-    // Force the browser library to 1.8.0 to prevent the API 36 compile error
-    implementation('androidx.browser:browser:1.8.0') {
-        version {
-            strictly '1.8.0'
-        }
-    }
 }
 
 apply from: 'capacitor.build.gradle'
