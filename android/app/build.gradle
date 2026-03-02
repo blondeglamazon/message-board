@@ -1,4 +1,9 @@
 apply plugin: 'com.android.application'
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.browser:browser:1.8.0'
+    }
+}
 
 android {
     namespace = "com.vimciety.app"
@@ -40,6 +45,12 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // Force the browser library to 1.8.0 to prevent the API 36 compile error
+    implementation('androidx.browser:browser:1.8.0') {
+        version {
+            strictly '1.8.0'
+        }
+    }
 }
 
 apply from: 'capacitor.build.gradle'
