@@ -12,8 +12,8 @@ buildscript {
 // --- MASTER VARIABLE LIST (Updated to prevent future errors) ---
 ext {
     minSdkVersion = 23
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     
     // Standard Android Libraries
     androidxAppCompatVersion = '1.6.1'
