@@ -53,3 +53,13 @@ try {
 } catch(Exception ignored) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+// Force all Capacitor plugins to use API 36 to fix the browser 1.9.0 error
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdk = 36
+            }
+        }
+    }
+}
