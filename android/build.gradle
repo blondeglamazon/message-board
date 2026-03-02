@@ -4,14 +4,14 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.android.tools.build:gradle:8.13.0'
         classpath 'com.google.gms:google-services:4.4.4'
     }
 }
 
 // --- MASTER VARIABLE LIST (Updated to prevent future errors) ---
 ext {
-    minSdkVersion = 23
+    minSdkVersion = 24
     compileSdkVersion = 36
     targetSdkVersion = 36
     
@@ -38,7 +38,7 @@ allprojects {
         google()
         mavenCentral()
     }
-    // Force the browser library to 1.8.0 globally to bypass the API 35/36 conflict
+    
     
         }
     
