@@ -39,12 +39,9 @@ allprojects {
         mavenCentral()
     }
     // Force the browser library to 1.8.0 globally to bypass the API 35/36 conflict
-    configurations.all {
-        resolutionStrategy {
-            force 'androidx.browser:browser:1.8.0'
+    
         }
-    }
-}
+    
 
 
 
