@@ -39,6 +39,12 @@ allprojects {
         mavenCentral()
     }
 
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.browser:browser:1.8.0'
+        }
+    }
+
     // --- GLOBAL FIX: Force optimization across all plugins ---
     subprojects {
         afterEvaluate { project ->
