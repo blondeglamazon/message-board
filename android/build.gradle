@@ -4,7 +4,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:9.0.1'
+        classpath 'com.android.tools.build:gradle:8.2.1'
         classpath 'com.google.gms:google-services:4.4.4'
     }
 }
@@ -46,26 +46,7 @@ allprojects {
     }
 }
 
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                // Force API 36 for all modules to satisfy the browser library requirement
-                compileSdk = 36
-                
-                // Surgical fix for the AdMob ProGuard error (AGP 9.0+ compatibility)
-                if (project.name.contains("admob") || namespace == "com.google.android.gms.ads") {
-                    buildTypes {
-                        release {
-                            // Safely clear the broken file and apply the optimized one
-                            setProguardFiles([getDefaultProguardFile('proguard-android-optimize.txt')])
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+
 
 tasks.register('clean', Delete) {
     delete rootProject.buildDir
