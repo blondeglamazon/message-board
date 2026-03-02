@@ -38,24 +38,27 @@ allprojects {
         google()
         mavenCentral()
     }
-
+    // Force the browser library to 1.8.0 globally to bypass the API 35/36 conflict
     configurations.all {
         resolutionStrategy {
             force 'androidx.browser:browser:1.8.0'
         }
     }
+}
 
-    // --- GLOBAL FIX: Force optimization across all plugins ---
-    subprojects {
-        afterEvaluate { project ->
-            if (project.hasProperty('android')) {
-                project.android {
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                // Force API 36 for all modules to satisfy the browser library requirement
+                compileSdk = 36
+                
+                // Surgical fix for the AdMob ProGuard error (AGP 9.0+ compatibility)
+                if (project.name.contains("admob") || namespace == "com.google.android.gms.ads") {
                     buildTypes {
-                        debug {
-                            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-                        }
                         release {
-                            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                            // Safely clear the broken file and apply the optimized one
+                            setProguardFiles([getDefaultProguardFile('proguard-android-optimize.txt')])
                         }
                     }
                 }
@@ -65,5 +68,5 @@ allprojects {
 }
 
 tasks.register('clean', Delete) {
-    delete rootProject.layout.buildDirectory
+    delete rootProject.buildDir
 }
