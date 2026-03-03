@@ -6,7 +6,7 @@ const nextConfig = {
   // MANUAL TOGGLE:
   // - Leave this as 'export' when building for mobile (Capacitor/Appflow)
   // - Comment this out or delete it when pushing to Vercel for web!
-  //output: 'export',
+  // output: 'export',
   
   images: {
     unoptimized: true, // Always leave this on for mobile static exports!
@@ -19,19 +19,19 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
 
   // ==========================================================
-  // 🚀 PERFORMANCE & BUNDLE OPTIMIZATIONS (Fixes #9 & #13)
+  // 🚀 PERFORMANCE & BUNDLE OPTIMIZATIONS
   // ==========================================================
   
-  // ✅ FIX #13: Disable legacy browser polyfills (saves ~112KB on Android WebViews)
-  // Also strips console.log in production to speed up the app
+  // Strips console.log in production to speed up the app
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
-  experimental: {
-    legacyBrowsers: false, 
-  },
 
-  // ✅ FIX #9: Force Next.js to aggressively share duplicate code chunks 
+  // ✅ CORRECT PLACEMENT: Top-level turbopack config for Next.js 16+
+  // Silences the crash when using custom Webpack rules.
+  turbopack: {},
+
+  // Force Next.js to aggressively share duplicate code chunks 
   // This slashes the app's JS bundle size and stops duplicate router modules
   webpack: (config, { isServer }) => {
     if (!isServer) {

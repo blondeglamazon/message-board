@@ -2,16 +2,16 @@ import { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 
-// 1. Initialize Supabase for the Server
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
 type Props = { params: Promise<{ id: string }> }
 
-// 2. This runs on the Vercel Server BEFORE the page loads. Bots read this!
+// 1. This runs on the Vercel Server BEFORE the page loads. Bots read this!
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
+
+  // ✅ FIX: Moved inside the function so it doesn't crash the Next.js build scanner!
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
   // Fetch the post from Supabase
   const { data: post } = await supabase
@@ -60,11 +60,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description,
       images: [ogImage],
-    },
+    }
   }
 }
 
-// 3. What happens when a REAL HUMAN clicks the link?
+// 2. What happens when a REAL HUMAN clicks the link?
 export default async function PostPage({ params }: Props) {
   const { id } = await params
   
