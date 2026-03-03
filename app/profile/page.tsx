@@ -11,6 +11,7 @@ import { Capacitor } from '@capacitor/core';
 // @ts-ignore
 import Microlink from '@microlink/react'
 
+
 function ProfileContent() {
   // ✅ FIX 1: Moved this hook INSIDE the component so React doesn't crash!
   const [isGoogleLinked, setIsGoogleLinked] = useState(false);
@@ -42,6 +43,24 @@ function ProfileContent() {
       store_url_2: '',
       store_url_3: ''
   })
+
+  const TRUSTED_EMBED_DOMAINS = [
+  // Existing music domains
+  'spotify.com',
+  'soundcloud.com',
+  'apple.com',
+
+  // UGC & Video (New)
+  'www.youtube.com',         // Standard YouTube embeds
+  'www.youtube-nocookie.com', // Privacy-enhanced YouTube embeds
+  
+  // Shopping & Affiliate (New)
+  'amazon.com',               // Amazon Associates/Influencer widgets
+  'amzn.to',                  // Amazon shortlinks (if redirected)
+  'widgets.shein.com',        // Official Shein embed widgets
+  'temu.com',                 // Temu affiliate/embed content
+];
+
 
   // Listen for the app waking up from the Google Login
   useEffect(() => {
@@ -236,6 +255,8 @@ function ProfileContent() {
       }
   }
 
+  
+
   async function handleCreatePost() {
     if (!currentUser || (!postText && !postFile)) return
     setIsPosting(true)
@@ -336,6 +357,7 @@ function ProfileContent() {
       });
     }
   }
+  
 
   const handleShare = async (postId: string) => {
       const url = `${window.location.origin}/?post=${postId}`;

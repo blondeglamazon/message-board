@@ -4,6 +4,8 @@ const nextConfig = {
   // - Leave this as 'export' when building for mobile (Capacitor/Appflow)
   // - Comment this out or delete it when pushing to Vercel for web!
   
+  productionBrowserSourceMaps: false,
+
   output: 'export',
   
   images: {
