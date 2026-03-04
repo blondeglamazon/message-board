@@ -1,19 +1,28 @@
 import { Metadata } from 'next'
-import { redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
+import PostRedirect from './PostRedirect' // <-- IMPORT THE CLIENT COMPONENT
 
 type Props = { params: Promise<{ id: string }> }
 
-// 1. This runs on the Vercel Server BEFORE the page loads. Bots read this!
+export function generateStaticParams() {
+  return [{ id: 'placeholder' }]
+}
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
 
-  // ✅ FIX: Moved inside the function so it doesn't crash the Next.js build scanner!
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+  // 1. MUST SHORT CIRCUIT to prevent Supabase crashes during the static build
+  if (id === 'placeholder') return { title: 'VIMciety' }
 
-  // Fetch the post from Supabase
+  const supabase = getSupabase()
+
   const { data: post } = await supabase
     .from('posts')
     .select('id, content, media_url, user_id')
@@ -24,7 +33,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: 'Post not found | VIMciety' }
   }
 
-  // Fetch the author's profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('username, display_name, avatar_url')
@@ -33,17 +41,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = `${profile?.display_name || profile?.username || 'Someone'} on VIMciety`
   
-  // Clean up the text for the preview snippet
   const description = post.content
     ? post.content.substring(0, 200) + (post.content.length > 200 ? '...' : '')
     : 'Check out this post on VIMciety!'
 
-  // Use the post's media as the image, or fall back to your logo
   const ogImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
     ? post.media_url
-    : 'https://www.vimciety.com/logo.png' // Make sure this logo actually exists on your site!
+    : 'https://www.vimciety.com/logo.png'
 
-  // Return the rich data to Facebook/Pinterest
   return {
     title,
     description,
@@ -64,11 +69,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-// 2. What happens when a REAL HUMAN clicks the link?
+// 2. MUST DELEGATE TO YOUR CLIENT COMPONENT
 export default async function PostPage({ params }: Props) {
   const { id } = await params
-  
-  // Instantly redirect them to your actual feed/profile, passing the post ID
-  // so your client-side code can scroll to it or open it!
-  redirect(`/?post=${id}`)
+  return <PostRedirect id={id} /> // <-- RENDER IT HERE
 }
