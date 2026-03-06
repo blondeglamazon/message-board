@@ -46,6 +46,11 @@
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "build:android": "node build-android.js && npx cap sync android"
   }
 }
