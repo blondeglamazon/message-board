@@ -49,7 +49,7 @@ export default function UserClientComponent({ username }: { username: string }) 
       // 4. Check Follow Status
       if (user) {
         const { data: followData } = await supabase
-          .from('follows')
+          .from('followers')
           .select('*')
           .match({ follower_id: user.id, following_id: profileData.id })
           .maybeSingle()

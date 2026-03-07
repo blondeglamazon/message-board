@@ -81,7 +81,7 @@ function MessageBoardContent() {
       else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
     } 
     else if (authUser && currentFeed === 'friends') {
-      const { data: followsMe } = await supabase.from('follows').select('follower_id').eq('following_id', authUser.id)
+      const { data: followsMe } = await supabase.from('followers').select('follower_id').eq('following_id', authUser.id)
       const theirIds = new Set(followsMe?.map(f => f.follower_id) || [])
       const friendIds = Array.from(followingIdsRef.current).filter(id => theirIds.has(id))
       if (friendIds.length > 0) query = query.in('user_id', friendIds)
@@ -150,7 +150,7 @@ function MessageBoardContent() {
         setBlockedIds(myBlockedIds)
         blockedIdsRef.current = myBlockedIds
 
-        const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', authUser.id)
+        const { data: follows } = await supabase.from('followers').select('following_id').eq('follower_id', authUser.id)
         myFollowingIds = new Set(follows?.map(f => f.following_id) || [])
         setFollowingIds(myFollowingIds)
         followingIdsRef.current = myFollowingIds
@@ -203,10 +203,10 @@ function MessageBoardContent() {
 
     if (isFollowing) {
       newFollowing.delete(targetUserId);
-      await supabase.from('follows').delete().match({ follower_id: user.id, following_id: targetUserId });
+      await supabase.from('followers').delete().match({ follower_id: user.id, following_id: targetUserId });
     } else {
       newFollowing.add(targetUserId);
-      await supabase.from('follows').insert({ follower_id: user.id, following_id: targetUserId });
+      await supabase.from('followers').insert({ follower_id: user.id, following_id: targetUserId });
       await supabase.from('notifications').insert({ user_id: targetUserId, actor_id: user.id, type: 'follow' });
     }
     setFollowingIds(newFollowing);
