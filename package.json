@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
     "@canva/app-ui-kit": "^5.5.0",
@@ -46,11 +51,6 @@
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "build:android": "node build-android.js && npx cap sync android"
+    "typescript": "^5"
   }
 }
