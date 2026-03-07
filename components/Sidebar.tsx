@@ -251,6 +251,13 @@ export default function Sidebar() {
         
         <div onClick={() => { setIsOpen(false); router.push('/settings'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/settings') }}>⚙️</div>
 
+{/* Privacy Policy Sidebar Link */}
+      <div style={{ marginTop: 'auto', paddingBottom: '20px', textAlign: 'center' }}>
+        <Link href="/privacy" style={{ color: '#9ca3af', fontSize: '12px', textDecoration: 'none' }}>
+          Privacy
+        </Link>
+      </div>
+      
         {user && (
           <button 
             onClick={handleSignOut} 
