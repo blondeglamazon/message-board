@@ -203,8 +203,8 @@ function ProfileContent() {
         // ✅ FIX: Changed .ilike() to .eq() — user_id is a UUID, not text
         supabase.from('posts').select('email').eq('user_id', userIdToFetch).not('email', 'is', null).order('created_at', { ascending: false }).limit(1),
         supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userIdToFetch),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userIdToFetch),
+        supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userIdToFetch),
+        supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', userIdToFetch),
         supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`).eq('user_id', userIdToFetch).order('created_at', { ascending: false }).range(0, POSTS_PER_PAGE - 1)
       ]);
       
