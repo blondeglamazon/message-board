@@ -7,6 +7,7 @@ import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
 
+
 // @ts-ignore
 import Microlink from '@microlink/react'
 
@@ -576,6 +577,14 @@ function MessageBoardContent() {
     </div>
   )
 }
+import Link from 'next/link';
+
+// ... inside your component ...
+<footer className="mt-20 p-4 text-center">
+  <Link href="/privacy" className="text-blue-600 hover:underline">
+    Privacy Policy
+  </Link>
+</footer>
 
 export default function MessageBoard() {
   return (
