@@ -7,7 +7,7 @@ const nextConfig = {
   // - Leave this as 'export' when building for mobile (Capacitor/Appflow)
   // - Comment this out or delete it when pushing to Vercel for web!
 
- //tput: 'export', 
+  //tput: 'export', 
 
   images: {
     unoptimized: true, // Always leave this on for mobile static exports!
