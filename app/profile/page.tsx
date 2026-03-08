@@ -17,6 +17,8 @@ import Microlink from '@microlink/react'
 // ============================================================================
 
 const TRUSTED_EMBED_DOMAINS = [
+  'spotify.com',                                             // ✅ RESTORED: Spotify support
+  'canva.com',                                               // ✅ RESTORED: Canva embed support
   'spotify.com',              // ✅ FIX: Was malformed 'http://googleusercontent.com/spotify.com'
   'youtube.com',
   'www.youtube-nocookie.com',
@@ -624,14 +626,14 @@ function ProfileContent() {
 
       {/* ✅ FIX: Toast uses type-based coloring */}
       {toast && (
-          <div style={{
-              position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)',
-              backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e',
-              color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px',
-              boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', transition: 'opacity 0.3s ease-in-out'
-          }}>
-              {toast.msg}
-          </div>
+        <div style={{
+            position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)',
+            backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e',
+            color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px',
+            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', transition: 'opacity 0.3s ease-in-out'
+        }}>
+            {toast.msg}
+        </div>
       )}
 
       <Sidebar />
@@ -659,6 +661,10 @@ function ProfileContent() {
                         <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={STYLES.input} placeholder="Display Name" />
                         <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={STYLES.input} placeholder="Avatar URL" />
                         <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={STYLES.input} placeholder="Background URL or Embed" />
+                        
+                        {/* ✅ RESTORED: Music/Canva Embed Code Field! */}
+                        <input type="text" value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={STYLES.input} placeholder="Spotify/Soundcloud/Canva Embed Code" />
+                        
                         <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={STYLES.input} placeholder="Calendly or Booking URL" />
                         <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={STYLES.input} placeholder="Primary Store URL" />
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio" />
@@ -695,6 +701,13 @@ function ProfileContent() {
                     </div>
                     {isMyProfile && !isEditing && <button onClick={() => setIsEditing(true)} style={STYLES.btnSecondary}>✏️ Edit</button>}
                 </div>
+
+                {/* ✅ RESTORED: Profile Widget/Embed Renderer! */}
+                {!isEditing && profileUser?.music_embed && (
+                    <div style={{ marginBottom: '30px', width: '100%', overflow: 'hidden', borderRadius: '16px', backgroundColor: 'transparent' }}>
+                        {renderSafeHTML(profileUser.music_embed)}
+                    </div>
+                )}
 
                 {/* ✅ Post Creation — now supports video uploads with preview */}
                 {isMyProfile && !isEditing && (
