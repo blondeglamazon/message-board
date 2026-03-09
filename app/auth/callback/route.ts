@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  
   // if "next" is in param, use it as the redirect URL
   const next = searchParams.get('next') ?? '/profile'
   
@@ -35,6 +36,15 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
+      // ✅ MOBILE COMPLIANCE: Check if the 'next' param is a native deep link (vimciety://) 
+      // or an absolute URL. If it is, bounce them straight back to the mobile app!
+      const isAbsoluteUrl = next.startsWith('http://') || next.startsWith('https://') || next.includes('://');
+      
+      if (isAbsoluteUrl) {
+        return NextResponse.redirect(next)
+      }
+      
+      // Otherwise, it's a standard web relative path (e.g. '/profile')
       return NextResponse.redirect(`${origin}${next}`)
     } else {
       console.error("Auth Callback Error:", error.message)
