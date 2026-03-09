@@ -1,16 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ==========================================================
-  // 📱 MOBILE CAPACITOR SETTINGS (Do not remove for Appflow)
+  // 📱 AUTOMATIC MOBILE CAPACITOR SETTINGS 
   // ==========================================================
-  // MANUAL TOGGLE:
-  // - Leave this as 'export' when building for mobile (Capacitor/Appflow)
-  // - Comment this out or delete it when pushing to Vercel for web!
-
- //utput: 'export', 
+  // ✅ MAGIC TOGGLE: Automatically turns on static export ONLY during mobile builds!
+  // Vercel will ignore this and safely deploy your API routes.
+  output: process.env.MOBILE_BUILD === 'true' ? 'export' : undefined, 
 
   images: {
-    unoptimized: true, // Always leave this on for mobile static exports!
+    // Automatically disables Next.js image optimization ONLY for mobile apps
+    unoptimized: process.env.MOBILE_BUILD === 'true' ? true : undefined,
   },
 
   // ==========================================================
@@ -28,7 +27,6 @@ const nextConfig = {
     removeConsole: process.env.NODE_ENV === "production",
   },
 
-  // ✅ CORRECT PLACEMENT: Top-level turbopack config for Next.js 16+
   // Silences the crash when using custom Webpack rules.
   turbopack: {},
 
