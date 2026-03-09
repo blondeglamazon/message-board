@@ -4,14 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node build-android.js",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "patch-package",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
     "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
