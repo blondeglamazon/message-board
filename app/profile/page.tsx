@@ -17,9 +17,9 @@ import Microlink from '@microlink/react'
 // ============================================================================
 
 const TRUSTED_EMBED_DOMAINS = [
-  'spotify.com',                                             // ✅ RESTORED: Spotify support
-  'canva.com',                                               // ✅ RESTORED: Canva embed support
-  'spotify.com',              // ✅ FIX: Was malformed 'http://googleusercontent.com/spotify.com'
+  'spotify.com',                                             
+  'canva.com',                                               
+  'spotify.com',              
   'youtube.com',
   'www.youtube-nocookie.com',
   'soundcloud.com',
@@ -66,12 +66,75 @@ const MAX_POST_LENGTH = 500;
 const MAX_COMMENT_LENGTH = 300;
 const POSTS_PER_PAGE = 20;
 
-// ✅ FIX: Expanded file validation to support video uploads
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif'];
 const VALID_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/mov'];
 const VALID_UPLOAD_TYPES = [...VALID_IMAGE_TYPES, ...VALID_VIDEO_TYPES];
 const MAX_IMAGE_SIZE_MB = 5;
 const MAX_VIDEO_SIZE_MB = 200;
+
+// ============================================================================
+// 📹 VIDEO PLAYER WITH MONETIZATION TRACKING (THROTTLED + DEBUG MODE)
+// ============================================================================
+function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, currentUser: any, supabase: any }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const lastSavedTime = useRef(0);
+  const lastDebugTime = useRef(0);
+
+  const handleTimeUpdate = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const currentTime = Math.floor(video.currentTime);
+
+    // 🚨 DEBUG: Print status to the console every 2 seconds to prove it's running
+    if (currentTime > 0 && currentTime % 2 === 0 && currentTime !== lastDebugTime.current) {
+        lastDebugTime.current = currentTime;
+        console.log(`[Timer: ${currentTime}s] Logged In: ${!!currentUser} | Is My Video: ${currentUser?.id === post.user_id}`);
+    }
+
+    // 🚨 FIX: The throttle! Only ping the database if 5 seconds have passed since last ping
+    if (currentTime >= 5 && currentTime - lastSavedTime.current >= 5) {
+      if (!currentUser) {
+        console.log("❌ TRACKING BLOCKED: You are not logged in.");
+        return;
+      }
+
+      if (post.user_id === currentUser.id) {
+        console.log("❌ TRACKING BLOCKED: You cannot watch your own video.");
+        return;
+      }
+
+      console.log(`🚀 Sending watch time to Supabase: ${currentTime} seconds...`);
+      lastSavedTime.current = currentTime; // Lock timer so it doesn't spam
+
+      const { error } = await supabase.from('video_views').upsert({
+        post_id: post.id,
+        viewer_id: currentUser.id,
+        watch_time_seconds: currentTime
+      }, { onConflict: 'post_id, viewer_id' }); 
+      
+      if (error) {
+        console.error("❌ Supabase Error:", error.message, error.details);
+      } else {
+        console.log("✅ Supabase save successful!");
+      }
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
+      <video 
+        ref={videoRef}
+        src={post.media_url} 
+        controls 
+        playsInline 
+        preload="metadata"
+        onTimeUpdate={handleTimeUpdate}
+        style={{ width: '100%', display: 'block' }} 
+      />
+    </div>
+  );
+}
 
 // ============================================================================
 // UI COMPONENT
@@ -81,7 +144,6 @@ function ProfileContent() {
   const [isGoogleLinked, setIsGoogleLinked] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
-  // ✅ FIX: Confirmation modal state replaces confirm()/prompt()
   const [confirmModal, setConfirmModal] = useState<{
     message: string;
     onConfirm: (inputValue?: string) => void;
@@ -113,17 +175,14 @@ function ProfileContent() {
       bio: '', calendly_url: '', google_calendar_url: '', store_url: '', store_url_2: '', store_url_3: ''
   })
 
-  // ✅ FIX: Toast supports success/error types (no longer always red)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
       setToast({ msg, type });
       setTimeout(() => setToast(null), 3000);
   };
 
-  // ✅ FIX: File input ref for styled upload button (proper 44px tap target)
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Monitor Offline/Online Status
   useEffect(() => {
     const initNetwork = async () => {
         const status = await Network.getStatus();
@@ -141,7 +200,6 @@ function ProfileContent() {
     }
   }, []);
 
-  // Deep Link App Listener
   useEffect(() => {
     const handleUrlOpen = (event: any) => {
       if (event.url.includes('vimciety://')) {
@@ -159,7 +217,7 @@ function ProfileContent() {
 
   const [postText, setPostText] = useState('')
   const [postFile, setPostFile] = useState<File | null>(null)
-  const [postFilePreview, setPostFilePreview] = useState<string | null>(null) // ✅ NEW: Preview state for selected file
+  const [postFilePreview, setPostFilePreview] = useState<string | null>(null) 
   const [isSelling, setIsSelling] = useState(false)
   const [productLink, setProductLink] = useState('')
   
@@ -202,7 +260,6 @@ function ProfileContent() {
       const [allProfilesRes, blockDataRes, userPostsRes, firstPostRes, followersRes, followingRes, historyRes] = await Promise.all([
         supabase.from('profiles').select('id, username, display_name, avatar_url'),
         (loggedInUser && loggedInUser.id !== userIdToFetch) ? supabase.from('blocks').select('id').eq('blocker_id', loggedInUser.id).eq('blocked_id', userIdToFetch).single() : Promise.resolve({ data: null }),
-        // ✅ FIX: Changed .ilike() to .eq() — user_id is a UUID, not text
         supabase.from('posts').select('email').eq('user_id', userIdToFetch).not('email', 'is', null).order('created_at', { ascending: false }).limit(1),
         supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userIdToFetch),
@@ -273,7 +330,6 @@ function ProfileContent() {
       setActionLoading(prev => ({...prev, saveProfile: false}))
   }
 
-  // ✅ FIX: File selection handler with validation and preview
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null;
     if (!file) { clearFile(); return; }
@@ -294,7 +350,6 @@ function ProfileContent() {
     }
 
     setPostFile(file);
-    // Generate preview
     const objectUrl = URL.createObjectURL(file);
     setPostFilePreview(objectUrl);
   }
@@ -341,7 +396,7 @@ function ProfileContent() {
         user_id: currentUser.id, 
         content: cleanText, 
         media_url: mediaUrl, 
-        post_type: postType, // ✅ FIX: Now correctly set to 'video' or 'image'
+        post_type: postType, 
         is_sell_post: isSelling, 
         product_link: isSelling ? productLink : null 
     }
@@ -358,7 +413,6 @@ function ProfileContent() {
 
   async function handleDelete(postId: string) {
       if (isOffline) return showToast("Cannot delete while offline.", 'error');
-      // ✅ FIX: Use modal instead of confirm() for Capacitor/WKWebView compatibility
       setConfirmModal({
         message: "Are you sure you want to delete this post?",
         onConfirm: async () => {
@@ -424,7 +478,6 @@ function ProfileContent() {
   }
 
   const handleShare = async (postId: string) => {
-      // ✅ FIX: Hardcoded domain — window.location.origin returns capacitor://localhost on native
       const url = `https://www.vimciety.com/post/${postId}`;
       
       if (navigator.share) {
@@ -437,7 +490,6 @@ function ProfileContent() {
               console.log('Share cancelled by user');
           }
       } else { 
-          // ✅ FIX: Clipboard wrapped in try/catch for WKWebView compatibility
           try {
               await navigator.clipboard.writeText(url);
               showToast("Link copied to clipboard!");
@@ -451,7 +503,6 @@ function ProfileContent() {
       if (!currentUser || !profileUser) return
       if (isOffline) return showToast("Cannot block users while offline.", 'error');
 
-      // ✅ FIX: Use modal instead of confirm() for WKWebView compatibility
       setConfirmModal({
         message: `Block ${profileUser.display_name || 'this user'}? You will no longer see their posts.`,
         onConfirm: async () => {
@@ -469,7 +520,6 @@ function ProfileContent() {
       if (!currentUser) return showToast("Please log in to report posts.", 'error');
       if (isOffline) return showToast("Cannot report while offline.", 'error');
 
-      // ✅ FIX: Use modal with input instead of window.prompt() for WKWebView compatibility
       setConfirmModal({
         message: "Why are you reporting this post?",
         showInput: true,
@@ -534,25 +584,13 @@ function ProfileContent() {
     );
   }
 
-  // ✅ NEW: Render media for a post (supports both images and videos)
   const renderPostMedia = (post: any) => {
     if (!post.media_url) return null;
 
     const isVideo = post.post_type === 'video' || post.media_url.match(/\.(mp4|webm|mov|ogg)$/i);
     
     if (isVideo) {
-      return (
-        <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
-          {/* ✅ iOS COMPLIANCE: playsInline prevents fullscreen hijacking */}
-          <video 
-            src={post.media_url} 
-            controls 
-            playsInline 
-            preload="metadata"
-            style={{ width: '100%', display: 'block' }} 
-          />
-        </div>
-      );
+      return <MonetizedVideoPlayer post={post} currentUser={currentUser} supabase={supabase} />;
     }
 
     return (
@@ -574,7 +612,6 @@ function ProfileContent() {
   return (
     <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
       
-      {/* ✅ FIX: Confirmation Modal (replaces confirm/prompt for WKWebView) */}
       {confirmModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -617,14 +654,12 @@ function ProfileContent() {
         </div>
       )}
 
-      {/* Offline Banner */}
       {isOffline && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', backgroundColor: '#ef4444', color: 'white', textAlign: 'center', padding: '10px', zIndex: 10000, fontWeight: 'bold' }}>
           No Internet Connection
         </div>
       )}
 
-      {/* ✅ FIX: Toast uses type-based coloring */}
       {toast && (
         <div style={{
             position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)',
@@ -662,7 +697,6 @@ function ProfileContent() {
                         <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={STYLES.input} placeholder="Avatar URL" />
                         <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={STYLES.input} placeholder="Background URL or Embed" />
                         
-                        {/* ✅ RESTORED: Music/Canva Embed Code Field! */}
                         <input type="text" value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={STYLES.input} placeholder="Spotify/Soundcloud/Canva Embed Code" />
                         
                         <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={STYLES.input} placeholder="Calendly or Booking URL" />
@@ -702,14 +736,12 @@ function ProfileContent() {
                     {isMyProfile && !isEditing && <button onClick={() => setIsEditing(true)} style={STYLES.btnSecondary}>✏️ Edit</button>}
                 </div>
 
-                {/* ✅ RESTORED: Profile Widget/Embed Renderer! */}
                 {!isEditing && profileUser?.music_embed && (
                     <div style={{ marginBottom: '30px', width: '100%', overflow: 'hidden', borderRadius: '16px', backgroundColor: 'transparent' }}>
                         {renderSafeHTML(profileUser.music_embed)}
                     </div>
                 )}
 
-                {/* ✅ Post Creation — now supports video uploads with preview */}
                 {isMyProfile && !isEditing && (
                     <div style={STYLES.card}>
                         <textarea 
@@ -724,7 +756,6 @@ function ProfileContent() {
                         </div>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {/* ✅ FIX: Styled upload button wrapping hidden input for 44px tap target */}
                             <input 
                               type="file" 
                               ref={fileInputRef}
@@ -739,7 +770,6 @@ function ProfileContent() {
                               📷 Upload Image or Video
                             </button>
 
-                            {/* ✅ NEW: File preview for images and videos */}
                             {postFile && postFilePreview && (
                               <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #374151', marginTop: '4px' }}>
                                 {VALID_VIDEO_TYPES.includes(postFile.type) ? (
@@ -813,7 +843,6 @@ function ProfileContent() {
                             
                             {renderPostContent(post)}
                             
-                            {/* ✅ FIX: Unified media renderer supports video + image with playsInline */}
                             {renderPostMedia(post)}
 
                             {post.is_sell_post && post.product_link && (
