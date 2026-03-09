@@ -5,7 +5,7 @@ const nextConfig = {
   // ==========================================================
   // ✅ MAGIC TOGGLE: Automatically turns on static export ONLY during mobile builds!
   // Vercel will ignore this and safely deploy your API routes.
-  //tput: process.env.MOBILE_BUILD === 'true' ? 'export' : undefined, 
+  output: process.env.MOBILE_BUILD === 'true' ? 'export' : undefined, 
 
   images: {
     // Automatically disables Next.js image optimization ONLY for mobile apps
