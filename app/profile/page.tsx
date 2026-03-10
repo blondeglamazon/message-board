@@ -73,7 +73,7 @@ const MAX_IMAGE_SIZE_MB = 5;
 const MAX_VIDEO_SIZE_MB = 200;
 
 // ============================================================================
-// 📹 VIDEO PLAYER WITH MONETIZATION TRACKING (THROTTLED + DEBUG MODE)
+// 📹 VIDEO PLAYER WITH MONETIZATION TRACKING
 // ============================================================================
 function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, currentUser: any, supabase: any }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -86,26 +86,15 @@ function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, curr
 
     const currentTime = Math.floor(video.currentTime);
 
-    // 🚨 DEBUG: Print status to the console every 2 seconds to prove it's running
     if (currentTime > 0 && currentTime % 2 === 0 && currentTime !== lastDebugTime.current) {
         lastDebugTime.current = currentTime;
         console.log(`[Timer: ${currentTime}s] Logged In: ${!!currentUser} | Is My Video: ${currentUser?.id === post.user_id}`);
     }
 
-    // 🚨 FIX: The throttle! Only ping the database if 5 seconds have passed since last ping
     if (currentTime >= 5 && currentTime - lastSavedTime.current >= 5) {
-      if (!currentUser) {
-        console.log("❌ TRACKING BLOCKED: You are not logged in.");
-        return;
-      }
+      if (!currentUser || post.user_id === currentUser.id) return;
 
-      if (post.user_id === currentUser.id) {
-        console.log("❌ TRACKING BLOCKED: You cannot watch your own video.");
-        return;
-      }
-
-      console.log(`🚀 Sending watch time to Supabase: ${currentTime} seconds...`);
-      lastSavedTime.current = currentTime; // Lock timer so it doesn't spam
+      lastSavedTime.current = currentTime;
 
       const { error } = await supabase.from('video_views').upsert({
         post_id: post.id,
@@ -113,25 +102,13 @@ function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, curr
         watch_time_seconds: currentTime
       }, { onConflict: 'post_id, viewer_id' }); 
       
-      if (error) {
-        console.error("❌ Supabase Error:", error.message, error.details);
-      } else {
-        console.log("✅ Supabase save successful!");
-      }
+      if (error) console.error("❌ Supabase Error:", error.message, error.details);
     }
   };
 
   return (
     <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
-      <video 
-        ref={videoRef}
-        src={post.media_url} 
-        controls 
-        playsInline 
-        preload="metadata"
-        onTimeUpdate={handleTimeUpdate}
-        style={{ width: '100%', display: 'block' }} 
-      />
+      <video ref={videoRef} src={post.media_url} controls playsInline preload="metadata" onTimeUpdate={handleTimeUpdate} style={{ width: '100%', display: 'block' }} />
     </div>
   );
 }
@@ -163,17 +140,38 @@ function ProfileContent() {
   
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({})
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
+  
+  // Profile Edit State
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
       display_name: '', avatar_url: '', background_url: '', music_embed: '', 
       bio: '', calendly_url: '', google_calendar_url: '', store_url: '', store_url_2: '', store_url_3: ''
   })
+
+  // Post Creation State
+  const [postText, setPostText] = useState('')
+  const [postFile, setPostFile] = useState<File | null>(null)
+  const [postFilePreview, setPostFilePreview] = useState<string | null>(null) 
+  const [isSelling, setIsSelling] = useState(false)
+  const [productLink, setProductLink] = useState('')
+
+  // 🤖 AI States
+  const [postTopic, setPostTopic] = useState('');
+  const [postTone, setPostTone] = useState('funny');
+  const [isGeneratingPost, setIsGeneratingPost] = useState(false);
+  const [isGeneratingBio, setIsGeneratingBio] = useState(false);
+  
+  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+  const [isBlocked, setIsBlocked] = useState(false)
+
+  const targetId = searchParams.get('id')
+  const targetSlug = searchParams.get('u')
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -195,38 +193,16 @@ function ProfileContent() {
         if (status.connected) showToast("Back online!");
     });
     
-    return () => { 
-        listenerPromise.then(handle => handle.remove()); 
-    }
+    return () => { listenerPromise.then(handle => handle.remove()); }
   }, []);
 
   useEffect(() => {
     const handleUrlOpen = (event: any) => {
-      if (event.url.includes('vimciety://')) {
-        const path = event.url.replace('vimciety://', '/');
-        router.push(path);
-      }
+      if (event.url.includes('vimciety://')) router.push(event.url.replace('vimciety://', '/'));
     };
-    
     const listenerPromise = CapacitorApp.addListener('appUrlOpen', handleUrlOpen);
-    
-    return () => { 
-        listenerPromise.then(handle => handle.remove()); 
-    };
+    return () => { listenerPromise.then(handle => handle.remove()); };
   }, [router]);
-
-  const [postText, setPostText] = useState('')
-  const [postFile, setPostFile] = useState<File | null>(null)
-  const [postFilePreview, setPostFilePreview] = useState<string | null>(null) 
-  const [isSelling, setIsSelling] = useState(false)
-  const [productLink, setProductLink] = useState('')
-  
-  const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
-  const [openComments, setOpenComments] = useState<Set<string>>(new Set())
-  const [isBlocked, setIsBlocked] = useState(false)
-
-  const targetId = searchParams.get('id')
-  const targetSlug = searchParams.get('u')
 
   useEffect(() => {
     const checkGoogleConnection = async () => {
@@ -243,16 +219,9 @@ function ProfileContent() {
       setCurrentUser(loggedInUser)
 
       let profileData = null
-      if (targetId) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', targetId).single()
-        profileData = data
-      } else if (targetSlug) {
-        const { data } = await supabase.from('profiles').select('*').eq('username', targetSlug).single()
-        profileData = data
-      } else if (loggedInUser) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', loggedInUser.id).single()
-        profileData = data
-      }
+      if (targetId) profileData = (await supabase.from('profiles').select('*').eq('id', targetId).single()).data
+      else if (targetSlug) profileData = (await supabase.from('profiles').select('*').eq('username', targetSlug).single()).data
+      else if (loggedInUser) profileData = (await supabase.from('profiles').select('*').eq('id', loggedInUser.id).single()).data
 
       if (!profileData) { setLoading(false); return; }
       const userIdToFetch = profileData.id
@@ -300,17 +269,66 @@ function ProfileContent() {
     loadProfile()
   }, [targetId, targetSlug, supabase])
 
+  // ============================================================================
+  // ✨ AI FUNCTIONS
+  // ============================================================================
+  const handleMagicBio = async () => {
+    if (!editForm.bio) return showToast("Type a few keywords in the bio box first!", 'error');
+    if (isOffline) return showToast("Cannot use AI while offline.", 'error');
+    
+    setIsGeneratingBio(true);
+    try {
+      const response = await fetch('/api/generate-bio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'bio', prompt: editForm.bio })
+      });
+      const data = await response.json();
+      if (data.text) {
+        setEditForm({ ...editForm, bio: data.text });
+        showToast("✨ Magic Bio generated!");
+      } else {
+        showToast("Failed to generate.", 'error');
+      }
+    } catch (error) {
+      showToast("Error connecting to AI.", 'error');
+    } finally {
+      setIsGeneratingBio(false);
+    }
+  };
+
+  const handleMagicPost = async () => {
+    if (!postTopic) return showToast("Please tell me what your post is about!", 'error');
+    if (isOffline) return showToast("Cannot use AI while offline.", 'error');
+    
+    setIsGeneratingPost(true);
+    try {
+      const response = await fetch('/api/generate-bio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'post', prompt: postTopic, tone: postTone })
+      });
+      const data = await response.json();
+      if (data.text) {
+        setPostText(data.text);
+        showToast("✨ Post generated!");
+      } else {
+        showToast("Failed to generate.", 'error');
+      }
+    } catch (error) {
+      showToast("Error connecting to AI.", 'error');
+    } finally {
+      setIsGeneratingPost(false);
+    }
+  };
+
   async function loadMorePosts() {
       if (isOffline) return showToast("You are offline.", 'error');
       setLoadingMore(true);
       const start = posts.length;
-      const end = start + POSTS_PER_PAGE - 1;
       
-      const { data } = await supabase.from('posts')
-          .select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
-          .eq('user_id', profileUser.id)
-          .order('created_at', { ascending: false })
-          .range(start, end);
+      const { data } = await supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
+          .eq('user_id', profileUser.id).order('created_at', { ascending: false }).range(start, start + POSTS_PER_PAGE - 1);
 
       if (data) {
           if (data.length < POSTS_PER_PAGE) setHasMorePosts(false);
@@ -322,11 +340,8 @@ function ProfileContent() {
   async function handleSaveProfile() {
       if (!currentUser || isOffline) return isOffline && showToast("Cannot save while offline.", 'error');
       setActionLoading(prev => ({...prev, saveProfile: true}))
-      
       const { error } = await supabase.from('profiles').upsert({ id: currentUser.id, ...editForm })
-      if (error) showToast("Error saving profile: " + error.message, 'error')
-      else { setProfileUser({ ...profileUser, ...editForm }); setIsEditing(false); showToast("Profile saved!"); }
-      
+      if (!error) { setProfileUser({ ...profileUser, ...editForm }); setIsEditing(false); showToast("Profile saved!"); }
       setActionLoading(prev => ({...prev, saveProfile: false}))
   }
 
@@ -334,24 +349,12 @@ function ProfileContent() {
     const file = e.target.files?.[0] || null;
     if (!file) { clearFile(); return; }
     
-    if (!VALID_UPLOAD_TYPES.includes(file.type)) {
-        showToast("Invalid file type. Supported: JPG, PNG, WEBP, GIF, MP4, WebM, MOV.", 'error');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-    }
-
-    const isVideo = VALID_VIDEO_TYPES.includes(file.type);
-    const maxSize = isVideo ? MAX_VIDEO_SIZE_MB : MAX_IMAGE_SIZE_MB;
-
-    if (file.size > maxSize * 1024 * 1024) {
-        showToast(`File too large. Max ${isVideo ? 'video' : 'image'} size is ${maxSize}MB.`, 'error');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        return;
-    }
+    if (!VALID_UPLOAD_TYPES.includes(file.type)) return showToast("Invalid file type.", 'error');
+    const maxSize = VALID_VIDEO_TYPES.includes(file.type) ? MAX_VIDEO_SIZE_MB : MAX_IMAGE_SIZE_MB;
+    if (file.size > maxSize * 1024 * 1024) return showToast(`File too large. Max is ${maxSize}MB.`, 'error');
 
     setPostFile(file);
-    const objectUrl = URL.createObjectURL(file);
-    setPostFilePreview(objectUrl);
+    setPostFilePreview(URL.createObjectURL(file));
   }
 
   function clearFile() {
@@ -362,50 +365,24 @@ function ProfileContent() {
   }
 
   async function handleCreatePost() {
-    if (!currentUser) return
-    if (isOffline) return showToast("Cannot post while offline.", 'error');
-
+    if (!currentUser || isOffline) return;
     setActionLoading(prev => ({...prev, createPost: true}))
 
     const cleanText = DOMPurify.sanitize(postText, { ALLOWED_TAGS: [] }).trim()
-    if (!cleanText && !postFile) {
-        showToast("Post cannot be empty.", 'error');
-        setActionLoading(prev => ({...prev, createPost: false}))
-        return;
-    }
+    if (!cleanText && !postFile) return setActionLoading(prev => ({...prev, createPost: false}));
 
-    let mediaUrl = null
-    let postType = 'text'
-
+    let mediaUrl = null; let postType = 'text';
     if (postFile) {
-        const isVideo = VALID_VIDEO_TYPES.includes(postFile.type);
-        postType = isVideo ? 'video' : 'image';
-
+        postType = VALID_VIDEO_TYPES.includes(postFile.type) ? 'video' : 'image';
         const filePath = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${postFile.name.split('.').pop()}`
-        const { error: uploadError } = await supabase.storage.from('posts').upload(filePath, postFile)
-        if (!uploadError) {
-            mediaUrl = supabase.storage.from('posts').getPublicUrl(filePath).data.publicUrl
-        } else { 
-            showToast("Error uploading file: " + uploadError.message, 'error'); 
-            setActionLoading(prev => ({...prev, createPost: false})); 
-            return;
-        }
+        const { error } = await supabase.storage.from('posts').upload(filePath, postFile)
+        if (!error) mediaUrl = supabase.storage.from('posts').getPublicUrl(filePath).data.publicUrl
     }
 
-    const newPost = { 
-        user_id: currentUser.id, 
-        content: cleanText, 
-        media_url: mediaUrl, 
-        post_type: postType, 
-        is_sell_post: isSelling, 
-        product_link: isSelling ? productLink : null 
-    }
-
-    const { data, error } = await supabase.from('posts').insert(newPost).select().single()
-    if (error) showToast("Error creating post: " + error.message, 'error')
-    else if (data) {
+    const { data, error } = await supabase.from('posts').insert({ user_id: currentUser.id, content: cleanText, media_url: mediaUrl, post_type: postType, is_sell_post: isSelling, product_link: isSelling ? productLink : null }).select().single()
+    if (!error && data) {
         setPosts([{ ...data, likes: [], comments: [] }, ...posts])
-        setPostText(''); clearFile(); setIsSelling(false); setProductLink('');
+        setPostText(''); setPostTopic(''); clearFile(); setIsSelling(false); setProductLink('');
         showToast("Post created!");
     }
     setActionLoading(prev => ({...prev, createPost: false}))
@@ -413,142 +390,67 @@ function ProfileContent() {
 
   async function handleDelete(postId: string) {
       if (isOffline) return showToast("Cannot delete while offline.", 'error');
-      setConfirmModal({
-        message: "Are you sure you want to delete this post?",
-        onConfirm: async () => {
-          setConfirmModal(null);
-          setActionLoading(prev => ({...prev, [`delete-${postId}`]: true}))
-          const { error } = await supabase.from('posts').delete().eq('id', postId)
-          if (!error) setPosts(prev => prev.filter(p => p.id !== postId))
-          else showToast("Failed to delete post.", 'error')
-          setActionLoading(prev => ({...prev, [`delete-${postId}`]: false}))
-        }
-      });
+      setConfirmModal({ message: "Delete this post?", onConfirm: async () => {
+          setConfirmModal(null); setActionLoading(prev => ({...prev, [`delete-${postId}`]: true}));
+          const { error } = await supabase.from('posts').delete().eq('id', postId);
+          if (!error) setPosts(prev => prev.filter(p => p.id !== postId));
+          setActionLoading(prev => ({...prev, [`delete-${postId}`]: false}));
+      }});
   }
 
   async function handleLike(postId: string, isLiked: boolean) {
-    if (!currentUser) return showToast("Please login to like posts.", 'error');
-    if (isOffline) return showToast("Cannot like while offline.", 'error');
-    if (actionLoading[`like-${postId}`]) return;
-
+    if (!currentUser || isOffline || actionLoading[`like-${postId}`]) return;
     setActionLoading(prev => ({...prev, [`like-${postId}`]: true}))
-    const previousPosts = [...posts];
     setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== currentUser.id) : [...(msg.likes || []), { user_id: currentUser.id }] } : msg));
-    
     try {
-        if (isLiked) {
-            const { error } = await supabase.from('likes').delete().match({ user_id: currentUser.id, post_id: postId });
-            if (error) throw error;
-        } else {
-            const { error } = await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId });
-            if (error) throw error;
-            if (profileUser && profileUser.id !== currentUser.id) await supabase.from('notifications').insert({ user_id: profileUser.id, actor_id: currentUser.id, type: 'like', post_id: postId });
-        }
-    } catch (err) {
-        setPosts(previousPosts); 
-        showToast("Network error. Could not save like.", 'error');
-    }
+        if (isLiked) await supabase.from('likes').delete().match({ user_id: currentUser.id, post_id: postId });
+        else await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId });
+    } catch (err) {}
     setActionLoading(prev => ({...prev, [`like-${postId}`]: false}))
   }
 
   const toggleComments = (postId: string) => {
-    const newSet = new Set(openComments)
-    if (newSet.has(postId)) newSet.delete(postId)
-    else newSet.add(postId)
-    setOpenComments(newSet)
+    const newSet = new Set(openComments); newSet.has(postId) ? newSet.delete(postId) : newSet.add(postId);
+    setOpenComments(newSet);
   }
 
   async function handlePostComment(postId: string) {
-    if (!currentUser) return showToast("Please login to comment.", 'error')
-    if (isOffline) return showToast("Cannot comment while offline.", 'error');
-    
-    const rawText = commentText[postId] || ''
-    const cleanText = DOMPurify.sanitize(rawText, { ALLOWED_TAGS: [] }).trim()
-    if (!cleanText) return
-
+    if (!currentUser || isOffline) return;
+    const cleanText = DOMPurify.sanitize(commentText[postId] || '', { ALLOWED_TAGS: [] }).trim()
+    if (!cleanText) return;
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: true}))
-    const { data: newComment, error } = await supabase.from('comments').insert({ post_id: postId, user_id: currentUser.id, email: currentUser.email, content: cleanText }).select().single()
-    if (error) { showToast("Error: " + error.message, 'error'); setActionLoading(prev => ({...prev, [`comment-${postId}`]: false})); return; }
     
-    setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
-    setCommentText(prev => ({ ...prev, [postId]: '' }))
-
-    if (profileUser && profileUser.id !== currentUser.id) await supabase.from('notifications').insert({ user_id: profileUser.id, actor_id: currentUser.id, type: 'comment', post_id: postId });
+    const { data } = await supabase.from('comments').insert({ post_id: postId, user_id: currentUser.id, email: currentUser.email, content: cleanText }).select().single()
+    if (data) {
+        setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), data] } : msg));
+        setCommentText(prev => ({ ...prev, [postId]: '' }));
+    }
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: false}))
   }
 
   const handleShare = async (postId: string) => {
       const url = `https://www.vimciety.com/post/${postId}`;
-      
-      if (navigator.share) {
-          try { 
-              await navigator.share({ 
-                  title: 'Check out this post on VIMciety', 
-                  url: url 
-              }); 
-          } catch (err) {
-              console.log('Share cancelled by user');
-          }
-      } else { 
-          try {
-              await navigator.clipboard.writeText(url);
-              showToast("Link copied to clipboard!");
-          } catch {
-              showToast("Could not copy link.", 'error');
-          }
-      }
+      if (navigator.share) try { await navigator.share({ title: 'Check out this post on VIMciety', url }); } catch {}
+      else { await navigator.clipboard.writeText(url); showToast("Link copied to clipboard!"); }
   };
 
   async function handleBlockUser() {
-      if (!currentUser || !profileUser) return
-      if (isOffline) return showToast("Cannot block users while offline.", 'error');
-
-      setConfirmModal({
-        message: `Block ${profileUser.display_name || 'this user'}? You will no longer see their posts.`,
-        onConfirm: async () => {
-          setConfirmModal(null);
-          setActionLoading(prev => ({...prev, blockUser: true}))
-          const { error } = await supabase.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: profileUser.id })
-          if (!error) { setIsBlocked(true); showToast("User blocked."); router.push('/'); } 
-          else showToast("Error blocking user.", 'error')
-          setActionLoading(prev => ({...prev, blockUser: false}))
-        }
-      });
+      setConfirmModal({ message: `Block user?`, onConfirm: async () => {
+          setConfirmModal(null); setActionLoading(prev => ({...prev, blockUser: true}));
+          const { error } = await supabase.from('blocks').insert({ blocker_id: currentUser.id, blocked_id: profileUser.id });
+          if (!error) { setIsBlocked(true); router.push('/'); } 
+          setActionLoading(prev => ({...prev, blockUser: false}));
+      }});
   }
 
   async function handleReportPost(postId: string) {
-      if (!currentUser) return showToast("Please log in to report posts.", 'error');
-      if (isOffline) return showToast("Cannot report while offline.", 'error');
-
-      setConfirmModal({
-        message: "Why are you reporting this post?",
-        showInput: true,
-        inputPlaceholder: "e.g., Spam, Harassment, Inappropriate",
-        onConfirm: async (inputValue) => {
-          const reason = inputValue?.trim() || 'No reason provided';
-          setConfirmModal(null);
-          setConfirmInput('');
-
-          setActionLoading(prev => ({...prev, [`report-${postId}`]: true}))
-          try {
-              const { error } = await supabase.from('reports').insert({ post_id: postId, reporter_id: currentUser.id, reason });
-              if (error) throw error;
-              showToast("Thank you. Our moderation team will review this within 24 hours.");
-          } catch (err) {
-              showToast("Failed to submit report. Please try again.", 'error');
-          }
-          setActionLoading(prev => ({...prev, [`report-${postId}`]: false}))
-        }
-      });
+      setConfirmModal({ message: "Why are reporting?", showInput: true, onConfirm: async (inputValue) => {
+          setConfirmModal(null); setConfirmInput(''); setActionLoading(prev => ({...prev, [`report-${postId}`]: true}));
+          await supabase.from('reports').insert({ post_id: postId, reporter_id: currentUser.id, reason: inputValue?.trim() || 'No reason provided' });
+          showToast("Report submitted.");
+          setActionLoading(prev => ({...prev, [`report-${postId}`]: false}));
+      }});
   }
-
-  const connectGoogleCalendar = async () => {
-    if (isOffline) return showToast("You are offline.", 'error');
-    const redirectUrl = Capacitor.isNativePlatform() ? 'vimciety://profile' : `${window.location.origin}/profile`;
-    const { error } = await supabase.auth.linkIdentity({ provider: 'google', options: { scopes: 'https://www.googleapis.com/auth/calendar.events', redirectTo: redirectUrl } });
-    if (error && !(error.message.includes('already linked') || error.message.includes('already_exists'))) showToast("Error connecting Google: " + error.message, 'error');
-    else { setIsGoogleLinked(true); showToast("Google Calendar connected!"); }
-  };
 
   const renderSafeHTML = (html: string) => {
       if (!html) return null;
@@ -558,47 +460,19 @@ function ProfileContent() {
 
   const renderPostContent = (post: any) => {
     if (post.post_type === 'embed') return <div style={{marginTop:'10px', overflow:'hidden', borderRadius:'8px'}}>{renderSafeHTML(post.content)}</div>;
-
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const urls = post.content?.match(urlRegex);
-    const firstUrl = urls ? urls[0] : null;
-
-    const renderTextWithLinks = (text: string) => {
-      if (!text) return null;
-      const parts = text.split(urlRegex);
-      return parts.map((part, i) => {
-        if (part.match(urlRegex)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
-        return <span key={i}>{part}</span>;
-      });
-    };
-
+    const urls = post.content?.match(/(https?:\/\/[^\s]+)/g);
+    
     return (
       <div style={{ lineHeight: '1.5' }}>
-        <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word' }}>{renderTextWithLinks(post.content)}</p>
-        {firstUrl && (
+        <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word' }}>
+            {post.content?.split(/(https?:\/\/[^\s]+)/g).map((part: string, i: number) => part.match(/(https?:\/\/[^\s]+)/g) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a> : <span key={i}>{part}</span>)}
+        </p>
+        {urls && urls[0] && (
           <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
-              <Microlink url={firstUrl} size="large" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #374151', backgroundColor: '#111827', color: 'white' }} />
+              <Microlink url={urls[0]} size="large" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #374151', backgroundColor: '#111827', color: 'white' }} />
           </div>
         )}
       </div>
-    );
-  }
-
-  const renderPostMedia = (post: any) => {
-    if (!post.media_url) return null;
-
-    const isVideo = post.post_type === 'video' || post.media_url.match(/\.(mp4|webm|mov|ogg)$/i);
-    
-    if (isVideo) {
-      return <MonetizedVideoPlayer post={post} currentUser={currentUser} supabase={supabase} />;
-    }
-
-    return (
-      <img 
-        src={post.media_url} 
-        style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '10px' }} 
-        alt="Post media" 
-      />
     );
   }
 
@@ -607,66 +481,27 @@ function ProfileContent() {
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
   const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
-  const isPostInvalid = (!postText.trim() && !postFile) || postText.length > MAX_POST_LENGTH;
 
   return (
     <div style={{ minHeight: '100vh', position: 'relative', backgroundColor: '#111827' }}>
       
       {confirmModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10001,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '20px'
-        }}>
-          <div style={{
-            backgroundColor: '#1f2937', borderRadius: '16px', padding: '24px',
-            maxWidth: '400px', width: '100%', border: '1px solid #374151'
-          }}>
-            <p style={{ color: 'white', fontSize: '16px', marginTop: 0, marginBottom: '16px' }}>
-              {confirmModal.message}
-            </p>
-            {confirmModal.showInput && (
-              <input
-                type="text"
-                value={confirmInput}
-                onChange={(e) => setConfirmInput(e.target.value)}
-                placeholder={confirmModal.inputPlaceholder || ''}
-                style={{ ...STYLES.input, marginBottom: '16px' }}
-                autoFocus
-              />
-            )}
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#1f2937', borderRadius: '16px', padding: '24px', maxWidth: '400px', width: '100%', border: '1px solid #374151' }}>
+            <p style={{ color: 'white', fontSize: '16px', marginTop: 0, marginBottom: '16px' }}>{confirmModal.message}</p>
+            {confirmModal.showInput && <input type="text" value={confirmInput} onChange={(e) => setConfirmInput(e.target.value)} placeholder={confirmModal.inputPlaceholder || ''} style={{ ...STYLES.input, marginBottom: '16px' }} autoFocus />}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button 
-                onClick={() => { setConfirmModal(null); setConfirmInput(''); }} 
-                style={STYLES.btnSecondary}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => confirmModal.onConfirm(confirmInput)}
-                style={STYLES.btnPrimary}
-              >
-                Confirm
-              </button>
+              <button onClick={() => { setConfirmModal(null); setConfirmInput(''); }} style={STYLES.btnSecondary}>Cancel</button>
+              <button onClick={() => confirmModal.onConfirm(confirmInput)} style={STYLES.btnPrimary}>Confirm</button>
             </div>
           </div>
         </div>
       )}
 
-      {isOffline && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', backgroundColor: '#ef4444', color: 'white', textAlign: 'center', padding: '10px', zIndex: 10000, fontWeight: 'bold' }}>
-          No Internet Connection
-        </div>
-      )}
+      {isOffline && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', backgroundColor: '#ef4444', color: 'white', textAlign: 'center', padding: '10px', zIndex: 10000, fontWeight: 'bold' }}>No Internet Connection</div>}
 
       {toast && (
-        <div style={{
-            position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)',
-            backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e',
-            color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px',
-            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', transition: 'opacity 0.3s ease-in-out'
-        }}>
+        <div style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e', color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)' }}>
             {toast.msg}
         </div>
       )}
@@ -681,9 +516,7 @@ function ProfileContent() {
             
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{isMyProfile ? 'My Profile' : `${profileUser.display_name || 'User'}'s Profile`}</h1>
-                <button onClick={() => router.push('/')} style={{ ...STYLES.btnSecondary, backgroundColor: 'white', color: '#333' }}>
-                    ← Back to Feed
-                </button>
+                <button onClick={() => router.push('/')} style={{ ...STYLES.btnSecondary, backgroundColor: 'white', color: '#333' }}>← Back to Feed</button>
             </header>
 
             {isBlocked ? (
@@ -696,16 +529,24 @@ function ProfileContent() {
                         <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={STYLES.input} placeholder="Display Name" />
                         <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={STYLES.input} placeholder="Avatar URL" />
                         <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={STYLES.input} placeholder="Background URL or Embed" />
-                        
                         <input type="text" value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={STYLES.input} placeholder="Spotify/Soundcloud/Canva Embed Code" />
-                        
                         <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={STYLES.input} placeholder="Calendly or Booking URL" />
                         <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={STYLES.input} placeholder="Primary Store URL" />
-                        <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio" />
+                        
+                        <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio (Type a few keywords, then click Magic Write!)" />
+                        
+                        {/* ✨ AI BIO BUTTON */}
+                        <button 
+                            onClick={handleMagicBio} 
+                            disabled={isGeneratingBio} 
+                            type="button" 
+                            style={{...STYLES.btnPrimary, width: '100%', marginBottom: '15px', backgroundColor: '#a855f7', opacity: isGeneratingBio ? 0.6 : 1}}
+                        >
+                            {isGeneratingBio ? '✨ Thinking...' : '✨ Magic Write Bio'}
+                        </button>
+
                         <div style={{display:'flex', gap:'10px'}}>
-                            <button onClick={handleSaveProfile} disabled={actionLoading.saveProfile} style={{...STYLES.btnPrimary, opacity: actionLoading.saveProfile ? 0.6 : 1}}>
-                                {actionLoading.saveProfile ? 'Saving...' : 'Save'}
-                            </button>
+                            <button onClick={handleSaveProfile} disabled={actionLoading.saveProfile} style={{...STYLES.btnPrimary, opacity: actionLoading.saveProfile ? 0.6 : 1}}>Save</button>
                             <button onClick={() => setIsEditing(false)} style={STYLES.btnSecondary}>Cancel</button>
                         </div>
                     </div>
@@ -719,11 +560,7 @@ function ProfileContent() {
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
-                                {!isMyProfile && currentUser && (
-                                    <button onClick={handleBlockUser} disabled={actionLoading.blockUser} style={{ ...STYLES.btnDanger, opacity: actionLoading.blockUser ? 0.6 : 1 }}>
-                                        {actionLoading.blockUser ? 'Blocking...' : '🚫 Block User'}
-                                    </button>
-                                )}
+                                {!isMyProfile && currentUser && <button onClick={handleBlockUser} disabled={actionLoading.blockUser} style={{ ...STYLES.btnDanger, opacity: actionLoading.blockUser ? 0.6 : 1 }}>🚫 Block</button>}
                             </div>
                             <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
                                 <div style={{ color: '#4b5563', fontSize: '15px' }}><strong style={{ color: '#111827' }}>{followerCount}</strong> Followers</div>
@@ -744,6 +581,38 @@ function ProfileContent() {
 
                 {isMyProfile && !isEditing && (
                     <div style={STYLES.card}>
+                        
+                        {/* ✨ AI POST ASSISTANT SECTION */}
+                        <div style={{ padding: '15px', backgroundColor: '#374151', borderRadius: '8px', marginBottom: '15px', border: '1px solid #4b5563' }}>
+                            <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#a855f7' }}>✨ AI Story Assistant</p>
+                            <input 
+                              type="text" 
+                              placeholder="What should the post be about? (e.g., Working out)" 
+                              value={postTopic}
+                              onChange={(e) => setPostTopic(e.target.value)}
+                              style={{ ...STYLES.input, marginBottom: '10px', backgroundColor: '#1f2937' }}
+                            />
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <select 
+                                  value={postTone} 
+                                  onChange={(e) => setPostTone(e.target.value)}
+                                  style={{ ...STYLES.input, marginBottom: 0, flex: 1, backgroundColor: '#1f2937' }}
+                                >
+                                  <option value="funny">😂 Funny</option>
+                                  <option value="inspirational">✨ Inspirational</option>
+                                  <option value="professional">💼 Professional</option>
+                                  <option value="storytelling">📖 Story</option>
+                                </select>
+                                <button 
+                                  onClick={handleMagicPost} 
+                                  disabled={isGeneratingPost}
+                                  style={{ ...STYLES.btnPrimary, backgroundColor: '#a855f7', flex: 1, opacity: isGeneratingPost ? 0.6 : 1 }}
+                                >
+                                  {isGeneratingPost ? 'Writing...' : '✨ Generate'}
+                                </button>
+                            </div>
+                        </div>
+
                         <textarea 
                             placeholder="What's on your mind? Or what are you selling?"
                             value={postText}
@@ -756,52 +625,13 @@ function ProfileContent() {
                         </div>
                         
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <input 
-                              type="file" 
-                              ref={fileInputRef}
-                              accept="image/png, image/jpeg, image/jpg, image/webp, image/gif, video/mp4, video/webm, video/quicktime"
-                              onChange={handleFileSelect} 
-                              hidden 
-                            />
-                            <button 
-                              onClick={() => fileInputRef.current?.click()} 
-                              style={{ ...STYLES.btnSecondary, width: '100%', textAlign: 'center' }}
-                            >
-                              📷 Upload Image or Video
-                            </button>
+                            <input type="file" ref={fileInputRef} accept="image/*, video/*" onChange={handleFileSelect} hidden />
+                            <button onClick={() => fileInputRef.current?.click()} style={{ ...STYLES.btnSecondary, width: '100%', textAlign: 'center' }}>📷 Upload Image or Video</button>
 
                             {postFile && postFilePreview && (
                               <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #374151', marginTop: '4px' }}>
-                                {VALID_VIDEO_TYPES.includes(postFile.type) ? (
-                                  <video 
-                                    src={postFilePreview} 
-                                    controls 
-                                    playsInline 
-                                    style={{ width: '100%', display: 'block', maxHeight: '300px' }} 
-                                  />
-                                ) : (
-                                  <img 
-                                    src={postFilePreview} 
-                                    alt="Upload preview" 
-                                    style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} 
-                                  />
-                                )}
-                                <button 
-                                  onClick={clearFile}
-                                  style={{ 
-                                    position: 'absolute', top: '8px', right: '8px', 
-                                    background: 'rgba(0,0,0,0.7)', color: 'white', 
-                                    border: 'none', borderRadius: '50%', 
-                                    width: '44px', height: '44px', 
-                                    cursor: 'pointer', fontSize: '18px',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                                <div style={{ padding: '8px 12px', backgroundColor: '#374151', fontSize: '13px', color: '#9ca3af' }}>
-                                  {postFile.name} ({(postFile.size / (1024 * 1024)).toFixed(1)}MB)
-                                </div>
+                                {VALID_VIDEO_TYPES.includes(postFile.type) ? <video src={postFilePreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} /> : <img src={postFilePreview} alt="Upload" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />}
+                                <button onClick={clearFile} style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                               </div>
                             )}
 
@@ -812,11 +642,7 @@ function ProfileContent() {
 
                             {isSelling && <input type="url" placeholder="Checkout Link" value={productLink} onChange={(e) => setProductLink(e.target.value)} style={{...STYLES.input, border: '1px solid #22c55e'}} />}
 
-                            <button 
-                                onClick={handleCreatePost} 
-                                disabled={actionLoading.createPost || isPostInvalid}
-                                style={{ ...STYLES.btnPrimary, width: '100%', marginTop: '10px', opacity: (actionLoading.createPost || isPostInvalid) ? 0.6 : 1 }}
-                            >
+                            <button onClick={handleCreatePost} disabled={actionLoading.createPost || (!postText.trim() && !postFile)} style={{ ...STYLES.btnPrimary, width: '100%', marginTop: '10px', opacity: (actionLoading.createPost || (!postText.trim() && !postFile)) ? 0.6 : 1 }}>
                                 {actionLoading.createPost ? 'Posting...' : 'Post'}
                             </button>
                         </div>
@@ -830,76 +656,32 @@ function ProfileContent() {
                         <div key={post.id} style={STYLES.card}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
                                 <span>{new Date(post.created_at).toLocaleString()}</span>
-                                {isMyProfile ? (
-                                    <button onClick={() => handleDelete(post.id)} disabled={actionLoading[`delete-${post.id}`]} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px' }}>
-                                        {actionLoading[`delete-${post.id}`] ? '...' : 'Delete'}
-                                    </button>
-                                ) : (
-                                    <button onClick={() => handleReportPost(post.id)} disabled={actionLoading[`report-${post.id}`]} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', minHeight: '44px' }}>
-                                        {actionLoading[`report-${post.id}`] ? 'Reporting...' : 'Report Post'}
-                                    </button>
-                                )}
+                                {isMyProfile ? <button onClick={() => handleDelete(post.id)} disabled={actionLoading[`delete-${post.id}`]} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px' }}>Delete</button> : <button onClick={() => handleReportPost(post.id)} disabled={actionLoading[`report-${post.id}`]} style={{ color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', minHeight: '44px' }}>Report</button>}
                             </div>
                             
                             {renderPostContent(post)}
-                            
-                            {renderPostMedia(post)}
+                            {post.media_url && (post.post_type === 'video' || post.media_url.match(/\.(mp4|webm|mov|ogg)$/i) ? <MonetizedVideoPlayer post={post} currentUser={currentUser} supabase={supabase} /> : <img src={post.media_url} style={{ maxWidth: '100%', borderRadius: '8px', marginTop: '10px' }} alt="Post media" />)}
 
-                            {post.is_sell_post && post.product_link && (
-                                <a href={post.product_link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', boxSizing: 'border-box' }}>💳 Buy Now / View Item</a>
-                            )}
+                            {post.is_sell_post && post.product_link && <a href={post.product_link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: '15px', backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '12px', borderRadius: '8px', textDecoration: 'none', boxSizing: 'border-box' }}>💳 Buy Now / View Item</a>}
 
                             <div style={{ marginTop: '15px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '15px' }}>
-                                <button aria-label="Like Post" onClick={() => handleLike(post.id, !!isLiked)} style={{ ...STYLES.iconBtn, color: isLiked ? '#ef4444' : '#9ca3af' }}>
-                                    <span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> <span>{post.likes?.length || 0}</span>
-                                </button>
-                                <button aria-label="Comment on Post" onClick={() => toggleComments(post.id)} style={STYLES.iconBtn}>
-                                    <span style={{ fontSize: '20px' }}>💬</span> <span>{post.comments?.length || 0}</span>
-                                </button>
-                                <button aria-label="Share Post" onClick={() => handleShare(post.id)} style={STYLES.iconBtn}>
-                                    <span style={{ fontSize: '20px' }}>↗️</span> <span>Share</span>
-                                </button>
+                                <button aria-label="Like Post" onClick={() => handleLike(post.id, !!isLiked)} style={{ ...STYLES.iconBtn, color: isLiked ? '#ef4444' : '#9ca3af' }}><span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> <span>{post.likes?.length || 0}</span></button>
+                                <button aria-label="Comment on Post" onClick={() => toggleComments(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>💬</span> <span>{post.comments?.length || 0}</span></button>
+                                <button aria-label="Share Post" onClick={() => handleShare(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>↗️</span> <span>Share</span></button>
                             </div>
 
                             {openComments.has(post.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
-                                    {post.comments?.map((c: any) => {
-                                        const commenter = profilesMap[c.user_id]
-                                        return (
-                                            <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px' }}>
-                                                <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '8px' }}>{commenter?.display_name || commenter?.username || 'User'}</span>
-                                                <span style={{ color: '#9ca3af' }}>{c.content}</span>
-                                            </div>
-                                        )
-                                    })}
+                                    {post.comments?.map((c: any) => <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px' }}><span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '8px' }}>{profilesMap[c.user_id]?.display_name || 'User'}</span><span style={{ color: '#9ca3af' }}>{c.content}</span></div>)}
                                     <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                        <input 
-                                            type="text" placeholder="Add a comment..." maxLength={MAX_COMMENT_LENGTH}
-                                            value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} 
-                                            style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} 
-                                        />
-                                        <button 
-                                            onClick={() => handlePostComment(post.id)} 
-                                            disabled={actionLoading[`comment-${post.id}`]}
-                                            style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer', opacity: actionLoading[`comment-${post.id}`] ? 0.6 : 1 }}
-                                        >
-                                            {actionLoading[`comment-${post.id}`] ? '...' : 'Post'}
-                                        </button>
+                                        <input type="text" placeholder="Add a comment..." value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} />
+                                        <button onClick={() => handlePostComment(post.id)} disabled={actionLoading[`comment-${post.id}`]} style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
                                     </div>
                                 </div>
                             )}
                         </div>
                     )})}
-                    
-                    {hasMorePosts && posts.length > 0 && (
-                        <button 
-                            onClick={loadMorePosts} 
-                            disabled={loadingMore}
-                            style={{ ...STYLES.btnSecondary, width: '100%', marginTop: '10px', opacity: loadingMore ? 0.6 : 1 }}
-                        >
-                            {loadingMore ? 'Loading...' : 'Load More Posts'}
-                        </button>
-                    )}
+                    {hasMorePosts && posts.length > 0 && <button onClick={loadMorePosts} disabled={loadingMore} style={{ ...STYLES.btnSecondary, width: '100%', marginTop: '10px', opacity: loadingMore ? 0.6 : 1 }}>Load More Posts</button>}
                 </div>
               </>
             )}
