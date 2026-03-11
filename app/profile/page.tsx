@@ -280,7 +280,12 @@ function ProfileContent() {
     
     setIsGeneratingBio(true);
     try {
-      const response = await fetch('/api/generate-bio', {
+      // Determine the correct API URL based on if the user is on the web or the mobile app
+const apiUrl = Capacitor.isNativePlatform() 
+  ? 'https://www.vimciety.com/api/generate-bio' 
+  : '/api/generate-bio';
+
+const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'bio', prompt: editForm.bio })
@@ -305,7 +310,12 @@ function ProfileContent() {
     
     setIsGeneratingPost(true);
     try {
-      const response = await fetch('/api/generate-bio', {
+      // Determine the correct API URL based on if the user is on the web or the mobile app
+const apiUrl = Capacitor.isNativePlatform() 
+  ? 'https://www.vimciety.com/api/generate-bio' 
+  : '/api/generate-bio';
+
+const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'post', prompt: postTopic, tone: postTone })
@@ -582,15 +592,20 @@ function ProfileContent() {
                         
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio (Type a few keywords, then click Magic Write!)" />
                         
-                        {/* ✨ AI BIO BUTTON */}
-                        <button 
-                            onClick={handleMagicBio} 
-                            disabled={isGeneratingBio} 
-                            type="button" 
-                            style={{...STYLES.btnPrimary, width: '100%', marginBottom: '15px', backgroundColor: '#a855f7', opacity: isGeneratingBio ? 0.6 : 1}}
-                        >
-                            {isGeneratingBio ? '✨ Thinking...' : '✨ Magic Write Bio'}
-                        </button>
+                        {/* ✨ AI BIO BUTTON & DISCLAIMER */}
+                        <div style={{ marginBottom: '20px' }}>
+                            <button 
+                                onClick={handleMagicBio} 
+                                disabled={isGeneratingBio} 
+                                type="button" 
+                                style={{...STYLES.btnPrimary, width: '100%', backgroundColor: '#a855f7', opacity: isGeneratingBio ? 0.6 : 1}}
+                            >
+                                {isGeneratingBio ? '✨ Thinking...' : '✨ Magic Write Bio'}
+                            </button>
+                            <p style={{ margin: '6px 0 0 0', fontSize: '11px', color: '#9ca3af', textAlign: 'center' }}>
+                                Powered by Google AI. By generating, your prompt is sent to Google.
+                            </p>
+                        </div>
 
                         <div style={{display:'flex', gap:'10px'}}>
                             <button onClick={handleSaveProfile} disabled={actionLoading.saveProfile} style={{...STYLES.btnPrimary, opacity: actionLoading.saveProfile ? 0.6 : 1}}>Save</button>
@@ -645,7 +660,7 @@ function ProfileContent() {
                 {isMyProfile && !isEditing && (
                     <div style={STYLES.card}>
                         
-                        {/* ✨ AI POST ASSISTANT SECTION */}
+                        {/* ✨ AI POST ASSISTANT SECTION & DISCLAIMER */}
                         <div style={{ padding: '15px', backgroundColor: '#374151', borderRadius: '8px', marginBottom: '15px', border: '1px solid #4b5563' }}>
                             <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: '#a855f7' }}>✨ AI Story Assistant</p>
                             <input 
@@ -674,6 +689,10 @@ function ProfileContent() {
                                   {isGeneratingPost ? 'Writing...' : '✨ Generate'}
                                 </button>
                             </div>
+                            {/* 🚨 REQUIRED APP STORE AI DISCLAIMER */}
+                            <p style={{ margin: '10px 0 0 0', fontSize: '11px', color: '#9ca3af', textAlign: 'center' }}>
+                                Powered by Google AI. By generating, your prompt is sent to Google.
+                            </p>
                         </div>
 
                         <textarea 

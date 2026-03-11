@@ -1,20 +1,10 @@
-This draft is a great start, but there are a few structural issues and policy conflicts we need to clean up.
-
-Specifically, you accidentally have **two Section 5s**, some duplicated paragraphs, and the formatting for the Google Limited Use policy got a bit scrambled. Most importantly, we need to add a strict "carve-out" to your Marketing Partners clause so Google reviewers don't think you are selling their Calendar data!
-
-I have completely reformatted, cleaned up, and bulletproofed your Privacy Policy to meet the strict requirements of the Google Cloud API Review, Apple App Store (Guideline 5.1.1), and Google Play Store.
-
-**Copy this exact text and use it to replace your `PrivacyPolicy.md` file:**
-
----
-
 # Privacy Policy for VIMciety
 
-**Last Updated:** February 25, 2026
+**Last Updated:** March 11, 2026
 
 ## 1. Introduction
 
-Welcome to **VIMciety** ("we," "our," or "us"). We are committed to protecting your personal information and your right to privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application (the "App").
+Welcome to **VIMciety** ("we," "our," or "us"). We are committed to protecting your personal information and your right to privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and website (the "App").
 
 By accessing or using the App, you agree to the terms of this Privacy Policy. If you do not agree with the terms of this Privacy Policy, please do not access the App.
 
@@ -37,7 +27,13 @@ We automatically collect certain information when you visit, use, or navigate th
 * **Device Data:** Information about your mobile device (e.g., device ID, model, operating system version).
 * **Usage Data:** Log files, crash reports, and interaction data (e.g., features you use, time spent on the App).
 
-## 3. How We Use Your Information
+## 3. Cookies and Tracking Technologies
+
+We may use cookies, web beacons, tracking pixels, and other tracking technologies on the App to help customize our platform, securely manage your login sessions (via Supabase), and improve your overall experience.
+
+When you access the App, your personal information is not inherently collected through the use of tracking technology. Most browsers and mobile devices are set to accept cookies by default. You can usually choose to set your browser or device to remove or reject cookies. Please be aware that choosing to remove or reject cookies could affect the availability and functionality of the App (such as keeping you logged into your account).
+
+## 4. How We Use Your Information
 
 We use the information we collect or receive for the following purposes:
 
@@ -47,7 +43,7 @@ We use the information we collect or receive for the following purposes:
 * **Customer Support:** To respond to user inquiries and resolve issues.
 * **Analytics & Improvements:** To understand how users interact with the App and improve the overall user experience.
 
-## 4. Sharing Your Information & API Usage
+## 5. Sharing Your Information & API Usage
 
 We may share information we have collected about you in certain situations. Your information may be disclosed as follows:
 
@@ -57,7 +53,7 @@ We may share information we have collected about you in certain situations. Your
 * **Marketing Partners:** In the future, we may share hashed or pseudonymized data with third-party marketing platforms to deliver relevant promotional content. *(Note: This strictly excludes any data obtained from Google APIs, which is never shared for marketing purposes).*
 * **Legal Obligations:** We may disclose your information where we are legally required to do so to comply with applicable law, governmental requests, or court orders.
 
-### C. Google API Services User Data Policy (Limited Use)
+### Google API Services User Data Policy (Limited Use)
 
 VIMciety's use and transfer to any other app of information received from Google APIs will adhere to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. Specifically regarding Google Calendar data:
 
@@ -65,7 +61,7 @@ VIMciety's use and transfer to any other app of information received from Google
 * **How we use it:** This data is used exclusively to allow other users to view your availability and book appointments directly through your VIMciety profile.
 * **Data Sharing:** We do **NOT** share, sell, or transfer your Google Calendar data to any third-party marketing platforms, advertising networks, or data brokers under any circumstances.
 
-## 5. Data Retention and Deletion
+## 6. Data Retention and Deletion
 
 We keep your information for as long as necessary to fulfill the purposes outlined in this privacy policy unless otherwise required by law.
 
@@ -76,19 +72,19 @@ In compliance with Apple App Store and Google Play Store guidelines, you have th
 * **In-App:** You can instantly request account deletion by navigating to the Settings menu within the App and selecting "Delete Account."
 * **Via Web:** You may submit an account deletion request by visiting [https://vimciety.com/delete-account](https://vimciety.com/delete-account) or by emailing us directly. We will process and permanently delete your data within 30 days of verification.
 
-## 6. Security of Your Information
+## 7. Security of Your Information
 
 We use administrative, technical, and physical security measures to help protect your personal information. While we have taken reasonable steps to secure the personal information you provide to us, please be aware that despite our efforts, no security measures are perfect or impenetrable. No method of data transmission can be guaranteed against any interception or other types of misuse.
 
-## 7. Policy for Children
+## 8. Policy for Children
 
 We do not knowingly solicit information from or market to children under the age of 13. If we learn that we have collected personal information from a child under age 13 without verification of parental consent, we will delete that information as quickly as possible. If you become aware of any data we have collected from children under age 13, please contact us immediately.
 
-## 8. Changes to This Privacy Policy
+## 9. Changes to This Privacy Policy
 
 We may update this Privacy Policy from time to time. The updated version will be indicated by an updated "Last Updated" date at the top of this document, and the updated version will be effective as soon as it is accessible. We encourage you to review this Privacy Policy frequently to stay informed of how we protect your information.
 
-## 9. Contact Us
+## 10. Contact Us
 
 If you have questions, comments, or data deletion requests regarding this policy, you may email us at:
 **vimciety@gmail.com**
