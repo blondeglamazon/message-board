@@ -19,7 +19,6 @@ import Microlink from '@microlink/react'
 const TRUSTED_EMBED_DOMAINS = [
   'spotify.com',                                             
   'canva.com',                                               
-  'spotify.com',              
   'youtube.com',
   'www.youtube-nocookie.com',
   'soundcloud.com',
@@ -182,6 +181,7 @@ function ProfileContent() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const initNetwork = async () => {
@@ -345,6 +345,32 @@ function ProfileContent() {
       const { error } = await supabase.from('profiles').upsert({ id: currentUser.id, ...editForm })
       if (!error) { setProfileUser({ ...profileUser, ...editForm }); setIsEditing(false); showToast("Profile saved!"); }
       setActionLoading(prev => ({...prev, saveProfile: false}))
+  }
+
+  // Handle direct avatar photo uploads
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser || isOffline) return;
+    
+    if (!VALID_IMAGE_TYPES.includes(file.type)) return showToast("Invalid image type.", 'error');
+    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) return showToast(`Image too large. Max is ${MAX_IMAGE_SIZE_MB}MB.`, 'error');
+
+    setActionLoading(prev => ({...prev, uploadAvatar: true}));
+    showToast("Uploading profile picture...");
+
+    const filePath = `${currentUser.id}/avatar-${Date.now()}.${file.name.split('.').pop()}`;
+    const { error } = await supabase.storage.from('posts').upload(filePath, file);
+    
+    if (!error) {
+        const publicUrl = supabase.storage.from('posts').getPublicUrl(filePath).data.publicUrl;
+        setEditForm({ ...editForm, avatar_url: publicUrl });
+        showToast("Profile picture uploaded!");
+    } else {
+        showToast("Failed to upload avatar.", 'error');
+    }
+    
+    if (avatarInputRef.current) avatarInputRef.current.value = '';
+    setActionLoading(prev => ({...prev, uploadAvatar: false}));
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -528,12 +554,31 @@ function ProfileContent() {
                 {isEditing && (
                     <div style={STYLES.card}>
                         <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
+                        
                         <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={STYLES.input} placeholder="Display Name" />
-                        <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={STYLES.input} placeholder="Avatar URL" />
+                        
+                        {/* 🖼️ AVATAR UPLOAD SECTION */}
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                            <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{...STYLES.input, marginBottom: 0}} placeholder="Avatar URL" />
+                            <input type="file" ref={avatarInputRef} accept="image/*" onChange={handleAvatarUpload} hidden />
+                            <button 
+                                onClick={() => avatarInputRef.current?.click()} 
+                                disabled={actionLoading.uploadAvatar} 
+                                style={{ ...STYLES.btnSecondary, whiteSpace: 'nowrap', opacity: actionLoading.uploadAvatar ? 0.6 : 1 }}
+                            >
+                                {actionLoading.uploadAvatar ? '⏳' : '📷 Upload'}
+                            </button>
+                        </div>
+
                         <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} style={STYLES.input} placeholder="Background URL or Embed" />
                         <input type="text" value={editForm.music_embed} onChange={e => setEditForm({...editForm, music_embed: e.target.value})} style={STYLES.input} placeholder="Spotify/Soundcloud/Canva Embed Code" />
+                        
                         <input type="url" value={editForm.calendly_url} onChange={e => setEditForm({...editForm, calendly_url: e.target.value})} style={STYLES.input} placeholder="Calendly or Booking URL" />
-                        <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={STYLES.input} placeholder="Primary Store URL" />
+                        
+                        {/* 🛒 3 STORE LINKS */}
+                        <input type="url" value={editForm.store_url} onChange={e => setEditForm({...editForm, store_url: e.target.value})} style={STYLES.input} placeholder="Primary Store URL 1" />
+                        <input type="url" value={editForm.store_url_2} onChange={e => setEditForm({...editForm, store_url_2: e.target.value})} style={STYLES.input} placeholder="Store URL 2 (Optional)" />
+                        <input type="url" value={editForm.store_url_3} onChange={e => setEditForm({...editForm, store_url_3: e.target.value})} style={STYLES.input} placeholder="Store URL 3 (Optional)" />
                         
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio (Type a few keywords, then click Magic Write!)" />
                         
@@ -570,6 +615,13 @@ function ProfileContent() {
                             </div>
                             <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
                             {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
+                            
+                            {/* Render Store Links if available */}
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                                {profileUser?.store_url && <a href={profileUser.store_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 1</a>}
+                                {profileUser?.store_url_2 && <a href={profileUser.store_url_2} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 2</a>}
+                                {profileUser?.store_url_3 && <a href={profileUser.store_url_3} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 3</a>}
+                            </div>
                         </div>
                     </div>
                     {isMyProfile && !isEditing && <button onClick={() => setIsEditing(true)} style={STYLES.btnSecondary}>✏️ Edit</button>}
@@ -594,11 +646,11 @@ function ProfileContent() {
                               onChange={(e) => setPostTopic(e.target.value)}
                               style={{ ...STYLES.input, marginBottom: '10px', backgroundColor: '#1f2937' }}
                             />
-                            <div style={{ display: 'flex', gap: '10px' }}>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                                 <select 
                                   value={postTone} 
                                   onChange={(e) => setPostTone(e.target.value)}
-                                  style={{ ...STYLES.input, marginBottom: 0, flex: 1, backgroundColor: '#1f2937' }}
+                                  style={{ ...STYLES.input, marginBottom: 0, flex: 1, backgroundColor: '#1f2937', minWidth: '120px' }}
                                 >
                                   <option value="funny">😂 Funny</option>
                                   <option value="inspirational">✨ Inspirational</option>
@@ -608,7 +660,7 @@ function ProfileContent() {
                                 <button 
                                   onClick={handleMagicPost} 
                                   disabled={isGeneratingPost}
-                                  style={{ ...STYLES.btnPrimary, backgroundColor: '#a855f7', flex: 1, opacity: isGeneratingPost ? 0.6 : 1 }}
+                                  style={{ ...STYLES.btnPrimary, backgroundColor: '#a855f7', flex: 1, opacity: isGeneratingPost ? 0.6 : 1, minWidth: '120px' }}
                                 >
                                   {isGeneratingPost ? 'Writing...' : '✨ Generate'}
                                 </button>
