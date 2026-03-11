@@ -12,7 +12,7 @@ import Sidebar from '@/components/Sidebar'
 import Microlink from '@microlink/react'
 
 // ✅ INCREASED FILE SIZE: 200MB Limit for Videos
-const MAX_FILE_SIZE = 200 * 1024 * 1024 
+const MAX_FILE_SIZE = 500 * 1024 * 1024 
 
 function MessageBoardContent() {
   // ✅ FIX: Prevent Supabase client recreation on every render

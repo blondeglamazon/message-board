@@ -71,8 +71,8 @@ const POSTS_PER_PAGE = 20;
 const VALID_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif'];
 const VALID_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/mov'];
 const VALID_UPLOAD_TYPES = [...VALID_IMAGE_TYPES, ...VALID_VIDEO_TYPES];
-const MAX_IMAGE_SIZE_MB = 5;
-const MAX_VIDEO_SIZE_MB = 200;
+const MAX_IMAGE_SIZE_MB = 20;
+const MAX_VIDEO_SIZE_MB = 500;
 
 // ============================================================================
 // 📹 VIDEO PLAYER WITH MONETIZATION TRACKING
