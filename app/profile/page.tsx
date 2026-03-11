@@ -28,7 +28,9 @@ const TRUSTED_EMBED_DOMAINS = [
   'amzn.to',
   'widgets.shein.com',
   'temu.com',
-  'googleusercontent.com'
+  'googleusercontent.com',
+  'square.site',
+  'squareup.com'
 ];
 
 if (typeof window !== 'undefined' || typeof global !== 'undefined') {
