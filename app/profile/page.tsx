@@ -615,15 +615,24 @@ function ProfileContent() {
                             </div>
                             <p style={{ margin: 0, color: '#6b7280', fontSize: '14px' }}>Member since: {profileUser?.memberSince}</p>
                             {profileUser?.bio && <p style={{ marginTop: '10px', color: '#374151', fontStyle: 'italic' }}>"{profileUser.bio}"</p>}
-                            
-                            {/* Render Store Links if available */}
-                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
-                                {profileUser?.store_url && <a href={profileUser.store_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 1</a>}
-                                {profileUser?.store_url_2 && <a href={profileUser.store_url_2} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 2</a>}
-                                {profileUser?.store_url_3 && <a href={profileUser.store_url_3} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', fontSize: '14px', textDecoration: 'underline' }}>🔗 Store Link 3</a>}
-                            </div>
                         </div>
                     </div>
+                    
+                    {/* Render Store Links as Rich Previews using Microlink */}
+                    {(profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px', width: '100%' }}>
+                            {profileUser?.store_url && (
+                                <Microlink url={profileUser.store_url} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb' }} />
+                            )}
+                            {profileUser?.store_url_2 && (
+                                <Microlink url={profileUser.store_url_2} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb' }} />
+                            )}
+                            {profileUser?.store_url_3 && (
+                                <Microlink url={profileUser.store_url_3} size="normal" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb' }} />
+                            )}
+                        </div>
+                    )}
+
                     {isMyProfile && !isEditing && <button onClick={() => setIsEditing(true)} style={STYLES.btnSecondary}>✏️ Edit</button>}
                 </div>
 
