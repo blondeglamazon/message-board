@@ -21,14 +21,18 @@ const proxyBackup = './proxy.ts.bak';
 const routeFile = './app/auth/callback/route.ts';
 const routeBackup = './app/auth/callback/route.ts.bak';
 
-// Target ONLY the specific AI folders, not the whole API folder!
+// Target ONLY the specific AI & Cron folders, not the whole API folder!
 const aiBioDir = './app/api/generate-bio';
 const aiBioBackup = './app/api/generate-bio-hidden';
+
+const cronDir = './app/api/cron';
+const cronBackup = './app/api/cron-hidden';
 
 // 🚨 SELF-HEALING
 if (fs.existsSync(proxyBackup) && !fs.existsSync(proxyFile)) fs.renameSync(proxyBackup, proxyFile);
 if (fs.existsSync(routeBackup) && !fs.existsSync(routeFile)) fs.renameSync(routeBackup, routeFile);
 if (fs.existsSync(aiBioBackup) && !fs.existsSync(aiBioDir)) fs.renameSync(aiBioBackup, aiBioDir);
+if (fs.existsSync(cronBackup) && !fs.existsSync(cronDir)) fs.renameSync(cronBackup, cronDir);
 
 console.log('🗑️ Clearing Next.js cache...');
 fs.rmSync('.next', { recursive: true, force: true });
@@ -48,6 +52,10 @@ try {
   if (fs.existsSync(aiBioDir)) {
     fs.renameSync(aiBioDir, aiBioBackup);
     console.log('✅ Temporarily hiding AI Bio route...');
+  }
+  if (fs.existsSync(cronDir)) {
+    fs.renameSync(cronDir, cronBackup);
+    console.log('✅ Temporarily hiding Cron route...');
   }
 
   // 2. Run the Next.js static build
@@ -80,6 +88,10 @@ try {
   if (fs.existsSync(aiBioBackup)) {
     fs.renameSync(aiBioBackup, aiBioDir);
     console.log('✅ AI Bio route restored!');
+  }
+  if (fs.existsSync(cronBackup)) {
+    fs.renameSync(cronBackup, cronDir);
+    console.log('✅ Cron route restored!');
   }
 
   if (buildFailed) process.exit(1);
