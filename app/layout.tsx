@@ -3,10 +3,10 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script' // Optimized script loader
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
+// 📱 ADDED: Import the PushManager to handle notifications silently in the background
+import PushManager from '@/components/PushManager'
 
 const inter = Inter({ subsets: ['latin'] })
-
-
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.vimciety.com'), // 👈 ADD THIS EXACT LINE
@@ -58,6 +58,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
         
+        {/* 📱 ADDED: Runs silently in the background to handle push tokens */}
+        <PushManager />
+
         {/* REQUIRED: Loads the Canva Button SDK efficiently */}
         <Script 
           src="https://sdk.canva.com/designbutton/v2/api.js" 
