@@ -21,14 +21,17 @@ const proxyBackup = './proxy.ts.bak';
 const routeFile = './app/auth/callback/route.ts';
 const routeBackup = './app/auth/callback/route.ts.bak';
 
-// Target ONLY the specific AI & Cron folders, not the whole API folder!
+// 🔥 THE FIX: Use an underscore so Next.js completely ignores these folders!
 const aiBioDir = './app/api/generate-bio';
-const aiBioBackup = './app/api/generate-bio-hidden';
+const aiBioBackup = './app/api/_generate-bio';
 
 const cronDir = './app/api/cron';
-const cronBackup = './app/api/cron-hidden';
+const cronBackup = './app/api/_cron';
 
-// 🚨 SELF-HEALING
+// 🚨 SELF-HEALING (Also check for the old -hidden folders just in case)
+if (fs.existsSync('./app/api/generate-bio-hidden')) fs.renameSync('./app/api/generate-bio-hidden', aiBioDir);
+if (fs.existsSync('./app/api/cron-hidden')) fs.renameSync('./app/api/cron-hidden', cronDir);
+
 if (fs.existsSync(proxyBackup) && !fs.existsSync(proxyFile)) fs.renameSync(proxyBackup, proxyFile);
 if (fs.existsSync(routeBackup) && !fs.existsSync(routeFile)) fs.renameSync(routeBackup, routeFile);
 if (fs.existsSync(aiBioBackup) && !fs.existsSync(aiBioDir)) fs.renameSync(aiBioBackup, aiBioDir);
@@ -69,7 +72,6 @@ try {
 } catch (error) {
   console.error('\n❌ Build failed! Here is the actual Next.js error:');
   
-  // 🔥 THIS WILL PRINT THE EXACT REASON NEXT.JS IS CRASHING!
   if (error.stdout) console.error(error.stdout.toString());
   if (error.stderr) console.error(error.stderr.toString());
   console.error(error.message);
