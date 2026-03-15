@@ -64,7 +64,7 @@ export default function RootLayout({
         {/* REQUIRED: Loads the Canva Button SDK efficiently */}
         <Script 
           src="https://sdk.canva.com/designbutton/v2/api.js" 
-          strategy="afterInteractive" 
+          strategy="lazyOnload" 
         />
         
         {/* The Sidebar (Navigation) */}

@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   // ✅ FIX #17: Proper CORS and Network Handling for Android
   server: {
     androidScheme: 'https',
-    cleartext: true
+    cleartext: false,
   },
 
   // (Optional) Space for your future AdMob/Push Notification configurations
