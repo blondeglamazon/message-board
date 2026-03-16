@@ -28,6 +28,10 @@ const aiBioBackup = './app/api/_generate-bio';
 const cronDir = './app/api/cron';
 const cronBackup = './app/api/_cron';
 
+// NEW: Hide the push notification route from mobile static export
+const sendPushDir = './app/api/send-push';
+const sendPushBackup = './app/api/_send-push';
+
 // 🚨 SELF-HEALING (Also check for the old -hidden folders just in case)
 if (fs.existsSync('./app/api/generate-bio-hidden')) fs.renameSync('./app/api/generate-bio-hidden', aiBioDir);
 if (fs.existsSync('./app/api/cron-hidden')) fs.renameSync('./app/api/cron-hidden', cronDir);
@@ -36,6 +40,7 @@ if (fs.existsSync(proxyBackup) && !fs.existsSync(proxyFile)) fs.renameSync(proxy
 if (fs.existsSync(routeBackup) && !fs.existsSync(routeFile)) fs.renameSync(routeBackup, routeFile);
 if (fs.existsSync(aiBioBackup) && !fs.existsSync(aiBioDir)) fs.renameSync(aiBioBackup, aiBioDir);
 if (fs.existsSync(cronBackup) && !fs.existsSync(cronDir)) fs.renameSync(cronBackup, cronDir);
+if (fs.existsSync(sendPushBackup) && !fs.existsSync(sendPushDir)) fs.renameSync(sendPushBackup, sendPushDir);
 
 console.log('🗑️ Clearing Next.js cache...');
 fs.rmSync('.next', { recursive: true, force: true });
@@ -59,6 +64,10 @@ try {
   if (fs.existsSync(cronDir)) {
     fs.renameSync(cronDir, cronBackup);
     console.log('✅ Temporarily hiding Cron route...');
+  }
+  if (fs.existsSync(sendPushDir)) {
+    fs.renameSync(sendPushDir, sendPushBackup);
+    console.log('✅ Temporarily hiding send-push route...');
   }
 
   // 2. Run the Next.js static build
@@ -94,6 +103,10 @@ try {
   if (fs.existsSync(cronBackup)) {
     fs.renameSync(cronBackup, cronDir);
     console.log('✅ Cron route restored!');
+  }
+  if (fs.existsSync(sendPushBackup)) {
+    fs.renameSync(sendPushBackup, sendPushDir);
+    console.log('✅ send-push route restored!');
   }
 
   if (buildFailed) process.exit(1);
