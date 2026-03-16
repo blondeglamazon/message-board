@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   try {
     const { receiverId, title, body } = await req.json();
 
-    // 3. Find ALL push tokens for this user (they might have an iPhone and an iPad)
+    // 3. Find ALL push tokens for this user
     const { data: tokens, error } = await supabase
       .from('push_tokens')
       .select('token')
@@ -33,17 +33,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No push tokens found for user' }, { status: 404 });
     }
 
-    // Extract just the token strings into an array
     const tokenArray = tokens.map(t => t.token);
 
-    // 4. Send the notification to ALL their devices via Firebase Multicast
+    // 4. Send the notification to ALL their devices
     const message = {
       notification: { title, body },
-      tokens: tokenArray, // Note: using 'tokens' (plural) here for multicast
+      tokens: tokenArray, 
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
     
+    // 🧹 5. STALE TOKEN CLEANUP
+    // Find any tokens that Firebase reports as unregistered/uninstalled
+    const tokensToDelete: string[] = [];
+    response.responses.forEach((resp, idx) => {
+      if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+        tokensToDelete.push(tokenArray[idx]);
+      }
+    });
+
+    // Delete all dead tokens from Supabase in one batch query
+    if (tokensToDelete.length > 0) {
+      await supabase
+        .from('push_tokens')
+        .delete()
+        .in('token', tokensToDelete);
+      console.log(`Cleaned up ${tokensToDelete.length} stale tokens.`);
+    }
+
     return NextResponse.json({ 
       success: true, 
       successCount: response.successCount,
