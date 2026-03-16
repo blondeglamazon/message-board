@@ -183,6 +183,17 @@ function ProfileContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
+  // ============================================================================
+  // 🧹 PREVENT MEMORY LEAKS ON MOBILE
+  // ============================================================================
+  useEffect(() => {
+    return () => {
+      if (postFilePreview) {
+        URL.revokeObjectURL(postFilePreview);
+      }
+    };
+  }, [postFilePreview]);
+
   useEffect(() => {
     const initNetwork = async () => {
         const status = await Network.getStatus();
@@ -280,12 +291,11 @@ function ProfileContent() {
     
     setIsGeneratingBio(true);
     try {
-      // Determine the correct API URL based on if the user is on the web or the mobile app
-const apiUrl = Capacitor.isNativePlatform() 
-  ? 'https://www.vimciety.com/api/generate-bio' 
-  : '/api/generate-bio';
+      const apiUrl = Capacitor.isNativePlatform() 
+        ? 'https://www.vimciety.com/api/generate-bio' 
+        : '/api/generate-bio';
 
-const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'bio', prompt: editForm.bio })
@@ -310,12 +320,11 @@ const response = await fetch(apiUrl, {
     
     setIsGeneratingPost(true);
     try {
-      // Determine the correct API URL based on if the user is on the web or the mobile app
-const apiUrl = Capacitor.isNativePlatform() 
-  ? 'https://www.vimciety.com/api/generate-bio' 
-  : '/api/generate-bio';
+      const apiUrl = Capacitor.isNativePlatform() 
+        ? 'https://www.vimciety.com/api/generate-bio' 
+        : '/api/generate-bio';
 
-const response = await fetch(apiUrl, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'post', prompt: postTopic, tone: postTone })
@@ -397,7 +406,9 @@ const response = await fetch(apiUrl, {
 
   function clearFile() {
     setPostFile(null);
-    if (postFilePreview) URL.revokeObjectURL(postFilePreview);
+    if (postFilePreview) {
+      URL.revokeObjectURL(postFilePreview);
+    }
     setPostFilePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -436,13 +447,41 @@ const response = await fetch(apiUrl, {
       }});
   }
 
+  // ============================================================================
+  // ❤️ LIKE WITH PUSH NOTIFICATION
+  // ============================================================================
   async function handleLike(postId: string, isLiked: boolean) {
     if (!currentUser || isOffline || actionLoading[`like-${postId}`]) return;
     setActionLoading(prev => ({...prev, [`like-${postId}`]: true}))
+    
+    // Find the post to get the receiver's ID
+    const targetPost = posts.find(p => p.id === postId);
+
     setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, likes: isLiked ? msg.likes.filter((l: any) => l.user_id !== currentUser.id) : [...(msg.likes || []), { user_id: currentUser.id }] } : msg));
+    
     try {
-        if (isLiked) await supabase.from('likes').delete().match({ user_id: currentUser.id, post_id: postId });
-        else await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId });
+        if (isLiked) {
+          await supabase.from('likes').delete().match({ user_id: currentUser.id, post_id: postId });
+        } else {
+          await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId });
+          
+          // 🚀 TRIGGER NOTIFICATION (Only if it's not our own post)
+          if (targetPost && targetPost.user_id !== currentUser.id) {
+            const pushUrl = Capacitor.isNativePlatform() 
+              ? 'https://www.vimciety.com/api/send-push' 
+              : '/api/send-push';
+
+            fetch(pushUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                receiverId: targetPost.user_id,
+                title: "New Like! ❤️",
+                body: `${currentUser.display_name || 'Someone'} liked your post.`
+              })
+            }).catch(err => console.error("Push failed", err));
+          }
+        }
     } catch (err) {}
     setActionLoading(prev => ({...prev, [`like-${postId}`]: false}))
   }
@@ -452,16 +491,39 @@ const response = await fetch(apiUrl, {
     setOpenComments(newSet);
   }
 
+  // ============================================================================
+  // 💬 COMMENT WITH PUSH NOTIFICATION
+  // ============================================================================
   async function handlePostComment(postId: string) {
     if (!currentUser || isOffline) return;
     const cleanText = DOMPurify.sanitize(commentText[postId] || '', { ALLOWED_TAGS: [] }).trim()
     if (!cleanText) return;
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: true}))
     
+    // Find the post for the receiver ID
+    const targetPost = posts.find(p => p.id === postId);
+
     const { data } = await supabase.from('comments').insert({ post_id: postId, user_id: currentUser.id, email: currentUser.email, content: cleanText }).select().single()
     if (data) {
         setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), data] } : msg));
         setCommentText(prev => ({ ...prev, [postId]: '' }));
+
+        // 🚀 TRIGGER NOTIFICATION (Only if it's not our own post)
+        if (targetPost && targetPost.user_id !== currentUser.id) {
+          const pushUrl = Capacitor.isNativePlatform() 
+            ? 'https://www.vimciety.com/api/send-push' 
+            : '/api/send-push';
+
+          fetch(pushUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              receiverId: targetPost.user_id,
+              title: "New Comment! 💬",
+              body: `${currentUser.display_name || 'Someone'}: ${cleanText.substring(0, 50)}${cleanText.length > 50 ? '...' : ''}`
+            })
+          }).catch(err => console.error("Push failed", err));
+        }
     }
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: false}))
   }
