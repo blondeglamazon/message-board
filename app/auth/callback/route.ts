@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   
-  // if "next" is in param, use it as the redirect URL
+  // if "next" is in param, use it as the redirect URL, default to '/profile'
   const next = searchParams.get('next') ?? '/profile'
   
   if (code) {
@@ -36,21 +36,25 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      // ✅ MOBILE COMPLIANCE: Check if the 'next' param is a native deep link (vimciety://) 
-      // or an absolute URL. If it is, bounce them straight back to the mobile app!
-      const isAbsoluteUrl = next.startsWith('http://') || next.startsWith('https://') || next.includes('://');
+      // ✅ MOBILE COMPLIANCE & SECURITY FIX
+      // Explicitly check for your native deep link scheme to safely bounce back to the app.
+      const isMobileDeepLink = next.startsWith('vimciety://');
       
-      if (isAbsoluteUrl) {
+      if (isMobileDeepLink) {
         return NextResponse.redirect(next)
       }
       
-      // Otherwise, it's a standard web relative path (e.g. '/profile')
-      return NextResponse.redirect(`${origin}${next}`)
+      // Prevent "Open Redirect" attacks: Ensure standard web redirects only go to your own domain (must start with "/")
+      const safeNext = next.startsWith('/') ? next : '/profile';
+      
+      return NextResponse.redirect(`${origin}${safeNext}`)
     } else {
       console.error("Auth Callback Error:", error.message)
+      // Pass the specific error back to the UI so the user knows what went wrong (e.g., link expired)
+      return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`)
     }
   }
 
-  // If there's an error or no code, redirect to the login page with an error parameter
+  // If there's no code, redirect to the login page
   return NextResponse.redirect(`${origin}/login?error=CouldNotAuthenticate`)
 }

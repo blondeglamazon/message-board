@@ -137,7 +137,11 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        // 🚨 CRITICAL FOR CAPACITOR: 
+        // We hardcode the live domain here. If we use window.location.origin on mobile, 
+        // it will send a broken "capacitor://localhost" link to their email.
+        // This routes them through your Auth bridge to securely establish the session!
+        redirectTo: 'https://www.vimciety.com/auth/callback?next=/reset-password',
       })
       if (error) throw error
       showToast('Password reset link sent! Check your email.')
