@@ -247,17 +247,34 @@ export default function Sidebar() {
           )}
         </div>
         
-        <div style={{ flex: 1 }} />
+       <div style={{ flex: 1 }} />
         
-        <div onClick={() => { setIsOpen(false); router.push('/settings'); }} style={{ cursor: 'pointer', ...iconStyle(pathname === '/settings') }}>⚙️</div>
+        {/* Referral Program Link */}
+        <div 
+          onClick={() => { setIsOpen(false); router.push('/referral'); }} 
+          style={{ cursor: 'pointer', ...iconStyle(pathname === '/referral') }}
+          title="Referral Program"
+        >
+          🎁
+        </div>
 
-{/* Privacy Policy Sidebar Link */}
-      <div style={{ marginTop: 'auto', paddingBottom: '20px', textAlign: 'center' }}>
-        <Link href="/privacy" style={{ color: '#9ca3af', fontSize: '12px', textDecoration: 'none' }}>
-          Privacy
-        </Link>
-      </div>
+        {/* Settings Link */}
+        <div 
+          onClick={() => { setIsOpen(false); router.push('/settings'); }} 
+          style={{ cursor: 'pointer', ...iconStyle(pathname === '/settings') }}
+          title="Settings"
+        >
+          ⚙️
+        </div>
+
+        {/* Privacy Policy Sidebar Link */}
+        <div style={{ marginTop: 'auto', paddingBottom: '20px', textAlign: 'center' }}>
+          <Link href="/privacy" style={{ color: '#9ca3af', fontSize: '12px', textDecoration: 'none' }}>
+            Privacy
+          </Link>
+        </div>
       
+        {/* Sign Out Button */}
         {user && (
           <button 
             onClick={handleSignOut} 
@@ -267,7 +284,7 @@ export default function Sidebar() {
             🚪
           </button>
         )} 
-        </div>
+      </div>
     </>
   )
 }
