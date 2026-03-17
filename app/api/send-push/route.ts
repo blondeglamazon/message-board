@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import admin from 'firebase-admin';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+
 // 1. Initialize Firebase Admin safely
 if (!admin.apps.length) {
   admin.initializeApp({
