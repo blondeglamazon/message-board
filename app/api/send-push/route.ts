@@ -1,28 +1,29 @@
 import { NextResponse } from 'next/server';
-import admin from 'firebase-admin';
 import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
-// 1. Initialize Firebase Admin safely
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-// 2. Initialize Supabase Admin client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(req: Request) {
   try {
+    // 1. Lazy-load Firebase Admin ONLY when a notification is actually being sent!
+    const admin = await import('firebase-admin');
+    
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        }),
+      });
+    }
+
+    // 2. Initialize Supabase Admin client safely inside the handler
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     const { receiverId, title, body } = await req.json();
 
     // 3. Find ALL push tokens for this user
@@ -69,8 +70,8 @@ export async function POST(req: Request) {
       failureCount: response.failureCount 
     });
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error sending push notification:', error);
-    return NextResponse.json({ error: 'Failed to send notification' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'Failed to send notification' }, { status: 500 });
   }
 }
