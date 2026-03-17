@@ -7,7 +7,8 @@ import DOMPurify from 'isomorphic-dompurify'
 import Sidebar from '@/components/Sidebar'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core'
+import ReferralDashboard from '@/components/ReferralDashboard';
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -837,8 +838,16 @@ function ProfileContent() {
 
 export default function ProfilePage() {
   return (
-    <Suspense fallback={<div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading...</div>}>
-      <ProfileContent />
-    </Suspense>
+    <>
+      <Suspense fallback={<div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading...</div>}>
+        <ProfileContent />
+      </Suspense>
+
+      {/* Referral Dashboard Section */}
+      <div style={{ padding: '0 20px', maxWidth: '640px', margin: '40px auto' }}>
+        <hr style={{ borderColor: '#374151', marginBottom: '40px' }} />
+        <ReferralDashboard />
+      </div>
+    </>
   )
 }
