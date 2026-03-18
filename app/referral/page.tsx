@@ -1,5 +1,6 @@
 import ReferralDashboard from '@/components/ReferralDashboard'
 import StripeConnectButton from '@/components/StripeConnectButton'
+import BuyButton from '@/components/BuyButton' // <-- Import is here!
 import { createClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
@@ -41,6 +42,17 @@ export default async function ReferralPage() {
           <p style={{ color: '#A7F3D0', fontSize: '14px', lineHeight: '1.5', margin: 0 }}>
             Your bank account is successfully linked with Stripe! You are officially ready to sell merch, digital downloads, and subscriptions to your followers.
           </p>
+
+          {/* --- THE TEST BUY BUTTON IS NESTED SAFELY IN HERE --- */}
+          <div style={{ marginTop: '24px', padding: '16px', backgroundColor: '#022C22', borderRadius: '8px' }}>
+            <p style={{ color: '#A7F3D0', fontSize: '13px', marginBottom: '8px', fontWeight: 'bold' }}>🧪 TEST A FAKE TRANSACTION:</p>
+            <BuyButton 
+              sellerId={user.id}         
+              priceInCents={500}         
+              title="Digital Shoutout"   
+            />
+          </div>
+
         </div>
       ) : (
         <StripeConnectButton />
