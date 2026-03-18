@@ -57,7 +57,7 @@ export async function GET() {
       paid = referrals.filter(r => r.status === 'paid').length;
       
       // Calculate the total money earned! (Assuming $5 per successful referral)
-      earned = paid * 5; 
+      earned = paid * 0.05; 
     }
 
     // 6. Return the calculated stats PLUS the generated link
