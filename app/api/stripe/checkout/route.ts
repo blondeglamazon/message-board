@@ -45,6 +45,10 @@ export async function POST(req: Request) {
         },
       ],
       mode: 'payment',
+      metadata: {
+        sellerId: sellerId,
+        itemName: title,
+      },
       // THIS IS THE MAGIC PART: Routing the money!
       payment_intent_data: {
         application_fee_amount: platformFee, // 10% goes to VIMciety
