@@ -2,20 +2,14 @@
 
 import { useState } from 'react'
 
-// This tells the button to expect a userId to be passed into it
-export default function StripeConnectButton({ userId }: { userId: string }) {
+export default function StripeConnectButton() {
   const [loading, setLoading] = useState(false)
 
   const handleConnect = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/stripe/onboard', { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Here, the button sends that specific user's ID to the backend
-        body: JSON.stringify({ userId: userId }) 
-      })
-      
+      // Look how clean this is! No ID needed, the backend handles it via cookies.
+      const res = await fetch('/api/stripe/onboard', { method: 'POST' })
       const data = await res.json()
       
       if (data.url) {
