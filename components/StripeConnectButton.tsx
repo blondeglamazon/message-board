@@ -2,18 +2,23 @@
 
 import { useState } from 'react'
 
-export default function StripeConnectButton() {
+// This tells the button to expect a userId to be passed into it
+export default function StripeConnectButton({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(false)
 
   const handleConnect = async () => {
     setLoading(true)
     try {
-      // Calls the backend API route we created to generate the Stripe link
-      const res = await fetch('/api/stripe/onboard', { method: 'POST' })
+      const res = await fetch('/api/stripe/onboard', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Here, the button sends that specific user's ID to the backend
+        body: JSON.stringify({ userId: userId }) 
+      })
+      
       const data = await res.json()
       
       if (data.url) {
-        // Redirect the user to the secure Stripe onboarding page
         window.location.href = data.url
       } else {
         alert(data.error || 'Failed to generate onboarding link')
