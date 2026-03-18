@@ -24,6 +24,7 @@
     "@google-cloud/vision": "^5.3.4",
     "@google/generative-ai": "^0.24.1",
     "@microlink/react": "^5.5.24",
+    "@stripe/stripe-js": "^8.10.0",
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.99.1",
@@ -36,7 +37,8 @@
     "next": "16.1.5",
     "nsfwjs": "^4.2.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "stripe": "^20.4.1"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
