@@ -10,13 +10,13 @@ interface ReferralEntry {
 }
 
 interface ReferralStats {
-  referral_code: string | null
+  link: string // <-- Added this so it matches the backend!
   total_referrals: number
   pending_referrals: number
   paid_referrals: number
-  rejected_referrals: number
+  rejected_referrals?: number
   total_earned: number
-  recent_referrals: ReferralEntry[] | null
+  recent_referrals?: ReferralEntry[] | null
 }
 
 export default function ReferralDashboard() {
@@ -26,7 +26,6 @@ export default function ReferralDashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      // This line is where the frontend calls the backend API we just moved in Step 1!
       const res = await fetch('/api/referral/stats') 
       const data = await res.json()
       setStats(data)
@@ -41,12 +40,10 @@ export default function ReferralDashboard() {
     fetchStats()
   }, [fetchStats])
 
-  const buildReferralLink = (code: string) => `https://www.vimciety.com/login?ref=${code}`
-
   const copyLink = async () => {
-    if (!stats?.referral_code) return
-    const link = buildReferralLink(stats.referral_code)
-    await navigator.clipboard.writeText(link)
+    // Check for the correct 'link' property now
+    if (!stats?.link) return
+    await navigator.clipboard.writeText(stats.link)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -93,7 +90,7 @@ export default function ReferralDashboard() {
           <input
             type="text"
             readOnly
-            value={stats?.referral_code ? buildReferralLink(stats.referral_code) : 'Loading...'}
+            value={stats?.link || 'Loading...'} // <-- Perfectly points to the backend link!
             style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #4B5563', fontSize: 13, color: 'white', backgroundColor: '#374151' }}
           />
           <button
