@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@/app/lib/supabase/server'; // Adjust if your path is different
 
-// Initialize Stripe with the exact version your SDK is asking for
+export async function POST(req: Request) {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-02-25.clover',
 });
 
-export async function POST(req: Request) {
+
+
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
