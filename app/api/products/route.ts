@@ -6,12 +6,10 @@ export async function POST(req: Request) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    // 1. Security Check: Are they logged in?
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    // 2. Grab the data from the frontend form
     const body = await req.json()
     const { title, price_in_cents, description } = body
 
@@ -19,9 +17,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Title and Price are required' }, { status: 400 })
     }
 
-    // 3. Insert the new product into the database!
-    // Notice we securely force the seller_id to be the logged-in user's ID
-    const { data, error } = await supabase
+    // 1. Insert the new product into the database
+    const { data: product, error: productError } = await supabase
       .from('products')
       .insert([
         { 
@@ -34,10 +31,31 @@ export async function POST(req: Request) {
       .select()
       .single()
 
-    if (error) throw error
+    if (productError) throw productError
 
-    // 4. Send the successful product back to the UI
-    return NextResponse.json({ product: data })
+    // 2. THE MAGIC: Auto-generate a post for the feed!
+    // Format the price back to dollars for the post text
+    const displayPrice = (price_in_cents / 100).toFixed(2)
+    const postContent = `🛒 I just launched a new product: **${title}** for $${displayPrice}! \n\n${description || 'Check out my storefront to get it now!'}`
+
+    // Insert into your posts table (Note: change 'user_id' to 'author_id' if that's what your table uses!)
+    const { error: postError } = await supabase
+      .from('posts')
+      .insert([
+        {
+          user_id: user.id, // <-- Make sure this matches your posts table column name!
+          content: postContent,
+          // If your posts table has a 'type' or 'product_id' column, you can link it here!
+        }
+      ])
+
+    if (postError) {
+      console.error("Product created, but failed to auto-post:", postError)
+      // We don't throw an error here so the product still successfully creates even if the post fails
+    }
+
+    // 3. Send the successful product back to the UI
+    return NextResponse.json({ product })
 
   } catch (err: any) {
     console.error('Create Product API error:', err)

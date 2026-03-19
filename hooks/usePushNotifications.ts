@@ -2,11 +2,9 @@ import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
-// 🚀 ACCEPT SUPABASE AS A PARAMETER
 export const usePushNotifications = (userId: string | null, supabase: any) => {
   
   useEffect(() => {
-    // Only run this on native iOS/Android, and only if we have a user and database client
     if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
 
     const setupPushNotifications = async () => {
@@ -20,18 +18,24 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         return;
       }
 
-      await PushNotifications.register();
-
+      // 1️⃣ ALWAYS ATTACH THE LISTENER FIRST!
       PushNotifications.addListener('registration', async (token) => {
         console.log('Push registration success! Token: ' + token.value);
         
-        // 💾 SAVE TO SUPABASE (Using the client passed from PushManager)
-        await supabase.from('push_tokens').upsert({
+        // 💾 SAVE TO SUPABASE
+        const { error } = await supabase.from('push_tokens').upsert({
           user_id: userId,
           token: token.value,
           platform: Capacitor.getPlatform(),
           updated_at: new Date().toISOString()
         }, { onConflict: 'token' }); 
+        
+        // 2️⃣ LOG DATABASE ERRORS IF SUPABASE REJECTS IT
+        if (error) {
+          console.error('Supabase failed to save token:', error.message);
+        } else {
+          console.log('Token perfectly saved to database!');
+        }
       });
 
       PushNotifications.addListener('registrationError', (error) => {
@@ -46,6 +50,9 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         console.log('Push action performed: ', notification);
         window.location.href = '/notifications';
       });
+
+      // 3️⃣ NOW TELL THE OS TO GET THE TOKEN
+      await PushNotifications.register();
     };
 
     setupPushNotifications();

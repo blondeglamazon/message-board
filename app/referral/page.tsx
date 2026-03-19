@@ -1,11 +1,11 @@
 import ReferralDashboard from '@/components/ReferralDashboard'
 import StripeConnectButton from '@/components/StripeConnectButton'
-import CreateProductForm from '@/components/CreateProductForm' // <-- Added the new form!
+import CreateProductForm from '@/components/CreateProductForm'
+import Storefront from '@/components/Storefront' // <-- 1. Imported the Storefront
 import { createClient } from '@/app/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export default async function ReferralPage() {
-  // 1. Get the current logged-in user
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -13,14 +13,12 @@ export default async function ReferralPage() {
     redirect('/login')
   }
 
-  // 2. Check their profile to see if they already have a Stripe Account ID
   const { data: profile } = await supabase
     .from('profiles')
     .select('stripe_account_id')
     .eq('id', user.id)
     .single()
 
-  // 3. Create a simple boolean to know if they are connected
   const isStripeConnected = !!profile?.stripe_account_id
 
   return (
@@ -33,20 +31,22 @@ export default async function ReferralPage() {
         Manage your payouts, sell to your followers, and earn money for referring friends to VIMciety.
       </p>
 
-      {/* 4. MAGIC HAPPENS HERE: Conditionally render the UI */}
       {isStripeConnected ? (
-        <div style={{ padding: '24px', backgroundColor: '#064E3B', borderRadius: '12px', border: '1px solid #059669' }}>
-          <h3 style={{ color: 'white', marginBottom: '8px', fontSize: '18px', fontWeight: 600 }}>
-            ✅ Payouts Connected
-          </h3>
-          <p style={{ color: '#A7F3D0', fontSize: '14px', lineHeight: '1.5', margin: 0 }}>
-            Your bank account is successfully linked with Stripe! You are officially ready to sell merch, digital downloads, and subscriptions to your followers.
-          </p>
+        <>
+          <div style={{ padding: '24px', backgroundColor: '#064E3B', borderRadius: '12px', border: '1px solid #059669', marginBottom: '32px' }}>
+            <h3 style={{ color: 'white', marginBottom: '8px', fontSize: '18px', fontWeight: 600 }}>
+              ✅ Payouts Connected
+            </h3>
+            <p style={{ color: '#A7F3D0', fontSize: '14px', lineHeight: '1.5', margin: 0 }}>
+              Your bank account is successfully linked with Stripe! You are officially ready to sell merch, digital downloads, and subscriptions to your followers.
+            </p>
 
-          {/* --- THE NEW CREATE PRODUCT FORM REPLACES THE TEST BUTTON --- */}
-          <CreateProductForm />
+            <CreateProductForm />
+          </div>
 
-        </div>
+          {/* 2. Added the Storefront right below the green box! */}
+          <Storefront userId={user.id} />
+        </>
       ) : (
         <StripeConnectButton />
       )}

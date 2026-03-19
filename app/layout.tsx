@@ -5,6 +5,8 @@ import './globals.css'
 import Sidebar from '@/components/Sidebar'
 // 📱 ADDED: Import the PushManager to handle notifications silently in the background
 import PushManager from '@/components/PushManager'
+import TrackingSetup from '@/components/TrackingSetup'; // Adjust the path if needed
+
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -72,6 +74,7 @@ export default function RootLayout({
 
         {/* Main Content Wrapper */}
         <main className="main-content">
+          <TrackingSetup />
           {children}
         </main>
 
