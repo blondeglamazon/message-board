@@ -147,6 +147,7 @@ function ProfileContent() {
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({})
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
+  const [profileViews, setProfileViews] = useState(0) // 🔥 NEW STATE FOR VIEWS
   
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
@@ -230,7 +231,6 @@ function ProfileContent() {
       if (!profileData) { setLoading(false); return; }
       const userIdToFetch = profileData.id
 
-      // 🛡️ Added `is_verified` to the pull map
       const [allProfilesRes, blockDataRes, userPostsRes, firstPostRes, followersRes, followingRes, historyRes] = await Promise.all([
         supabase.from('profiles').select('id, username, display_name, avatar_url, is_admin, is_premium, is_verified, role'),
         (loggedInUser && loggedInUser.id !== userIdToFetch) ? supabase.from('blocks').select('id').eq('blocker_id', loggedInUser.id).eq('blocked_id', userIdToFetch).single() : Promise.resolve({ data: null }),
@@ -243,11 +243,7 @@ function ProfileContent() {
       
       const pMap: Record<string, any> = {}
       allProfilesRes.data?.forEach((p: any) => { 
-          pMap[p.id] = {
-              ...p,
-              // ⭐ Ensure admins look like premium users everywhere in the map
-              is_premium: p.is_admin ? true : p.is_premium
-          } 
+          pMap[p.id] = { ...p, is_premium: p.is_admin ? true : p.is_premium } 
       })
       setProfilesMap(pMap)
 
@@ -267,12 +263,25 @@ function ProfileContent() {
           bio: profileData?.bio || '', calendly_url: profileData?.calendly_url || '', google_calendar_url: profileData?.google_calendar_url || '', store_url: profileData?.store_url || '', store_url_2: profileData?.store_url_2 || '', store_url_3: profileData?.store_url_3 || '',
           is_admin: profileData?.is_admin || false,
           is_verified: profileData?.is_verified || false,
-          // ⭐ AUTOMATIC PREMIUM UPGRADE FOR ADMINS:
           is_premium: profileData?.is_admin ? true : (profileData?.is_premium || false)
       })
       
       if (loggedInUser && loggedInUser.id === userIdToFetch) {
           setEditForm({ ...profileData, display_name: profileData?.display_name || '' })
+      }
+
+      // 📈 SILENT TRACKER: LOG A PROFILE VIEW
+      if (loggedInUser && loggedInUser.id !== userIdToFetch) {
+        supabase.from('profile_views').insert({
+          profile_id: userIdToFetch,
+          viewer_id: loggedInUser.id
+        }).then(); // Fire and forget
+      }
+
+      // 🔥 FETCH RECENT VIEWS (Only if they are Premium or Admin)
+      if (profileData?.is_premium || profileData?.is_admin) {
+        const { data: viewCount } = await supabase.rpc('get_profile_views_30d', { p_id: userIdToFetch });
+        setProfileViews(viewCount || 0);
       }
 
       if (historyRes.data) {
@@ -688,6 +697,15 @@ function ProfileContent() {
                                     )}
                                 </div>
                             </div>
+
+                            {/* 🔥 THE NEW VIEW COUNTER BADGE FOR PREMIUM USERS */}
+                            {profileUser?.is_premium && (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '900', color: '#ea580c', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', padding: '4px 12px', borderRadius: '9999px', marginBottom: '10px' }} title="Profile views in the last 30 days">
+                                    <span>🔥</span>
+                                    <span>{profileViews} Views (30d)</span>
+                                </div>
+                            )}
+
                             <div style={{ display: 'flex', gap: '15px', marginBottom: '8px' }}>
                                 <div style={{ color: '#4b5563', fontSize: '15px' }}><strong style={{ color: '#111827' }}>{followerCount}</strong> Followers</div>
                                 <div style={{ color: '#4b5563', fontSize: '15px' }}><strong style={{ color: '#111827' }}>{followingCount}</strong> Following</div>

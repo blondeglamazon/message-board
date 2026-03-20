@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { deletePost } from '../actions' // 👈 Importing the secure server action
 
 export default function PostModeration() {
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null) // 👈 Added state to track the admin
   
   const supabase = createClient()
   const router = useRouter()
@@ -29,6 +31,8 @@ export default function PostModeration() {
 
       if (profile?.role !== 'admin') { router.push('/'); return }
 
+      setCurrentUser(user) // Save the user so we can pass their ID to server actions
+
       // Fetch Posts
       const { data, error } = await supabase
         .from('posts')
@@ -48,20 +52,21 @@ export default function PostModeration() {
     loadPosts()
   }, [router, supabase])
 
-  // 2. Handle Delete (Standard Client Function)
+  // 2. Handle Delete (Secure Server Action)
   const handleDelete = async (postId: string) => {
+    if (!currentUser) return;
     if (!confirm("Are you sure you want to delete this post?")) return
 
-    const { error } = await supabase
-      .from('posts')
-      .delete()
-      .eq('id', postId)
-
-    if (error) {
-      alert("Error deleting post: " + error.message)
-    } else {
-      // Update UI immediately
-      setPosts(currentPosts => currentPosts.filter(p => p.id !== postId))
+    try {
+      // 👈 Uses the secure server action to bypass RLS
+      const success = await deletePost(currentUser.id, postId)
+      
+      if (success) {
+        // Update UI immediately
+        setPosts(currentPosts => currentPosts.filter(p => p.id !== postId))
+      }
+    } catch (e: any) {
+      alert("Error deleting post: " + e.message)
     }
   }
 
@@ -75,7 +80,7 @@ export default function PostModeration() {
           <p className="text-gray-500">Review and manage community content.</p>
         </div>
         <Link href="/admin" className="text-sm text-blue-600 hover:underline mb-1">
-          ← Back to User Management
+          ← Back to Dashboard
         </Link>
       </header>
 

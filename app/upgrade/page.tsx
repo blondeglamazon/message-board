@@ -30,7 +30,7 @@ const TIERS = [
     badge: null
   },
   {
-    id: 'price_1TCoX04cqLiS65IRPQWpxnI4', 
+    id: 'price_1TCpjG4cqLiS65IR4ewgRreB', 
     name: 'VIM+',
     price: '$9.99',
     interval: '/mo',

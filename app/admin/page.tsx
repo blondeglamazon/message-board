@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { updateUserRole, deleteUser } from './actions' // Imports the client versions we just made
+import { updateUserRole, deleteUser } from './actions'
 
 export default function AdminDashboard() {
   const [profiles, setProfiles] = useState<any[]>([])
@@ -57,9 +57,12 @@ export default function AdminDashboard() {
   // --- Handlers (Client Side) ---
 
   const handleRoleToggle = async (userId: string, currentRole: string) => {
+    if (!currentUser) return;
     const newRole = currentRole === 'admin' ? 'user' : 'admin'
+    
     try {
-        const success = await updateUserRole(userId, newRole)
+        // Passed currentUser.id to satisfy the server action security check
+        const success = await updateUserRole(currentUser.id, userId, newRole)
         if (success) {
             // Manually update UI state
             setProfiles(prev => prev.map(p => p.id === userId ? { ...p, role: newRole } : p))
@@ -70,9 +73,12 @@ export default function AdminDashboard() {
   }
 
   const handleDelete = async (userId: string) => {
+    if (!currentUser) return;
     if(!confirm('Are you sure you want to delete this user? This cannot be undone.')) return
+    
     try {
-        const success = await deleteUser(userId)
+        // Passed currentUser.id to satisfy the server action security check
+        const success = await deleteUser(currentUser.id, userId)
         if (success) {
             // Manually remove from UI
             setProfiles(prev => prev.filter(p => p.id !== userId))
@@ -92,7 +98,11 @@ export default function AdminDashboard() {
           <p className="text-gray-500 text-sm">System overview and management.</p>
         </div>
         <div className="flex gap-3">
-          <button className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+          {/* Wired up the Moderate Content button! */}
+          <button 
+            onClick={() => router.push('/admin/reports')}
+            className="bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          >
             Moderate Content
           </button>
           <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium border border-blue-100">

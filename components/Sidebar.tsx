@@ -49,10 +49,10 @@ export default function Sidebar() {
       setUser(authUser)
 
       if (authUser) {
-        // Get Profile - ADDED THE NEW STORE AND CALENDAR URLS HERE
+        // Get Profile - ADDED is_admin and role here so we don't have to fetch twice!
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('username, avatar_url, calendly_url, google_calendar_url, store_url')
+          .select('username, avatar_url, calendly_url, google_calendar_url, store_url, is_admin, role')
           .eq('id', authUser.id)
           .single()
         
@@ -89,7 +89,7 @@ export default function Sidebar() {
     getData()
     
     return () => { mounted = false }
-  }, [])
+  }, [supabase])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -151,7 +151,7 @@ export default function Sidebar() {
           border: '1px solid #e5e7eb', 
           borderLeft: 'none', 
           borderRadius: '0 8px 8px 0',
-          zIndex: 9999, /* CHANGED THIS FROM 60 TO 9999 */
+          zIndex: 9999, 
           alignItems: 'center', 
           justifyContent: 'center',
           fontSize: '14px', 
@@ -177,7 +177,7 @@ export default function Sidebar() {
         alignItems: 'center', 
         padding: 'calc(20px + env(safe-area-inset-top)) 0 20px 0',
         borderRight: '1px solid #e5e7eb', 
-        zIndex: 9998, /* <--- CHANGED THIS TO 9998 */
+        zIndex: 9998, 
         transform: sidebarTransform,
         transition: 'transform 0.3s ease',
         boxShadow: (isMobile && isOpen) ? '4px 0 12px rgba(0,0,0,0.1)' : 'none'
@@ -186,7 +186,7 @@ export default function Sidebar() {
        {user && profile && (
           <div 
             onClick={() => {
-              setIsOpen(false); // Close sidebar on mobile when clicked
+              setIsOpen(false); 
               router.push(`/profile?u=${profile.username}`);
             }} 
             style={{ cursor: 'pointer', marginBottom: '20px', marginTop: '10px' }}
@@ -218,8 +218,6 @@ export default function Sidebar() {
               {unreadCount > 0 && <span style={badgeStyle}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
           </div>
 
-          {/* ----- SELLER / BUSINESS ICONS ADDED HERE ----- */}
-          
           {/* Scheduling Icon */}
           {(profile?.calendly_url || profile?.google_calendar_url) && (
             <a 
@@ -249,6 +247,17 @@ export default function Sidebar() {
         
        <div style={{ flex: 1 }} />
         
+        {/* ----- ADMIN PANEL ICON ----- */}
+        {(profile?.is_admin || profile?.role === 'admin') && (
+          <div 
+            onClick={() => { setIsOpen(false); router.push('/admin'); }} 
+            style={{ cursor: 'pointer', ...iconStyle(pathname?.startsWith('/admin')) }}
+            title="Admin Dashboard"
+          >
+            🛡️
+          </div>
+        )}
+
         {/* Referral Program Link */}
         <div 
           onClick={() => { setIsOpen(false); router.push('/referral'); }} 
