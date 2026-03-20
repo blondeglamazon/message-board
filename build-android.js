@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path'); // 👈 ADDED THIS!
 const { execSync } = require('child_process');
 
 // ==========================================================
@@ -21,6 +22,15 @@ const proxyBackup = './proxy.ts.bak';
 const routeFile = './app/auth/callback/route.ts';
 const routeBackup = './app/auth/callback/route.ts.bak';
 
+const referralDir = path.join(__dirname, 'app', 'api', 'referral');
+const referralBackup = path.join(__dirname, 'app', 'api', '_referral_hidden');
+
+const checkoutDir = path.join(__dirname, 'app', 'api', 'checkout');
+const checkoutBackup = path.join(__dirname, 'app', 'api', '_checkout_hidden');
+
+const webhooksDir = path.join(__dirname, 'app', 'api', 'webhooks');
+const webhooksBackup = path.join(__dirname, 'app', 'api', '_webhooks_hidden');
+
 // 🔥 THE FIX: Use an underscore so Next.js completely ignores these folders!
 const aiBioDir = './app/api/generate-bio';
 const aiBioBackup = './app/api/_generate-bio';
@@ -41,6 +51,11 @@ if (fs.existsSync(routeBackup) && !fs.existsSync(routeFile)) fs.renameSync(route
 if (fs.existsSync(aiBioBackup) && !fs.existsSync(aiBioDir)) fs.renameSync(aiBioBackup, aiBioDir);
 if (fs.existsSync(cronBackup) && !fs.existsSync(cronDir)) fs.renameSync(cronBackup, cronDir);
 if (fs.existsSync(sendPushBackup) && !fs.existsSync(sendPushDir)) fs.renameSync(sendPushBackup, sendPushDir);
+
+// 🚨 SELF-HEALING FOR NEW ROUTES
+if (fs.existsSync(referralBackup) && !fs.existsSync(referralDir)) fs.renameSync(referralBackup, referralDir);
+if (fs.existsSync(checkoutBackup) && !fs.existsSync(checkoutDir)) fs.renameSync(checkoutBackup, checkoutDir);
+if (fs.existsSync(webhooksBackup) && !fs.existsSync(webhooksDir)) fs.renameSync(webhooksBackup, webhooksDir);
 
 console.log('🗑️ Clearing Next.js cache...');
 fs.rmSync('.next', { recursive: true, force: true });
@@ -69,7 +84,21 @@ try {
     fs.renameSync(sendPushDir, sendPushBackup);
     console.log('✅ Temporarily hiding send-push route...');
   }
-
+  
+  // NEW: Hide the dynamic monetization routes
+  if (fs.existsSync(referralDir)) {
+    fs.renameSync(referralDir, referralBackup);
+    console.log('✅ Temporarily hiding referral route...');
+  }
+  if (fs.existsSync(checkoutDir)) {
+    fs.renameSync(checkoutDir, checkoutBackup);
+    console.log('✅ Temporarily hiding checkout route...');
+  }
+  if (fs.existsSync(webhooksDir)) {
+    fs.renameSync(webhooksDir, webhooksBackup);
+    console.log('✅ Temporarily hiding webhooks route...');
+  }
+  
   // 2. Run the Next.js static build
   console.log('🚀 Running mobile static build...\n');
   
@@ -107,6 +136,20 @@ try {
   if (fs.existsSync(sendPushBackup)) {
     fs.renameSync(sendPushBackup, sendPushDir);
     console.log('✅ send-push route restored!');
+  }
+
+  // 👈 ADDED THE RESTORATION LOGIC HERE
+  if (fs.existsSync(referralBackup)) {
+    fs.renameSync(referralBackup, referralDir);
+    console.log('✅ referral route restored!');
+  }
+  if (fs.existsSync(checkoutBackup)) {
+    fs.renameSync(checkoutBackup, checkoutDir);
+    console.log('✅ checkout route restored!');
+  }
+  if (fs.existsSync(webhooksBackup)) {
+    fs.renameSync(webhooksBackup, webhooksDir);
+    console.log('✅ webhooks route restored!');
   }
 
   if (buildFailed) process.exit(1);
