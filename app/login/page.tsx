@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { Capacitor } from '@capacitor/core'
 import { SocialLogin } from '@capgo/capacitor-social-login'
 
+// 💸 ADDED: Import RevenueCat to sync user IDs
+import { Purchases } from '@revenuecat/purchases-capacitor'
+
 // We wrap the main logic in this component so Next.js doesn't fail the build when using useSearchParams()
 function LoginContent() {
   const [supabase] = useState(() => createClient())
@@ -80,6 +83,16 @@ function LoginContent() {
 
         if (data?.session) {
           await supabase.auth.setSession(data.session)
+          
+          // 💸 ADDED: Tell RevenueCat exactly who just logged in via Social Auth
+          if (Capacitor.isNativePlatform() && data.session.user) {
+            try {
+              await Purchases.logIn({ appUserID: data.session.user.id });
+              console.log("✅ Synced Social User with RevenueCat");
+            } catch (rcError) {
+              console.error("RevenueCat Sync Error:", rcError);
+            }
+          }
         }
 
         window.location.href = '/';
@@ -122,8 +135,19 @@ function LoginContent() {
         if (error) throw error
         showToast('Check your email for the confirmation link!')
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
+        
+        // 💸 ADDED: Tell RevenueCat exactly who just logged in via Email
+        if (Capacitor.isNativePlatform() && data?.user) {
+          try {
+            await Purchases.logIn({ appUserID: data.user.id });
+            console.log("✅ Synced Email User with RevenueCat");
+          } catch (rcError) {
+            console.error("RevenueCat Sync Error:", rcError);
+          }
+        }
+
         router.push('/')
         router.refresh()
       }

@@ -3,15 +3,17 @@ import { Inter } from 'next/font/google'
 import Script from 'next/script' // Optimized script loader
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
-// 📱 ADDED: Import the PushManager to handle notifications silently in the background
+
+// 📱 Silent Background Managers
 import PushManager from '@/components/PushManager'
-import TrackingSetup from '@/components/TrackingSetup'; // Adjust the path if needed
+import TrackingSetup from '@/components/TrackingSetup';
+import RevenueCatSetup from '@/components/RevenueCatSetup'; // 👈 ADDED: RevenueCat Setup
 
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://www.vimciety.com'), // 👈 ADD THIS EXACT LINE
+  metadataBase: new URL('https://www.vimciety.com'), 
   title: 'VIMciety',
   description: 'Everything was once imagined. Join the VIMciety community today!',
   openGraph: {
@@ -21,7 +23,6 @@ export const metadata: Metadata = {
     siteName: 'VIMciety',
     images: [
       {
-        // Replace this URL with a direct link to your actual VIMciety logo or banner!
         url: 'https://www.vimciety.com/logo.png', 
         width: 1200,
         height: 630,
@@ -35,7 +36,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'VIMciety',
     description: 'Everything was once imagined. Join the VIMciety community today!',
-    images: ['https://www.vimciety.com/logo.png'], // Use the same image URL here
+    images: ['https://www.vimciety.com/logo.png'], 
   },
 }
 
@@ -48,7 +49,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#ffffff', // Sets the Android status bar color
+  themeColor: '#ffffff', 
 }
 
 export default function RootLayout({
@@ -62,6 +63,9 @@ export default function RootLayout({
         
         {/* 📱 ADDED: Runs silently in the background to handle push tokens */}
         <PushManager />
+
+        {/* 💸 ADDED: Initializes RevenueCat for iOS/Android Payments */}
+        <RevenueCatSetup />
 
         {/* REQUIRED: Loads the Canva Button SDK efficiently */}
         <Script 
