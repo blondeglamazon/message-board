@@ -18,7 +18,7 @@ const routesToHide = [
   { dir: './proxy.ts', backup: './proxy.ts.bak', name: 'proxy.ts' },
   { dir: './app/auth/callback/route.ts', backup: './app/auth/callback/route.ts.bak', name: 'auth route' },
   { dir: path.join(__dirname, 'app', 'api', 'generate-bio'), backup: path.join(__dirname, 'app', 'api', '_generate-bio'), name: 'AI Bio' },
-  //{ dir: path.join(__dirname, 'app', 'api', 'cron'), backup: path.join(__dirname, 'app', 'api', '_cron'), name: 'Cron' },
+  { dir: path.join(__dirname, 'app', 'api', 'cron'), backup: path.join(__dirname, 'app', 'api', '_cron'), name: 'Cron' },
   { dir: path.join(__dirname, 'app', 'api', 'send-push'), backup: path.join(__dirname, 'app', 'api', '_send-push'), name: 'Push' },
   { dir: path.join(__dirname, 'app', 'api', 'referral'), backup: path.join(__dirname, 'app', 'api', '_referral_hidden'), name: 'Referral' },
   { dir: path.join(__dirname, 'app', 'api', 'checkout'), backup: path.join(__dirname, 'app', 'api', '_checkout_hidden'), name: 'Checkout' },
