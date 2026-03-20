@@ -9,7 +9,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         // 👇 Hardcoded to 36 to match
         targetSdkVersion 36
-        versionCode 31
+        versionCode 32
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
