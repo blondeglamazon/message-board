@@ -1,7 +1,7 @@
 "use client"; // Required for useEffect in Next.js App Router
 
 import { useEffect } from 'react';
-import { Purchases, LOG_LEVEL } from '@revenuecat/purchases-capacitor'; // 👈 ADDED LOG_LEVEL HERE
+import { Purchases, LOG_LEVEL } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
 export default function RevenueCatSetup() {
@@ -10,13 +10,28 @@ export default function RevenueCatSetup() {
       // Ensure this ONLY runs on native iOS/Android, not in the web browser
       if (Capacitor.isNativePlatform()) {
         try {
-          // 👈 FIXED: Use the official LOG_LEVEL enum instead of a string
           await Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }); 
           
-          // Connect to your specific VIMciety project using your public Apple/Android API key
-          await Purchases.configure({ apiKey: "test_QtyadJZfVvfZmKKCgTsDiqoRtbu" });
+          // 📱 DETECT WHICH PHONE THE USER IS HOLDING
+          const platform = Capacitor.getPlatform();
+          let apiKey = "";
+
+          if (platform === 'ios') {
+            // 👇 Safely pulls your Apple key from Vercel/Appflow environments
+            apiKey = process.env.NEXT_PUBLIC_REVENUECAT_APPLE_KEY || ""; 
+          } else if (platform === 'android') {
+            // 👇 Safely pulls your Google key from Vercel/Appflow environments
+            apiKey = process.env.NEXT_PUBLIC_REVENUECAT_GOOGLE_KEY || ""; 
+          }
+
+          // Initialize if we have a valid key for the current platform
+          if (apiKey) {
+            await Purchases.configure({ apiKey });
+            console.log(`✅ RevenueCat configured successfully for ${platform}`);
+          } else {
+            console.warn(`⚠️ No RevenueCat API key configured for platform: ${platform}. Did you forget to add it to your environment variables?`);
+          }
           
-          console.log("✅ RevenueCat configured successfully");
         } catch (error) {
           console.error("❌ Failed to configure RevenueCat:", error);
         }

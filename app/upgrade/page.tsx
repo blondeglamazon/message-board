@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { Capacitor } from '@capacitor/core'
-import { createClient } from '@/app/lib/supabase/client' // 👈 ADDED THIS IMPORT
+import { createClient } from '@/app/lib/supabase/client'
+import { RevenueCatUI } from '@revenuecat/purchases-capacitor-ui'
 
 // ============================================================================
 // 🎨 CENTRALIZED STYLES (Matches your VIMciety Theme)
@@ -30,7 +31,8 @@ const TIERS = [
     badge: null
   },
   {
-    id: 'price_1TCpjG4cqLiS65IR4ewgRreB', 
+    // 👇 Safely pulls your Stripe Price ID from Vercel/Appflow
+    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VIM_PLUS || '', 
     name: 'VIM+',
     price: '$9.99',
     interval: '/mo',
@@ -42,7 +44,8 @@ const TIERS = [
     badge: 'MOST POPULAR'
   },
   {
-    id: 'price_1TCoWy4cqLiS65IR5lgih0CC', 
+    // 👇 Safely pulls your Stripe Price ID from Vercel/Appflow
+    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VERIFIED || '', 
     name: 'Verified',
     price: '$19.99',
     interval: '/mo',
@@ -74,21 +77,41 @@ export default function UpgradePage() {
 
   const handleUpgrade = async (tierId: string, tierName: string) => {
     if (tierId === 'free') return;
-    if (!currentUser) return showToast("Please log in to upgrade", 'error'); // 👈 ADDED LOGIN CHECK
     
+    // Safety check in case the environment variables didn't load
+    if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
+    
+    if (!currentUser) return showToast("Please log in to upgrade", 'error');
+    
+    // 📱 =========================================================
+    // NATIVE APP LOGIC (iOS & Android) - Triggers RevenueCat
+    // =========================================================
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await RevenueCatUI.presentPaywall(); 
+        return; 
+      } catch (error) {
+        console.error("RevenueCat Error:", error);
+        showToast("Could not load the upgrade screen.", "error");
+        return;
+      }
+    }
+
+    // 🌐 =========================================================
+    // WEB LOGIC - Triggers Stripe Checkout
+    // =========================================================
     setLoadingTier(tierId)
     
     try {
-      const apiUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com/api/checkout' : '/api/checkout';
+      const apiUrl = '/api/checkout';
       
-      // 🚀 UNCOMMENTED FETCH AND ADDED USER ID / TIER NAME!
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             priceId: tierId,
-            userId: currentUser.id, // Sends who is buying
-            tierName: tierName      // Sends what they are buying
+            userId: currentUser.id,
+            tierName: tierName
         })
       });
       
@@ -136,7 +159,7 @@ export default function UpgradePage() {
         }}>
           {TIERS.map((tier) => (
             <div 
-              key={tier.id}
+              key={tier.name}
               style={{
                 backgroundColor: '#1f2937',
                 borderRadius: '20px',
