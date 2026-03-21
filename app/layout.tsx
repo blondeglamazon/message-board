@@ -1,14 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
-import Script from 'next/script' // Optimized script loader
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
-
-// 📱 Silent Background Managers
-import PushManager from '@/components/PushManager'
-import TrackingSetup from '@/components/TrackingSetup';
-import RevenueCatSetup from '@/components/RevenueCatSetup'; // 👈 ADDED: RevenueCat Setup
-
+import NativeManagers from '@/components/NativeManagers';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -61,24 +55,14 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
         
-        {/* 📱 ADDED: Runs silently in the background to handle push tokens */}
-        <PushManager />
+        {/* 📱 ADDED: Silently boots up Push Notifications, Tracking, and RevenueCat in the background! */}
+        <NativeManagers />
 
-        {/* 💸 ADDED: Initializes RevenueCat for iOS/Android Payments */}
-        <RevenueCatSetup />
-
-        {/* REQUIRED: Loads the Canva Button SDK efficiently */}
-        <Script 
-          src="https://sdk.canva.com/designbutton/v2/api.js" 
-          strategy="lazyOnload" 
-        />
-        
         {/* The Sidebar (Navigation) */}
         <Sidebar />
 
         {/* Main Content Wrapper */}
         <main className="main-content">
-          <TrackingSetup />
           {children}
         </main>
 

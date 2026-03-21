@@ -26,56 +26,86 @@ const routesToHide = [
   { dir: path.join(__dirname, 'app', '[username]'), backup: path.join(__dirname, 'app', '_username_hidden'), name: '[username]' },
   { dir: path.join(__dirname, 'app', 'post', '[id]'), backup: path.join(__dirname, 'app', 'post', '_id_hidden'), name: 'post/[id]' },
   { dir: path.join(__dirname, 'app', 'post', '[postId]'), backup: path.join(__dirname, 'app', 'post', '_postId_hidden'), name: 'post/[postId]' },
-  
-  // 🛡️ NEW: Hide the Admin Panel from the mobile app build
   { dir: path.join(__dirname, 'app', 'admin'), backup: path.join(__dirname, 'app', '_admin_hidden'), name: 'Admin Dashboard' }
 ];
 
-// 3. SELF HEALING (In case a previous build crashed halfway)
-routesToHide.forEach(r => {
-  if (fs.existsSync(r.backup) && !fs.existsSync(r.dir)) {
-    fs.renameSync(r.backup, r.dir);
-  }
-});
+// Helper: Pause execution for X milliseconds
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-console.log('🗑️ Clearing Next.js cache...');
-fs.rmSync('.next', { recursive: true, force: true });
-
-let buildFailed = false;
-
-try {
-  console.log('🙈 Hiding dynamic routes...');
-  routesToHide.forEach(r => {
-    if (fs.existsSync(r.dir)) {
-      fs.renameSync(r.dir, r.backup);
-      console.log(`   ✅ Hid ${r.name}`);
+// Helper: Windows-proof rename function with automatic retries
+async function safeRename(oldPath, newPath) {
+  const maxRetries = 10;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (fs.existsSync(oldPath)) {
+        fs.renameSync(oldPath, newPath);
+      }
+      return; // Success! Exit the loop.
+    } catch (err) {
+      if (i === maxRetries - 1) throw err; // Out of retries, crash gracefully
+      
+      // If Windows file watcher locked it, wait 500ms and try again
+      if (err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') {
+        console.log(`   ⏳ Windows locked ${path.basename(oldPath)}, retrying... (Attempt ${i + 1}/${maxRetries})`);
+        await sleep(500); 
+      } else {
+        throw err; // A different error occurred
+      }
     }
-  });
-
-  console.log('⚡ Running Next.js build...');
-  execSync('npx next build', {
-    stdio: 'inherit',
-    env: { ...process.env, MOBILE_BUILD: 'true' }
-  });
-  console.log('✅ Next.js build completed successfully!');
-
-} catch (error) {
-  console.error('\n❌ BUILD CRASHED!');
-  if (error.stdout) console.error(error.stdout.toString());
-  if (error.stderr) console.error(error.stderr.toString());
-  console.error(error.message);
-  buildFailed = true;
-} finally {
-  console.log('♻️ Restoring dynamic routes...');
-  routesToHide.forEach(r => {
-    if (fs.existsSync(r.backup)) {
-      fs.renameSync(r.backup, r.dir);
-      console.log(`   ✅ Restored ${r.name}`);
-    }
-  });
-
-  if (buildFailed) {
-    console.error('🛑 Exiting with error code 1.');
-    process.exit(1);
   }
 }
+
+// 3. MAIN ASYNC EXECUTION
+async function runBuild() {
+  // SELF HEALING (In case a previous build crashed halfway)
+  for (const r of routesToHide) {
+    if (fs.existsSync(r.backup) && !fs.existsSync(r.dir)) {
+      await safeRename(r.backup, r.dir);
+    }
+  }
+
+  console.log('🗑️ Clearing Next.js cache...');
+  fs.rmSync('.next', { recursive: true, force: true });
+
+  let buildFailed = false;
+
+  try {
+    console.log('🙈 Hiding dynamic routes...');
+    for (const r of routesToHide) {
+      if (fs.existsSync(r.dir)) {
+        await safeRename(r.dir, r.backup);
+        console.log(`   ✅ Hid ${r.name}`);
+      }
+    }
+
+    console.log('⚡ Running Next.js build...');
+    execSync('npx next build', {
+      stdio: 'inherit',
+      env: { ...process.env, MOBILE_BUILD: 'true' }
+    });
+    console.log('✅ Next.js build completed successfully!');
+
+  } catch (error) {
+    console.error('\n❌ BUILD CRASHED!');
+    if (error.stdout) console.error(error.stdout.toString());
+    if (error.stderr) console.error(error.stderr.toString());
+    console.error(error.message);
+    buildFailed = true;
+  } finally {
+    console.log('♻️ Restoring dynamic routes...');
+    for (const r of routesToHide) {
+      if (fs.existsSync(r.backup)) {
+        await safeRename(r.backup, r.dir);
+        console.log(`   ✅ Restored ${r.name}`);
+      }
+    }
+
+    if (buildFailed) {
+      console.error('🛑 Exiting with error code 1.');
+      process.exit(1);
+    }
+  }
+}
+
+// Start the sequence
+runBuild();

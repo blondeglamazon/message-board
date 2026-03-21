@@ -4,6 +4,7 @@ android {
     namespace = "com.vimciety.app"
     // 👇 THE NUCLEAR OPTION: Hardcoded to 36 so nothing can override it
     compileSdk = 36
+    
     defaultConfig {
         applicationId "com.vimciety.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -12,14 +13,22 @@ android {
         versionCode 32
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+        
+        // 👇 FIXED: Moved out of aaptOptions!
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
     }
+    
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -53,6 +62,7 @@ try {
 } catch(Exception ignored) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
 // Force all Capacitor plugins to use API 36 to fix the browser 1.9.0 error
 subprojects {
     afterEvaluate { project ->

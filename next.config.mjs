@@ -1,3 +1,9 @@
+import withBundleAnalyzer from '@next/bundle-analyzer';
+
+const bundleAnalyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ==========================================================
@@ -6,7 +12,6 @@ const nextConfig = {
   // ✅ MAGIC TOGGLE: Automatically turns on static export ONLY during mobile builds!
   // Vercel will ignore this and safely deploy your API routes.
   output: process.env.MOBILE_BUILD === 'true' ? 'export' : undefined, 
-  productionBrowserSourceMaps: false,
 
   images: {
     // Automatically disables Next.js image optimization ONLY for mobile apps
@@ -59,4 +64,5 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap your existing config with the analyzer before exporting
+export default bundleAnalyzer(nextConfig);

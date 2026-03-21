@@ -6,8 +6,6 @@ import { createBrowserClient } from '@supabase/auth-helpers-nextjs';
 export default function PushManager() {
   const [userId, setUserId] = useState<string | null>(null);
 
-  // 👇 Feed the URL and Key directly into the client!
-  // The "!" at the end tells TypeScript "I promise these environment variables exist"
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -23,7 +21,6 @@ export default function PushManager() {
     getUser();
   }, [supabase]);
 
-  // 🚀 Pass BOTH the userId and the supabase client into the hook
   usePushNotifications(userId, supabase);
 
   return null; 

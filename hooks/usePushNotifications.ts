@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
+// The "export const" right here is what fixes your error!
 export const usePushNotifications = (userId: string | null, supabase: any) => {
   
   useEffect(() => {

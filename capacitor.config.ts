@@ -11,9 +11,11 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
 
-  // (Optional) Space for your future AdMob/Push Notification configurations
+  // ✅ FIX #1: Push Notification configurations
   plugins: {
-    // AdMob config can go here if you decide to use advanced Capacitor-AdMob features later
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"]
+    }
   }
 };
 

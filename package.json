@@ -11,7 +11,7 @@
     "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
-    "@canva/app-ui-kit": "^5.5.0",
+    "@babel/runtime": "^7.29.2",
     "@canva/intents": "^2.1.2",
     "@capacitor-community/admob": "^8.0.0",
     "@capacitor/android": "^8.1.0",
@@ -46,6 +46,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.1.0",
+    "@next/bundle-analyzer": "^16.2.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

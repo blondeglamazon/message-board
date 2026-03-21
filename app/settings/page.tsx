@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import CanvaDesignButton from '@/components/CanvaDesignButton'
+
 
 export default function SettingsPage() {
   const supabase = createClient()
@@ -149,30 +149,7 @@ export default function SettingsPage() {
             <input name="soundcloud_url" value={formData.soundcloud_url} onChange={handleChange} style={inputStyle} placeholder="https://soundcloud.com/..." />
         </div>
 
-        {/* --- CANVA SECTION --- */}
-        <div>
-            <label style={labelStyle}>Canva Design ID</label>
-            <input 
-              name="canva_design_id"
-              value={formData.canva_design_id} 
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder="Design ID will appear here..."
-            />
-            {/* The Design Button */}
-            <CanvaDesignButton onSave={handleCanvaSave} />
-        </div>
-
-        <button 
-          type="submit"
-          disabled={saving}
-          style={{ 
-            padding: '14px', background: '#6366f1', color: 'white', border: 'none', borderRadius: '10px',
-            cursor: saving ? 'not-allowed' : 'pointer', fontSize: '16px', fontWeight: 'bold', marginTop: '10px'
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Profile Changes'}
-        </button>
+        
       </form>
 
       {/* --- LEGAL & ACCOUNT SECTION (REQUIRED FOR APP STORE) --- */}
