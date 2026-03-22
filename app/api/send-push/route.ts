@@ -1,33 +1,38 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import * as admin from 'firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
+// 1. Initialize Firebase Admin securely outside the handler (prevents memory leaks on cold starts)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
 export async function POST(req: Request) {
   try {
-    // 1. Lazy-load Firebase Admin ONLY when a notification is actually being sent!
-    const admin = await import('firebase-admin');
-    
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-      });
-    }
-
-    // 2. Initialize Supabase Admin client safely inside the handler
-    const supabase = createClient(
+    // 2. Initialize Supabase Admin client
+    // ⚠️ CRITICAL: Must use the SERVICE_ROLE_KEY to bypass RLS and read all push tokens!
+    const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { receiverId, title, body } = await req.json();
+    // Added optional `data` payload so your frontend can do deep-linking (like opening a post)
+    const { receiverId, title, body, data } = await req.json();
+
+    if (!receiverId || !title || !body) {
+      return NextResponse.json({ error: 'Missing required fields: receiverId, title, body' }, { status: 400 });
+    }
 
     // 3. Find ALL push tokens for this user
-    const { data: tokens, error } = await supabase
+    const { data: tokens, error } = await supabaseAdmin
       .from('push_tokens')
       .select('token')
       .eq('user_id', receiverId);
@@ -41,13 +46,13 @@ export async function POST(req: Request) {
     // 4. Send the notification to ALL their devices
     const message = {
       notification: { title, body },
+      data: data || {}, // Add the data payload here!
       tokens: tokenArray, 
     };
 
     const response = await admin.messaging().sendEachForMulticast(message);
     
     // 🧹 5. STALE TOKEN CLEANUP
-    // Find any tokens that Firebase reports as unregistered/uninstalled
     const tokensToDelete: string[] = [];
     response.responses.forEach((resp, idx) => {
       if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
@@ -57,7 +62,7 @@ export async function POST(req: Request) {
 
     // Delete all dead tokens from Supabase in one batch query
     if (tokensToDelete.length > 0) {
-      await supabase
+      await supabaseAdmin
         .from('push_tokens')
         .delete()
         .in('token', tokensToDelete);

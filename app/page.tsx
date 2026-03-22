@@ -7,6 +7,8 @@ import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
+import { PushNotifications } from '@capacitor/push-notifications'
+import { Capacitor } from '@capacitor/core'
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -58,6 +60,47 @@ function MessageBoardContent() {
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
+
+  // --- PUSH NOTIFICATION SETUP ---
+  const setupPushNotifications = async (userId: string, supabaseClient: any) => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      let permStatus = await PushNotifications.checkPermissions();
+      if (permStatus.receive === 'prompt') {
+        permStatus = await PushNotifications.requestPermissions();
+      }
+      if (permStatus.receive !== 'granted') {
+        console.log('User denied push permission');
+        return; 
+      }
+
+      await PushNotifications.register();
+
+      // Clear old listeners to prevent React Strict Mode from firing this twice
+      await PushNotifications.removeAllListeners();
+
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('✅ Push token received: ', token.value);
+        
+        const { error } = await supabaseClient
+          .from('push_tokens')
+          .upsert({ 
+            user_id: userId, 
+            token: token.value 
+          }, { onConflict: 'token' }); 
+
+        if (error) console.error('Supabase Error saving token:', error);
+      });
+
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('❌ Error on registration: ', error);
+      });
+
+    } catch (error) {
+      console.error('Push notification setup failed:', error);
+    }
+  };
 
   async function buildFeedQuery(authUser: any) {
     let query = supabase
@@ -132,6 +175,11 @@ function MessageBoardContent() {
       setIsLoading(true)
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
+
+      // 🚨 Trigger Push Registration immediately after authenticating
+      if (authUser) {
+        setupPushNotifications(authUser.id, supabase);
+      }
 
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
