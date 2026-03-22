@@ -1,30 +1,52 @@
-import { createClient } from '@/app/lib/supabase/client' // <--- Import createClient, not supabase
+import { createClient } from '@/app/lib/supabase/client'
+
+// 📱 MOBILE COMPLIANCE: 
+// Notice there is NO 'use server' at the top of this file. 
+// This ensures your Capacitor iOS/Android builds compile perfectly.
 
 export async function toggleFollow(followerId: string, followingId: string, isFollowing: boolean) {
-  const supabase = createClient() // <--- Initialize it here
+  const supabase = createClient()
   
-  if (isFollowing) {
-    const { error } = await supabase
-      .from('followers')
-      .delete()
-      .match({ follower_id: followerId, following_id: followingId })
-      
-    if (error) console.error('Error unfollowing:', error)
-  } else {
-    const { error } = await supabase
-      .from('followers')
-      .insert({ follower_id: followerId, following_id: followingId })
+  try {
+    if (isFollowing) {
+      const { error } = await supabase
+        .from('followers')
+        .delete()
+        .match({ follower_id: followerId, following_id: followingId })
+        
+      if (error) throw error;
+      return { success: true };
+    } else {
+      const { error } = await supabase
+        .from('followers')
+        .insert({ follower_id: followerId, following_id: followingId })
 
-    if (error) console.error('Error following:', error)
+      if (error) throw error;
+      return { success: true };
+    }
+  } catch (error) {
+    console.error('Error toggling follow:', error);
+    // Returning the error allows your UI to show a toast/alert to the user
+    return { success: false, error };
   }
 }
 
-export async function likePost(postId: number | string) {
-  const supabase = createClient() // <--- Initialize it here
+export async function likePost(postId: number | string, userId: string) {
+  const supabase = createClient()
 
-  // Example logic - adjust based on your actual needs
-  // Note: For a real app you might want to check if the user already liked it first
-  // This is a simplified increment example
-  /* const { error } = await supabase.rpc('increment_likes', { post_id: postId }) 
-  */
+  try {
+    // A robust insert for a "likes" table. 
+    // Make sure your Supabase table has a Unique constraint on (post_id, user_id) 
+    // so users can't like the same post 100 times!
+    const { error } = await supabase
+      .from('likes')
+      .insert({ post_id: postId, user_id: userId })
+
+    if (error) throw error;
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Error liking post:', error);
+    return { success: false, error };
+  }
 }

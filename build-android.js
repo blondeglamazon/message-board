@@ -32,7 +32,7 @@ const routesToHide = [
 // Helper: Pause execution for X milliseconds
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Helper: Windows-proof rename function with automatic retries
+// Helper: Windows-proof rename function with automatic retries and NO crashes
 async function safeRename(oldPath, newPath) {
   const maxRetries = 10;
   for (let i = 0; i < maxRetries; i++) {
@@ -40,19 +40,25 @@ async function safeRename(oldPath, newPath) {
       if (fs.existsSync(oldPath)) {
         fs.renameSync(oldPath, newPath);
       }
-      return; // Success! Exit the loop.
+      return true; // Success! 
     } catch (err) {
-      if (i === maxRetries - 1) throw err; // Out of retries, crash gracefully
+      if (i === maxRetries - 1) {
+        console.error(`\n⚠️ WARNING: Windows completely locked ${path.basename(oldPath)}.`);
+        console.error(`👉 YOU MUST MANUALLY RENAME IT LATER: ${path.basename(oldPath)} -> ${path.basename(newPath)}`);
+        return false; // Failed, but gracefully exit instead of crashing!
+      }
       
-      // If Windows file watcher locked it, wait 500ms and try again
+      // If Windows file watcher locked it, wait 1000ms (1 full second) and try again
       if (err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') {
-        console.log(`   ⏳ Windows locked ${path.basename(oldPath)}, retrying... (Attempt ${i + 1}/${maxRetries})`);
-        await sleep(500); 
+        console.log(`   ⏳ Windows locked ${path.basename(oldPath)}, retrying in 1s... (Attempt ${i + 1}/${maxRetries})`);
+        await sleep(1000); 
       } else {
-        throw err; // A different error occurred
+        console.error(`\n⚠️ Unexpected error renaming ${path.basename(oldPath)}: ${err.message}`);
+        return false; 
       }
     }
   }
+  return false;
 }
 
 // 3. MAIN ASYNC EXECUTION
@@ -73,8 +79,8 @@ async function runBuild() {
     console.log('🙈 Hiding dynamic routes...');
     for (const r of routesToHide) {
       if (fs.existsSync(r.dir)) {
-        await safeRename(r.dir, r.backup);
-        console.log(`   ✅ Hid ${r.name}`);
+        const success = await safeRename(r.dir, r.backup);
+        if (success) console.log(`   ✅ Hid ${r.name}`);
       }
     }
 
@@ -95,8 +101,12 @@ async function runBuild() {
     console.log('♻️ Restoring dynamic routes...');
     for (const r of routesToHide) {
       if (fs.existsSync(r.backup)) {
-        await safeRename(r.backup, r.dir);
-        console.log(`   ✅ Restored ${r.name}`);
+        const success = await safeRename(r.backup, r.dir);
+        if (success) {
+          console.log(`   ✅ Restored ${r.name}`);
+        } else {
+          console.log(`   ❌ Skipped ${r.name} (Requires manual rename)`);
+        }
       }
     }
 

@@ -1,21 +1,20 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense, useMemo } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DOMPurify from 'isomorphic-dompurify'
 import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
-
+import Link from 'next/link'
 
 // @ts-ignore
 import Microlink from '@microlink/react'
 
-// ✅ INCREASED FILE SIZE: 200MB Limit for Videos
-const MAX_FILE_SIZE = 500 * 1024 * 1024 
+const MAX_IMAGE_SIZE_MB = 20;
+const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 
 function MessageBoardContent() {
-  // ✅ FIX: Prevent Supabase client recreation on every render
   const [supabase] = useState(() => createClient())
   
   const router = useRouter()
@@ -40,7 +39,6 @@ function MessageBoardContent() {
   // Loading State
   const [isLoading, setIsLoading] = useState(true)
   
-  // ✅ FIX: Typed toast notifications (success = green, error = red)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
       setToast({ msg, type })
@@ -52,19 +50,15 @@ function MessageBoardContent() {
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   
-  // ✅ FIX: Use a Ref for blocked IDs to prevent infinite loops in useEffect
   const blockedIdsRef = useRef<string[]>([])
   const [blockedIds, setBlockedIds] = useState<string[]>([])
 
-  // ✅ FIX: Ref for following IDs so buildFeedQuery can access current values
   const followingIdsRef = useRef<Set<string>>(new Set())
   
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
-  // ✅ FIX: Extracted shared query builder — used by both initData and handlePost
-  // Applies blocked user filter + feed-specific filters consistently
   async function buildFeedQuery(authUser: any) {
     let query = supabase
       .from('posts')
@@ -116,7 +110,6 @@ function MessageBoardContent() {
     }
   };
 
-  // Refs
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const micInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -128,14 +121,18 @@ function MessageBoardContent() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // --- DATA FETCHING ---
+  useEffect(() => {
+    return () => { 
+      if (mediaPreview) URL.revokeObjectURL(mediaPreview); 
+    };
+  }, [mediaPreview]);
+
   useEffect(() => {
     async function initData() {
       setIsLoading(true)
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
 
-      // Fetch Profiles
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach(p => { pMap[p.id] = p })
@@ -166,16 +163,13 @@ function MessageBoardContent() {
     
     initData()
     
-    // Realtime Subscription
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
         const newPostUserId = payload.new.user_id;
 
-        // UGC Policy: Block filtered users from realtime
         if (blockedIdsRef.current.includes(newPostUserId)) return;
 
-        // Feed Filter: Don't inject random users' posts into Following/Friends feeds
         if (currentFeed === 'following' && newPostUserId !== user?.id) {
           if (!followingIdsRef.current.has(newPostUserId)) return;
         }
@@ -187,7 +181,6 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase])
 
-  // --- HANDLERS ---
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -253,24 +246,36 @@ function MessageBoardContent() {
     }
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      if (file.size > MAX_FILE_SIZE) {
-        showToast(`File too large! Max size is ${MAX_FILE_SIZE / (1024 * 1024)}MB.`, 'error')
-        return
-      }
-      setMediaFile(file)
-      setIsEmbedMode(false)
-      
-      if (file.type.startsWith('image/')) setPostType('image')
-      else if (file.type.startsWith('video/')) setPostType('video')
-      else if (file.type.startsWith('audio/')) setPostType('audio')
-      else setPostType('file')
-
-      const objectUrl = URL.createObjectURL(file)
-      setMediaPreview(objectUrl)
+ const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    
+    if (!file) { 
+        clearFile(); 
+        return; 
     }
+    
+    const isImage = file.type.startsWith('image/');
+    const isMedia = file.type.startsWith('video/') || file.type.startsWith('audio/');
+    
+    const maxSizeMB = isImage ? MAX_IMAGE_SIZE_MB : MAX_VIDEO_AUDIO_SIZE_MB;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      showToast(`File too large! Max for this file type is ${maxSizeMB}MB.`, 'error');
+      if (e.target) e.target.value = ''; 
+      return;
+    }
+
+    setMediaFile(file)
+    setIsEmbedMode(false)
+    
+    if (isImage) setPostType('image')
+    else if (file.type.startsWith('video/')) setPostType('video')
+    else if (file.type.startsWith('audio/')) setPostType('audio')
+    else setPostType('file')
+
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+
+    const objectUrl = URL.createObjectURL(file)
+    setMediaPreview(objectUrl)
   }
 
   const clearFile = () => {
@@ -278,6 +283,7 @@ function MessageBoardContent() {
     if (mediaPreview) URL.revokeObjectURL(mediaPreview)
     setMediaPreview(null)
     setPostType('text')
+    
     if (fileInputRef.current) fileInputRef.current.value = ''
     if (cameraInputRef.current) cameraInputRef.current.value = ''
     if (micInputRef.current) micInputRef.current.value = ''
@@ -322,8 +328,6 @@ function MessageBoardContent() {
     }
     setUploading(false)
   }
-
-  // --- RENDER HELPERS ---
 
   const renderSafeHTML = (html: string) => {
     if (!html) return null;
@@ -370,11 +374,13 @@ function MessageBoardContent() {
         {msg.media_url && (
           <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
             {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-              <video src={msg.media_url} controls playsInline style={{ width: '100%', display: 'block' }} />
+              <video src={msg.media_url} controls playsInline preload="metadata" style={{ width: '100%', display: 'block' }} />
             ) : msg.media_url.match(/\.(mp3|wav|m4a)$/i) ? (
-              <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={msg.media_url} style={{ width: '100%' }} /></div>
+              <div style={{padding:'20px', background:'#f3f4f6'}}>
+                <audio controls src={msg.media_url} preload="metadata" style={{ width: '100%' }} />
+              </div>
             ) : (
-              <img src={msg.media_url} alt="Post media" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />
+              <img src={msg.media_url} alt="Post media" loading="lazy" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />
             )}
           </div>
         )}
@@ -382,18 +388,19 @@ function MessageBoardContent() {
     );
   }
 
-  const filteredMessages = messages.filter(msg => {
-    const query = urlSearchQuery
-    if (!query) return true;
-    const lowerQ = query.toLowerCase();
-    const profile = profilesMap[msg.user_id];
-    return (msg.content?.toLowerCase().includes(lowerQ) || profile?.username?.toLowerCase().includes(lowerQ) || profile?.display_name?.toLowerCase().includes(lowerQ));
-  });
+  const filteredMessages = useMemo(() => {
+    return messages.filter(msg => {
+      const query = urlSearchQuery
+      if (!query) return true;
+      const lowerQ = query.toLowerCase();
+      const profile = profilesMap[msg.user_id];
+      return (msg.content?.toLowerCase().includes(lowerQ) || profile?.username?.toLowerCase().includes(lowerQ) || profile?.display_name?.toLowerCase().includes(lowerQ));
+    });
+  }, [messages, urlSearchQuery, profilesMap]);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       
-      {/* ✅ FIX: Typed toast — green for success, red for error */}
       {toast && (
           <div style={{
               position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)',
@@ -516,7 +523,7 @@ function MessageBoardContent() {
                             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div onClick={() => router.push(`/profile?u=${username}`)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                                        <img src={profile?.avatar_url || '/default-avatar.png'} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <img src={profile?.avatar_url || '/default-avatar.png'} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     </div>
                                     <div>
                                         <div style={{ fontWeight: 'bold', color: '#111827', fontSize: '15px' }}>{displayName}</div>
@@ -573,18 +580,16 @@ function MessageBoardContent() {
                 })
             )}
          </div>
+
+         <footer style={{ marginTop: '60px', padding: '20px', textAlign: 'center' }}>
+            <Link href="/privacy" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 'bold' }}>
+               Privacy Policy
+            </Link>
+         </footer>
       </main>
     </div>
   )
 }
-import Link from 'next/link';
-
-// ... inside your component ...
-<footer className="mt-20 p-4 text-center">
-  <Link href="/privacy" className="text-blue-600 hover:underline">
-    Privacy Policy
-  </Link>
-</footer>
 
 export default function MessageBoard() {
   return (
