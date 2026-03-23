@@ -11,10 +11,16 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
 
-  // ✅ FIX #1: Push Notification configurations
   plugins: {
+    // ✅ FIX #1: Push Notification configurations
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"]
+    },
+    // ✅ NEW FIX: Completely disable and remove the Facebook SDK to prevent Xcode 15 crashes
+    SocialLogin: {
+      providers: {
+        facebook: false
+      }
     }
   }
 };
