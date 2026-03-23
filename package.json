@@ -7,7 +7,7 @@
     "build": "node build-android.js",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && node patch-spm.js",
     "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
