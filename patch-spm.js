@@ -7,36 +7,44 @@ if (process.platform !== 'darwin') {
   process.exit(0);
 }
 
-console.error('🚀 RUNNING SWIFT PACKAGE PATCH 🚀');
+console.error('🚀 RUNNING SWIFT PACKAGE PATCHES 🚀');
 
 try {
-  const pluginDir = path.join(__dirname, 'node_modules', '@capgo', 'capacitor-app-tracking-transparency');
-  
-  if (!fs.existsSync(pluginDir)) {
-    console.error('Plugin directory not found. Skipping.');
-    process.exit(0);
-  }
-
-  // 1. Patch Package.swift
-  const spmFile = path.join(pluginDir, 'Package.swift');
-  if (fs.existsSync(spmFile)) {
-    let content = fs.readFileSync(spmFile, 'utf8');
-    content = content.replace(/8\.0\.0/g, '7.0.0'); // Force Capacitor 7
-    fs.writeFileSync(spmFile, content);
-    console.error('✅ SUCCESS: Patched Package.swift to Capacitor 7');
-  }
-
-  // 2. Patch any Podspec files just to be perfectly safe
-  const files = fs.readdirSync(pluginDir);
-  for (const file of files) {
-    if (file.endsWith('.podspec')) {
-      const podspecPath = path.join(pluginDir, file);
-      let content = fs.readFileSync(podspecPath, 'utf8');
-      content = content.replace(/8\.0\.0/g, '7.0.0'); // Force Capacitor 7
-      fs.writeFileSync(podspecPath, content);
-      console.error(`✅ SUCCESS: Patched ${file} to Capacitor 7`);
+  // --- 1. APP TRACKING TRANSPARENCY PATCH ---
+  const trackingDir = path.join(__dirname, 'node_modules', '@capgo', 'capacitor-app-tracking-transparency');
+  if (fs.existsSync(trackingDir)) {
+    const trackingSpm = path.join(trackingDir, 'Package.swift');
+    if (fs.existsSync(trackingSpm)) {
+      let content = fs.readFileSync(trackingSpm, 'utf8');
+      content = content.replace(/8\.0\.0/g, '7.0.0');
+      fs.writeFileSync(trackingSpm, content);
+      console.error('✅ SUCCESS: Patched Tracking Package.swift to Capacitor 7');
+    }
+    
+    const files = fs.readdirSync(trackingDir);
+    for (const file of files) {
+      if (file.endsWith('.podspec')) {
+        const podspecPath = path.join(trackingDir, file);
+        let content = fs.readFileSync(podspecPath, 'utf8');
+        content = content.replace(/8\.0\.0/g, '7.0.0');
+        fs.writeFileSync(podspecPath, content);
+      }
     }
   }
+
+  // --- 2. FACEBOOK SDK DOWNGRADE PATCH ---
+  const socialDir = path.join(__dirname, 'node_modules', '@capgo', 'capacitor-social-login');
+  if (fs.existsSync(socialDir)) {
+    const socialSpm = path.join(socialDir, 'Package.swift');
+    if (fs.existsSync(socialSpm)) {
+      let content = fs.readFileSync(socialSpm, 'utf8');
+      // Force Facebook SDK to exact version 17.0.0 (Xcode 15 compatible)
+      content = content.replace(/(https:\/\/github\.com\/facebook\/facebook-ios-sdk\.git"?[,\s]*)[^)]+\)/gi, '$1.exact("17.0.0")');
+      fs.writeFileSync(socialSpm, content);
+      console.error('✅ SUCCESS: Locked Facebook SDK to 17.0.0 for Xcode 15 compatibility');
+    }
+  }
+
 } catch (e) {
   console.error('❌ ERROR: ' + e.message);
 }
