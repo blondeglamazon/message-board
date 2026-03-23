@@ -7,7 +7,7 @@
     "build": "node build-android.js",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "patch-package && if [ \"$(uname)\" = \"Darwin\" ]; then node patch-ios.js; fi",
+    "postinstall": "patch-package && node patch-ios.js",
     "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
