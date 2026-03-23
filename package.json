@@ -34,7 +34,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "browser-image-compression": "^2.0.2",
     "firebase-admin": "^13.7.0",
-    "isomorphic-dompurify": "^2.35.0",
+    "isomorphic-dompurify": "2.16.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.563.0",
     "next": "16.1.5",
