@@ -5,8 +5,6 @@ console.error('🚀 RUNNING UNIVERSAL BUILD HACKS 🚀');
 
 try {
   // --- HACK 1: BYPASS CAPACITOR NODE 22 CHECK ---
-  // Patch BOTH the bin/capacitor entry point AND the compiled JS that checks the version.
-  // Appflow's Fastlane calls `npx cap config` directly, which re-checks the version.
   const capBin = path.join(__dirname, 'node_modules', '@capacitor', 'cli', 'bin', 'capacitor');
   if (fs.existsSync(capBin)) {
     let capContent = fs.readFileSync(capBin, 'utf8');
@@ -16,7 +14,6 @@ try {
     console.error('✅ SUCCESS: Bypassed Capacitor Node 22 requirement in bin/capacitor.');
   }
 
-  // Also patch the dist CLI files where the version check may live
   const cliDistPaths = [
     path.join(__dirname, 'node_modules', '@capacitor', 'cli', 'dist', 'index.js'),
     path.join(__dirname, 'node_modules', '@capacitor', 'cli', 'dist', 'index.cjs'),
@@ -32,12 +29,10 @@ try {
         content = content.replace(/"22\.0\.0"/g, '"20.0.0"');
         content = content.replace(/'22\.0\.0'/g, "'20.0.0'");
         fs.writeFileSync(distPath, content);
-        console.error(`✅ SUCCESS: Patched Node version check in ${path.basename(distPath)}`);
       }
     }
   }
 
-  // Recursively find and patch any file in @capacitor/cli that contains the version gate
   const cliDir = path.join(__dirname, 'node_modules', '@capacitor', 'cli');
   function patchDir(dir) {
     if (!fs.existsSync(dir)) return;
@@ -54,9 +49,8 @@ try {
             content = content.replace(/"22\.0\.0"/g, '"20.0.0"');
             content = content.replace(/'22\.0\.0'/g, "'20.0.0'");
             fs.writeFileSync(fullPath, content);
-            console.error(`✅ SUCCESS: Patched ${path.relative(cliDir, fullPath)}`);
           }
-        } catch (e) { /* skip binary/unreadable files */ }
+        } catch (e) {}
       }
     }
   }
@@ -81,6 +75,45 @@ try {
     content = content.replace(/6\.0\.0/g, '5.11.0');
     fs.writeFileSync(spmFile, content);
     console.error('✅ SUCCESS: Patched Package.swift directly.');
+  }
+
+  // --- HACK 4: WRAP CAPACITOR CLI TO FIX CAPACITOR 8.1.0 SWIFT BUG ---
+  const npxCapBin = path.join(__dirname, 'node_modules', '.bin', 'cap');
+  if (fs.existsSync(npxCapBin) && fs.existsSync(capBin)) {
+    const wrapperScript = `#!/usr/bin/env node
+const { spawnSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const args = process.argv.slice(2);
+const result = spawnSync(process.execPath, ['${capBin}', ...args], { stdio: 'inherit' });
+
+// ONLY RUN THIS HACK IF 'SYNC' OR 'UPDATE' WAS JUST CALLED
+if (args.includes('sync') || args.includes('update')) {
+  console.error('🚀 CAP SYNC FINISHED - RUNNING POST-SYNC HACKS 🚀');
+  const appSpmFile = path.join(process.cwd(), 'ios', 'App', 'CapApp-SPM', 'Package.swift');
+  if (fs.existsSync(appSpmFile)) {
+    let content = fs.readFileSync(appSpmFile, 'utf8');
+    const lines = content.split('\\n');
+    const newLines = lines.map(line => {
+      if (line.includes('capacitor-swift-pm')) {
+        // Force the broken 8.1.x version back to the stable 8.0.0
+        return line.replace(/from:\\s*["']8\\.\\d+\\.\\d+["']/g, 'exact: "8.0.0"')
+                   .replace(/branch:\\s*["']main["']/g, 'exact: "8.0.0"');
+      }
+      return line;
+    });
+    fs.writeFileSync(appSpmFile, newLines.join('\\n'));
+    console.error('✅ SUCCESS: Forced capacitor-swift-pm to exact 8.0.0 to fix Swift compiler bug.');
+  }
+}
+process.exit(result.status ?? 1);
+`;
+    // Replace the CLI symlink with our wrapper script so we can intercept npx cap sync
+    try { fs.unlinkSync(npxCapBin); } catch(e) {}
+    fs.writeFileSync(npxCapBin, wrapperScript);
+    fs.chmodSync(npxCapBin, 0o755);
+    console.error('✅ SUCCESS: Wrapped Capacitor CLI to patch SPM post-sync.');
   }
 
 } catch (e) {
