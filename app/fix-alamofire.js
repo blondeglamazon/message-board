@@ -1,26 +1,34 @@
 const fs = require('fs');
+const path = require('path');
 
-const files = [
-  'node_modules/@capgo/capacitor-social-login/Package.swift',
-  'node_modules/@capgo/capacitor-social-login/scripts/configure-dependencies.js',
-  'node_modules/@capgo/capacitor-social-login/CapgoCapacitorSocialLogin.podspec'
-];
-
-files.forEach(file => {
-  if (fs.existsSync(file)) {
-    let content = fs.readFileSync(file, 'utf8');
+function patchPlugin(pluginDir) {
+  const spmFile = path.join(pluginDir, 'Package.swift');
+  if (fs.existsSync(spmFile)) {
+    let content = fs.readFileSync(spmFile, 'utf8');
+    const original = content;
     
-    // Force SPM to stop before 5.11.0
-    content = content.replace(/\.upToNextMajor\(from:\s*["']5\.\d+\.\d+["']\)/g, '"5.10.0"..<"5.11.0"');
-    content = content.replace(/["']?5\.\d+\.\d+["']?\s*\.\.<\s*["']?6\.0\.0["']?/g, '"5.10.0"..<"5.11.0"');
+    // Aggressively match the Alamofire line and force it to be strictly less than 5.11.0
+    content = content.replace(/(\.package\s*\(\s*url:\s*["'][^"']+Alamofire[^"']+["']\s*,)([^)]+)(\))/gi, '$1 "5.0.0"..<"5.11.0"$3');
     
-    // Force CocoaPods to use 5.10.2
-    content = content.replace(/~>\s*5\.\d+\.\d+/g, '~> 5.10.2');
-    
-    // Catch-all
-    content = content.replace(/5\.11\.0/g, '5.10.0');
-
-    fs.writeFileSync(file, content);
-    console.log('✅ Safely locked Alamofire to v5.10 in ' + file);
+    if (original !== content) {
+      fs.writeFileSync(spmFile, content);
+      console.error('✅ SUCCESS: Forced Alamofire to < 5.11.0 in Package.swift');
+    }
   }
-});
+
+  const podFile = path.join(pluginDir, 'CapgoCapacitorSocialLogin.podspec');
+  if (fs.existsSync(podFile)) {
+    let content = fs.readFileSync(podFile, 'utf8');
+    const original = content;
+    
+    content = content.replace(/(s\.dependency\s+["']Alamofire["']).*/gi, '$1, ">= 5.0.0", "< 5.11.0"');
+    
+    if (original !== content) {
+      fs.writeFileSync(podFile, content);
+      console.error('✅ SUCCESS: Forced Alamofire to < 5.11.0 in Podspec');
+    }
+  }
+}
+
+// Target the specific plugin
+patchPlugin(path.join(__dirname, 'node_modules', '@capgo', 'capacitor-social-login'));
