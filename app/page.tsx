@@ -552,6 +552,26 @@ function MessageBoardContent() {
            </div>
          )}
 
+         {/* 👇 NEW APP DOWNLOAD BUTTONS ADDED HERE 👇 */}
+         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', width: '100%' }}>
+            <a 
+                href="https://play.google.com/store/apps/details?id=com.vimciety.app" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+            >
+                🤖 Android App
+            </a>
+            <a 
+                href="https://testflight.apple.com/join/87KV8sGZ" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+            >
+                🍎 iOS App
+            </a>
+         </div>
+
          {/* Loading and Empty States */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {isLoading ? (
