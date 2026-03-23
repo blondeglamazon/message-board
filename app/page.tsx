@@ -497,8 +497,10 @@ function MessageBoardContent() {
         overflowX: 'hidden' 
       }}>
          
-         <div style={{ marginBottom: '20px', marginTop: '40px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#111827' }}>{currentFeed.toUpperCase()} FEED</h2>
+         <div style={{ marginBottom: '20px', marginTop: '40px', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0 }}>
+                {currentFeed === 'global' ? 'EXPLORE' : `${currentFeed.toUpperCase()} FEED`}
+            </h2>
          </div>
 
          {user && (
@@ -553,23 +555,28 @@ function MessageBoardContent() {
          )}
 
          {/* 👇 NEW APP DOWNLOAD BUTTONS ADDED HERE 👇 */}
-         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', width: '100%' }}>
-            <a 
-                href="https://play.google.com/store/apps/details?id=com.vimciety.app" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-            >
-                🤖 Android App
-            </a>
-            <a 
-                href="https://testflight.apple.com/join/87KV8sGZ" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-            >
-                🍎 iOS App
-            </a>
+         <div style={{ marginBottom: '20px', width: '100%' }}>
+            <p style={{ textAlign: 'center', fontSize: '12px', fontWeight: '800', color: '#6b7280', margin: '0 0 10px 0', letterSpacing: '0.5px' }}>
+                DOWNLOAD THE MOBILE APP
+            </p>
+            <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                <a 
+                    href="https://play.google.com/store/apps/details?id=com.vimciety.app" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                >
+                    🤖 Android
+                </a>
+                <a 
+                    href="https://testflight.apple.com/join/87KV8sGZ" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                >
+                    🍎 iOS
+                </a>
+            </div>
          </div>
 
          {/* Loading and Empty States */}
