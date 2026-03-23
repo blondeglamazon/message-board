@@ -7,7 +7,7 @@
     "build": "node build-android.js",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "patch-package && node fix-alamofire.js",
+    "postinstall": "patch-package",
     "build:android": "node build-android.js && npx cap sync android"
   },
   "dependencies": {
