@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import { Capacitor } from '@capacitor/core'
 import { createClient } from '@/app/lib/supabase/client'
-import { RevenueCatUI } from '@revenuecat/purchases-capacitor-ui'
 import Link from 'next/link'
 
 // ============================================================================
@@ -69,6 +68,7 @@ export default function UpgradePage() {
   }, [])
   
   const [loadingTier, setLoadingTier] = useState<string | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -76,16 +76,29 @@ export default function UpgradePage() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  // 🔄 NEW: Required by Apple - Restore Purchases Function
+  const handleRestore = async () => {
+    if (!isNative) return showToast("Only available on the mobile app.", "error");
+    setIsRestoring(true);
+    try {
+      const { Purchases } = await import('@revenuecat/purchases-capacitor');
+      await Purchases.restorePurchases();
+      showToast("Purchases successfully restored!");
+    } catch (error) {
+      console.error("Restore Error:", error);
+      showToast("Failed to restore purchases.", "error");
+    }
+    setIsRestoring(false);
+  }
+
   const handleUpgrade = async (tierId: string, tierName: string) => {
     if (tierId === 'free') return;
     if (!currentUser) return showToast("Please log in to upgrade", 'error');
     
-    // 📱 =========================================================
-    // NATIVE APP LOGIC (iOS & Android) - Triggers RevenueCat
-    // Fix: Moved ABOVE the Stripe ID check so it never crashes!
-    // =========================================================
+    // 📱 NATIVE APP LOGIC (iOS & Android) - Triggers RevenueCat
     if (isNative) {
       try {
+        const { RevenueCatUI } = await import('@revenuecat/purchases-capacitor-ui');
         await RevenueCatUI.presentPaywall(); 
         return; 
       } catch (error) {
@@ -95,9 +108,7 @@ export default function UpgradePage() {
       }
     }
 
-    // 🌐 =========================================================
-    // WEB LOGIC - Triggers Stripe Checkout
-    // =========================================================
+    // 🌐 WEB LOGIC - Triggers Stripe Checkout
     if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
     setLoadingTier(tierId)
     
@@ -143,7 +154,6 @@ export default function UpgradePage() {
           </p>
         </div>
 
-        {/* Fix: Adjusted grid minmax to 250px so it doesn't squish on iPads */}
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
@@ -178,7 +188,6 @@ export default function UpgradePage() {
 
               <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 10px 0' }}>{tier.name}</h2>
               <div style={{ marginBottom: '20px' }}>
-                {/* Fix: Used clamp() so the price text smoothly shrinks on iPad instead of being cut off */}
                 <span style={{ fontSize: 'clamp(32px, 4vw, 42px)', fontWeight: 'bold' }}>{tier.price}</span>
                 <span style={{ color: '#9ca3af', fontSize: '16px' }}>{tier.interval}</span>
               </div>
@@ -209,22 +218,42 @@ export default function UpgradePage() {
           ))}
         </div>
 
-        {/* Fix: The legal links Apple demands are now directly on the page. 
-          The Stripe text is ONLY visible on the web!
-        */}
-        <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '13px', lineHeight: '1.6' }}>
+        {/* ========================================================= */}
+        {/* 🚨 REQUIRED BY APPLE: Restore Button & Legal Text           */}
+        {/* ========================================================= */}
+        <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.5', padding: '0 20px' }}>
           
-          <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
+          <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
              <Link href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Use (EULA)</Link>
+             <span style={{ color: '#4b5563' }}>|</span>
              <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
+             
+             {/* The Mandatory Restore Button for iOS */}
+             {isNative && (
+               <>
+                 <span style={{ color: '#4b5563' }}>|</span>
+                 <button 
+                    onClick={handleRestore} 
+                    disabled={isRestoring}
+                    style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                   {isRestoring ? 'Restoring...' : 'Restore Purchases'}
+                 </button>
+               </>
+             )}
           </div>
 
-          {!isNative && (
+          {/* The Mandatory Auto-Renew Boilerplate */}
+          {isNative ? (
+            <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'justify' }}>
+              Payment will be charged to your Apple ID account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your App Store account settings after purchase.
+            </p>
+          ) : (
             <>
               <p style={{ margin: '0 0 8px 0' }}>🔒 Secure payments processed via Stripe.</p>
               <p style={{ margin: 0 }}>Identity verification is powered by Stripe Identity. Your sensitive data is never stored on our servers.</p>
             </>
           )}
+
         </div>
 
       </div>

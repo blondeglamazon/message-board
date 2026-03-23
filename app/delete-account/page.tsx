@@ -35,7 +35,7 @@ export default function DeleteAccount() {
       <p>If you cannot access the app or prefer to do this via the web, you may request account deletion by emailing our support team:</p>
       
       <div style={{ backgroundColor: '#f3f4f6', padding: '20px', borderRadius: '8px', marginTop: '20px' }}>
-        <p style={{ margin: 0 }}><strong>Email:</strong> <a href="mailto:support@vimciety.com" style={{ color: '#6366f1', fontWeight: 'bold' }}>support@vimciety.com</a></p>
+        <p style={{ margin: 0 }}><strong>Email:</strong> <a href="vimciety@gmail.com" style={{ color: '#6366f1', fontWeight: 'bold' }}>support@vimciety.com</a></p>
         <p style={{ margin: '10px 0 0 0' }}><strong>Subject:</strong> Account Deletion Request</p>
         <p style={{ margin: '10px 0 0 0' }}>Please include your registered <strong>email address</strong> and <strong>username</strong> in the body of the email. We will process your request within 30 days.</p>
       </div>
