@@ -75,11 +75,10 @@ function MessageBoardContent() {
         return; 
       }
 
-      await PushNotifications.register();
-
-      // Clear old listeners to prevent React Strict Mode from firing this twice
+      // 🚨 FIX 1: Clear old listeners FIRST
       await PushNotifications.removeAllListeners();
 
+      // 🚨 FIX 2: Set up the trap (listener) to catch the token BEFORE registering
       PushNotifications.addListener('registration', async (token) => {
         console.log('✅ Push token received: ', token.value);
         
@@ -96,6 +95,9 @@ function MessageBoardContent() {
       PushNotifications.addListener('registrationError', (error) => {
         console.error('❌ Error on registration: ', error);
       });
+
+      // 🚨 FIX 3: NOW ask Google/Apple for the token!
+      await PushNotifications.register();
 
     } catch (error) {
       console.error('Push notification setup failed:', error);
