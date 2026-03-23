@@ -823,6 +823,26 @@ function ProfileContent() {
                             <input type="file" ref={fileInputRef} accept="image/*, video/*" onChange={handleFileSelect} hidden />
                             <button onClick={() => fileInputRef.current?.click()} style={{ ...STYLES.btnSecondary, width: '100%', textAlign: 'center' }}>📷 Upload Image or Video</button>
 
+                            {/* 👇 NEW APP DOWNLOAD BUTTONS ADDED HERE 👇 */}
+                            <div style={{ display: 'flex', gap: '10px', marginTop: '4px', width: '100%' }}>
+                                <a 
+                                    href="https://play.google.com/store/apps/details?id=com.vimciety.app" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    style={{ ...STYLES.btnSecondary, flex: 1, minWidth: 0, backgroundColor: '#1f2937', color: '#fff', textDecoration: 'none', border: '1px solid #4b5563', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '13px', padding: '8px' }}
+                                >
+                                    🤖 Android App
+                                </a>
+                                <a 
+                                    href="https://testflight.apple.com/join/87KV8sGZ" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    style={{ ...STYLES.btnSecondary, flex: 1, minWidth: 0, backgroundColor: '#1f2937', color: '#fff', textDecoration: 'none', border: '1px solid #4b5563', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '13px', padding: '8px' }}
+                                >
+                                    🍎 iOS TestFlight
+                                </a>
+                            </div>
+
                             {postFile && postFilePreview && (
                               <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #374151', marginTop: '4px' }}>
                                 {VALID_VIDEO_TYPES.includes(postFile.type) ? <video src={postFilePreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} /> : <img src={postFilePreview} alt="Upload" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />}
