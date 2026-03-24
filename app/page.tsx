@@ -16,29 +16,190 @@ import Microlink from '@microlink/react'
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 
+function PostViewTracker({ postId, userId, supabase }: { postId: string, userId: string | undefined, supabase: any }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userId || !ref.current) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        supabase.from('post_views').upsert({ 
+            post_id: postId, 
+            viewer_id: userId 
+        }, { onConflict: 'post_id, viewer_id' }).then();
+        observer.disconnect(); 
+      }
+    }, { threshold: 0.5 });
+
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [postId, userId, supabase]);
+
+  return <div ref={ref} style={{ height: '1px', width: '100%', marginTop: '-1px' }} />;
+}
+
+function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSuccess }: any) {
+  const [newMessage, setNewMessage] = useState('');
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [isEmbedMode, setIsEmbedMode] = useState(false);
+  const [postType, setPostType] = useState<string>('text');
+  const [uploading, setUploading] = useState(false);
+
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const micInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => { if (mediaPreview) URL.revokeObjectURL(mediaPreview); };
+  }, [mediaPreview]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) { clearFile(); return; }
+    
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    const isAudio = file.type.startsWith('audio/');
+
+    if (!isImage && !isVideo && !isAudio) {
+      showToast("Invalid file type. Please upload an image, video, or audio file.", 'error');
+      if (e.target) e.target.value = ''; 
+      return;
+    }
+
+    const maxSizeMB = isImage ? MAX_IMAGE_SIZE_MB : MAX_VIDEO_AUDIO_SIZE_MB;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      showToast(`File too large! Max for this file type is ${maxSizeMB}MB.`, 'error');
+      if (e.target) e.target.value = ''; 
+      return;
+    }
+
+    setMediaFile(file);
+    setIsEmbedMode(false);
+    
+    if (isImage) setPostType('image');
+    else if (isVideo) setPostType('video');
+    else if (isAudio) setPostType('audio');
+    else setPostType('file');
+
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaPreview(URL.createObjectURL(file));
+  };
+
+  const clearFile = () => {
+    setMediaFile(null);
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaPreview(null);
+    setPostType('text');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (micInputRef.current) micInputRef.current.value = '';
+  };
+
+  const handlePost = async () => {
+    if (!user) { router.push('/login'); return; }
+    if (!newMessage.trim() && !mediaFile) return;
+    
+    setUploading(true);
+    try {
+        let publicUrl = null;
+        let finalPostType = isEmbedMode ? 'embed' : postType;
+
+        if (mediaFile) {
+            const fileExt = mediaFile.name.split('.').pop();
+            const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('posts').upload(fileName, mediaFile);
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('posts').getPublicUrl(fileName);
+            publicUrl = data.publicUrl;
+        }
+
+        const { data: newPost, error } = await supabase.from('posts').insert([{ 
+            content: newMessage, user_id: user.id, post_type: finalPostType, media_url: publicUrl 
+        }]).select().single();
+
+        if (error) throw error;
+
+        setNewMessage('');
+        clearFile();
+        setIsEmbedMode(false);
+        showToast("Post created successfully!");
+
+        if (newPost && onPostSuccess) {
+            onPostSuccess(newPost);
+        }
+
+        if (isCreate) router.push('/');
+
+    } catch (e: any) { 
+        showToast("Upload Error: " + e.message, 'error');
+    }
+    setUploading(false);
+  };
+
+  return (
+    <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <textarea
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind?"}
+            style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #d1d5db', marginBottom: '15px', minHeight: '80px', backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', color: isEmbedMode ? '#00ff00' : '#111827', fontSize: '16px', resize: 'none', boxSizing: 'border-box' }}
+        />
+        
+        {mediaPreview && (
+            <div style={{ marginBottom: '15px', position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                {postType === 'video' ? (
+                <video src={mediaPreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} />
+                ) : postType === 'audio' ? (
+                <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={mediaPreview} style={{width:'100%'}} /></div>
+                ) : (
+                <img src={mediaPreview} alt="Preview" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />
+                )}
+                <button onClick={clearFile} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button onClick={() => cameraInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Camera">📷</button>
+            <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*,video/*" hidden />
+
+            <button onClick={() => micInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Microphone">🎤</button>
+            <input type="file" ref={micInputRef} onChange={handleFileSelect} accept="audio/*" hidden />
+
+            <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Upload">📁</button>
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="image/*,video/*,audio/*" hidden />
+
+            <button 
+                onClick={() => setIsEmbedMode(!isEmbedMode)} 
+                style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: isEmbedMode ? '2px solid #6366f1' : '1px solid #e5e7eb', backgroundColor: isEmbedMode ? '#e0e7ff' : 'white', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
+                mb
+            </button>
+
+            <button 
+                onClick={handlePost}
+                disabled={uploading}
+                style={{ minHeight: '44px', padding: '0 24px', backgroundColor: uploading ? '#9ca3af' : '#111827', color: 'white', borderRadius: '22px', border: 'none', cursor: uploading ? 'default' : 'pointer', fontWeight: 'bold', marginLeft: 'auto' }}
+            >
+                {uploading ? '...' : 'Post'}
+            </button>
+        </div>
+    </div>
+  );
+}
+
 function MessageBoardContent() {
   const [supabase] = useState(() => createClient())
-  
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // --- STATE ---
   const [messages, setMessages] = useState<any[]>([])
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({}) 
-  const [newMessage, setNewMessage] = useState('')
   
-  // Media / Upload State
-  const [mediaFile, setMediaFile] = useState<File | null>(null)
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null)
-  const [isEmbedMode, setIsEmbedMode] = useState(false)
-  const [postType, setPostType] = useState<string>('text') 
-  const [uploading, setUploading] = useState(false)
-  
-  // User / UI State
   const [user, setUser] = useState<any>(null)
   const [isMobile, setIsMobile] = useState(false)
-  
-  // Loading State
   const [isLoading, setIsLoading] = useState(true)
   
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -47,67 +208,43 @@ function MessageBoardContent() {
       setTimeout(() => setToast(null), 3000)
   }
   
-  // Comments / Interaction State
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+  // 👇 TRACKS WHICH COMMENT THE USER IS REPLYING TO
+  const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
+  
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   
   const blockedIdsRef = useRef<string[]>([])
   const [blockedIds, setBlockedIds] = useState<string[]>([])
-
   const followingIdsRef = useRef<Set<string>>(new Set())
   
   const currentFeed = searchParams.get('feed') || 'global' 
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
-  // --- PUSH NOTIFICATION SETUP ---
   const setupPushNotifications = async (userId: string, supabaseClient: any) => {
     if (!Capacitor.isNativePlatform()) return;
-
     try {
       let permStatus = await PushNotifications.checkPermissions();
       if (permStatus.receive === 'prompt') {
         permStatus = await PushNotifications.requestPermissions();
       }
-      if (permStatus.receive !== 'granted') {
-        console.log('User denied push permission');
-        return; 
-      }
+      if (permStatus.receive !== 'granted') return; 
 
-      // 🚨 FIX 1: Clear old listeners FIRST
       await PushNotifications.removeAllListeners();
-
-      // 🚨 FIX 2: Set up the trap (listener) to catch the token BEFORE registering
       PushNotifications.addListener('registration', async (token) => {
-        console.log('✅ Push token received: ', token.value);
-        
-        const { error } = await supabaseClient
-          .from('push_tokens')
-          .upsert({ 
-            user_id: userId, 
-            token: token.value 
-          }, { onConflict: 'token' }); 
-
-        if (error) console.error('Supabase Error saving token:', error);
+        await supabaseClient.from('push_tokens').upsert({ user_id: userId, token: token.value }, { onConflict: 'token' }); 
       });
-
-      PushNotifications.addListener('registrationError', (error) => {
-        console.error('❌ Error on registration: ', error);
-      });
-
-      // 🚨 FIX 3: NOW ask Google/Apple for the token!
       await PushNotifications.register();
-
-    } catch (error) {
-      console.error('Push notification setup failed:', error);
-    }
+    } catch (error) { console.error('Push notification setup failed:', error); }
   };
 
   async function buildFeedQuery(authUser: any) {
     let query = supabase
       .from('posts')
-      .select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
+      // 👇 UPDATED: Now grabs threaded replies AND comment likes
+      .select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`)
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -117,47 +254,26 @@ function MessageBoardContent() {
 
     if (authUser && currentFeed === 'following') {
       const ids = Array.from(followingIdsRef.current)
-      if (ids.length > 0) query = query.in('user_id', ids)
-      else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
+      query = ids.length > 0 ? query.in('user_id', ids) : query.in('user_id', ['00000000-0000-0000-0000-000000000000']);
     } 
     else if (authUser && currentFeed === 'friends') {
       const { data: followsMe } = await supabase.from('followers').select('follower_id').eq('following_id', authUser.id)
       const theirIds = new Set(followsMe?.map(f => f.follower_id) || [])
       const friendIds = Array.from(followingIdsRef.current).filter(id => theirIds.has(id))
-      if (friendIds.length > 0) query = query.in('user_id', friendIds)
-      else query = query.in('user_id', ['00000000-0000-0000-0000-000000000000'])
+      query = friendIds.length > 0 ? query.in('user_id', friendIds) : query.in('user_id', ['00000000-0000-0000-0000-000000000000']);
     }
-
     return query
   }
 
   const handleSharePost = async (postId: string, postUsername: string, postContent: string) => {
     const shareUrl = `https://www.vimciety.com/post/${postId}`;
-    const shareData = {
-      title: `Post by @${postUsername} | VIMciety`,
-      text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post by @${postUsername} on VIMciety!`,
-      url: shareUrl,
-    };
-
+    const shareData = { title: `Post by @${postUsername} | VIMciety`, text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post!`, url: shareUrl };
     if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (err) {
-        console.log('Share cancelled by user');
-      }
+      try { await navigator.share(shareData); } catch (err) {}
     } else {
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        showToast('Post link copied to clipboard!');
-      } catch (err) {
-        showToast('Failed to copy link.', 'error');
-      }
+      try { await navigator.clipboard.writeText(shareUrl); showToast('Post link copied to clipboard!'); } catch (err) { showToast('Failed to copy link.', 'error'); }
     }
   };
-
-  const cameraInputRef = useRef<HTMLInputElement>(null)
-  const micInputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
@@ -167,39 +283,26 @@ function MessageBoardContent() {
   }, [])
 
   useEffect(() => {
-    return () => { 
-      if (mediaPreview) URL.revokeObjectURL(mediaPreview); 
-    };
-  }, [mediaPreview]);
-
-  useEffect(() => {
     async function initData() {
       setIsLoading(true)
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
 
-      // 🚨 Trigger Push Registration immediately after authenticating
-      if (authUser) {
-        setupPushNotifications(authUser.id, supabase);
-      }
+      if (authUser) setupPushNotifications(authUser.id, supabase);
 
-      const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url')
+      const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url, is_premium')
       const pMap: Record<string, any> = {}
       allProfiles?.forEach(p => { pMap[p.id] = p })
       setProfilesMap(pMap)
 
-      let myFollowingIds = new Set<string>()
-      let myBlockedIds: string[] = []
-
       if (authUser) {
         const { data: blocks } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', authUser.id)
-        myBlockedIds = blocks?.map(b => b.blocked_id) || []
-        
+        const myBlockedIds = blocks?.map(b => b.blocked_id) || []
         setBlockedIds(myBlockedIds)
         blockedIdsRef.current = myBlockedIds
 
         const { data: follows } = await supabase.from('followers').select('following_id').eq('follower_id', authUser.id)
-        myFollowingIds = new Set(follows?.map(f => f.following_id) || [])
+        const myFollowingIds = new Set(follows?.map(f => f.following_id) || [])
         setFollowingIds(myFollowingIds)
         followingIdsRef.current = myFollowingIds
       }
@@ -213,20 +316,18 @@ function MessageBoardContent() {
     
     initData()
     
-    const channel = supabase
-      .channel('schema-db-changes')
+    const channel = supabase.channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, (payload) => {
         const newPostUserId = payload.new.user_id;
-
         if (blockedIdsRef.current.includes(newPostUserId)) return;
-
         if (currentFeed === 'following' && newPostUserId !== user?.id) {
           if (!followingIdsRef.current.has(newPostUserId)) return;
         }
-
-        setMessages((prev) => [{ ...payload.new, likes: [], comments: [] }, ...prev])
-      })
-      .subscribe()
+        setMessages((prev) => {
+            if (prev.some(p => p.id === payload.new.id)) return prev;
+            return [{ ...payload.new, likes: [], comments: [], post_views: [] }, ...prev];
+        });
+      }).subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase])
@@ -272,10 +373,42 @@ function MessageBoardContent() {
     }
   }
 
+  // 👇 NEW: Comment Liking Logic
+  async function handleLikeComment(postId: string, commentId: string, isLiked: boolean) {
+    if (!user) return showToast("Please login.", 'error');
+
+    // Optimistic UI update immediately
+    setMessages(prev => prev.map(msg => {
+        if (msg.id !== postId) return msg;
+        return {
+            ...msg,
+            comments: (msg.comments || []).map((c: any) => {
+                if (c.id !== commentId) return c;
+                return {
+                    ...c,
+                    comment_likes: isLiked 
+                        ? (c.comment_likes || []).filter((l: any) => l.user_id !== user.id) 
+                        : [...(c.comment_likes || []), { user_id: user.id }]
+                };
+            })
+        };
+    }));
+
+    if (isLiked) {
+        await supabase.from('comment_likes').delete().match({ comment_id: commentId, user_id: user.id });
+    } else {
+        await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: user.id });
+    }
+  }
+
   const toggleComments = (postId: string) => {
     const newSet = new Set(openComments)
-    if (newSet.has(postId)) newSet.delete(postId)
-    else newSet.add(postId)
+    if (newSet.has(postId)) {
+        newSet.delete(postId)
+        if (replyingTo?.postId === postId) setReplyingTo(null) // clear reply box when closed
+    } else {
+        newSet.add(postId)
+    }
     setOpenComments(newSet)
   }
 
@@ -284,11 +417,17 @@ function MessageBoardContent() {
     const text = commentText[postId]?.trim()
     if (!text) return
     
-    const { data: newComment, error } = await supabase.from('comments').insert({ post_id: postId, user_id: user.id, email: user.email, content: text }).select().single()
+    const parentId = replyingTo?.postId === postId ? replyingTo?.commentId : null;
+
+    const { data: newComment, error } = await supabase.from('comments').insert({ 
+        post_id: postId, user_id: user.id, content: text, parent_comment_id: parentId 
+    }).select('*, comment_likes(user_id)').single()
+    
     if (error) return showToast("Error: " + error.message, 'error')
     
     setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
     setCommentText(prev => ({ ...prev, [postId]: '' }))
+    if (replyingTo?.postId === postId) setReplyingTo(null);
 
     const targetPost = messages.find(m => m.id === postId);
     if (targetPost && targetPost.user_id !== user.id) { 
@@ -296,94 +435,18 @@ function MessageBoardContent() {
     }
   }
 
- const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    
-    if (!file) { 
-        clearFile(); 
-        return; 
-    }
-    
-    const isImage = file.type.startsWith('image/');
-    const isMedia = file.type.startsWith('video/') || file.type.startsWith('audio/');
-    
-    const maxSizeMB = isImage ? MAX_IMAGE_SIZE_MB : MAX_VIDEO_AUDIO_SIZE_MB;
-    if (file.size > maxSizeMB * 1024 * 1024) {
-      showToast(`File too large! Max for this file type is ${maxSizeMB}MB.`, 'error');
-      if (e.target) e.target.value = ''; 
-      return;
-    }
-
-    setMediaFile(file)
-    setIsEmbedMode(false)
-    
-    if (isImage) setPostType('image')
-    else if (file.type.startsWith('video/')) setPostType('video')
-    else if (file.type.startsWith('audio/')) setPostType('audio')
-    else setPostType('file')
-
-    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
-
-    const objectUrl = URL.createObjectURL(file)
-    setMediaPreview(objectUrl)
-  }
-
-  const clearFile = () => {
-    setMediaFile(null)
-    if (mediaPreview) URL.revokeObjectURL(mediaPreview)
-    setMediaPreview(null)
-    setPostType('text')
-    
-    if (fileInputRef.current) fileInputRef.current.value = ''
-    if (cameraInputRef.current) cameraInputRef.current.value = ''
-    if (micInputRef.current) micInputRef.current.value = ''
-  }
-
-  const handlePost = async () => {
-    if (!user) { router.push('/login'); return; }
-    if (!newMessage.trim() && !mediaFile) return
-    
-    setUploading(true)
-    try {
-        let publicUrl = null
-        let finalPostType = isEmbedMode ? 'embed' : postType
-
-        if (mediaFile) {
-            const fileExt = mediaFile.name.split('.').pop()
-            const fileName = `${user.id}-${Date.now()}.${fileExt}`
-            const { error: uploadError } = await supabase.storage.from('posts').upload(fileName, mediaFile)
-            if (uploadError) throw uploadError
-
-            const { data } = supabase.storage.from('posts').getPublicUrl(fileName)
-            publicUrl = data.publicUrl
-        }
-
-        await supabase.from('posts').insert([{ 
-            content: newMessage, user_id: user.id, email: user.email, post_type: finalPostType, media_url: publicUrl 
-        }])
-
-        setNewMessage('')
-        clearFile()
-        setIsEmbedMode(false)
-        showToast("Post created successfully!")
-
-        const query = await buildFeedQuery(user)
-        const { data: updatedPosts } = await query
-        if (updatedPosts) setMessages(updatedPosts)
-
-        if (isCreate) router.push('/')
-
-    } catch (e: any) { 
-        showToast("Upload Error: " + e.message, 'error') 
-    }
-    setUploading(false)
-  }
+  const handlePostSuccess = (newPost: any) => {
+    setMessages((prev) => {
+        if (prev.some(p => p.id === newPost.id)) return prev;
+        return [{ ...newPost, likes: [], comments: [], post_views: [] }, ...prev];
+    });
+  };
 
   const renderSafeHTML = (html: string) => {
     if (!html) return null;
     const clean = DOMPurify.sanitize(html, {
-        ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li'],
-        ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'frameborder', 'allow', 'allowfullscreen', 'scrolling', 'href', 'target', 'rel', 'title', 'class', 'id', 'loading', 'referrerpolicy'],
+        ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li', 'link'],
+        ALLOWED_ATTR: ['src', 'width', 'height', 'style', 'frameborder', 'allow', 'allowfullscreen', 'scrolling', 'href', 'target', 'rel', 'title', 'class', 'id', 'loading', 'referrerpolicy', 'data-url', 'data-image', 'data-description'],
         ADD_TAGS: ['iframe', 'link']
     })
     return <div style={{ width: '100%', overflow: 'hidden', marginTop: '10px', borderRadius: '12px' }} dangerouslySetInnerHTML={{ __html: clean }} />
@@ -465,37 +528,15 @@ function MessageBoardContent() {
 
       <Sidebar />
 
-      <div style={{ 
-        position: 'fixed', top: '20px', right: '20px', 
-        zIndex: 100, display: 'flex', gap: '10px' 
-      }}>
+      <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 100, display: 'flex', gap: '10px' }}>
         {user ? (
-          <button onClick={handleSignOut} style={{ 
-            minHeight: '44px', padding: '0 20px', borderRadius: '22px', 
-            border: '2px solid #111827', backgroundColor: 'white', 
-            fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
-            color: '#111827'
-          }}>
-            Log Out
-          </button>
+          <button onClick={handleSignOut} style={{ minHeight: '44px', padding: '0 20px', borderRadius: '22px', border: '2px solid #111827', backgroundColor: 'white', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', color: '#111827' }}>Log Out</button>
         ) : (
-          <button onClick={() => router.push('/login')} style={{ 
-            minHeight: '44px', display:'flex', alignItems:'center', padding: '0 20px', 
-            borderRadius: '22px', backgroundColor: 'white', color: '#111827', 
-            fontWeight: 'bold', cursor: 'pointer', border: '2px solid #111827',
-            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-          }}>
-            Log In
-          </button>
+          <button onClick={() => router.push('/login')} style={{ minHeight: '44px', display:'flex', alignItems:'center', padding: '0 20px', borderRadius: '22px', backgroundColor: 'white', color: '#111827', fontWeight: 'bold', cursor: 'pointer', border: '2px solid #111827', boxShadow: '0 2px 5px rgba(0,0,0,0.2)' }}>Log In</button>
         )}
       </div>
       
-      <main style={{ 
-        maxWidth: '600px', margin: '0 auto', 
-        paddingTop: 'calc(20px + env(safe-area-inset-top))',
-        paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px',
-        overflowX: 'hidden' 
-      }}>
+      <main style={{ maxWidth: '600px', margin: '0 auto', paddingTop: 'calc(20px + env(safe-area-inset-top))', paddingLeft: '20px', paddingRight: '20px', paddingBottom: '100px', overflowX: 'hidden' }}>
          
          <div style={{ marginBottom: '20px', marginTop: '40px', textAlign: 'center' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0 }}>
@@ -504,82 +545,19 @@ function MessageBoardContent() {
          </div>
 
          {user && (
-           <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-             <textarea
-               value={newMessage}
-               onChange={(e) => setNewMessage(e.target.value)}
-               placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind?"}
-               style={{ 
-                  width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #d1d5db', marginBottom: '15px', minHeight: '80px', backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', color: isEmbedMode ? '#00ff00' : '#111827', fontSize: '16px', resize: 'none', boxSizing: 'border-box'
-               }}
-             />
-             
-             {mediaPreview && (
-               <div style={{ marginBottom: '15px', position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                 {postType === 'video' ? (
-                    <video src={mediaPreview} controls playsInline style={{ width: '100%', display: 'block' }} />
-                 ) : postType === 'audio' ? (
-                    <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={mediaPreview} style={{width:'100%'}} /></div>
-                 ) : (
-                    <img src={mediaPreview} alt="Preview" style={{ width: '100%', display: 'block' }} />
-                 )}
-                 <button onClick={clearFile} style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-               </div>
-             )}
-
-             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button onClick={() => cameraInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Camera">📷</button>
-                <input type="file" ref={cameraInputRef} onChange={handleFileSelect} accept="image/*,video/*" capture="environment" hidden />
-
-                <button onClick={() => micInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Microphone">🎤</button>
-                <input type="file" ref={micInputRef} onChange={handleFileSelect} accept="audio/*" capture="user" hidden />
-
-                <button onClick={() => fileInputRef.current?.click()} style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '20px' }} title="Upload">📁</button>
-                <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="*/*" hidden />
-
-                <button 
-                    onClick={() => setIsEmbedMode(!isEmbedMode)} 
-                    style={{ flex: 1, minHeight: '44px', borderRadius: '8px', border: isEmbedMode ? '2px solid #6366f1' : '1px solid #e5e7eb', backgroundColor: isEmbedMode ? '#e0e7ff' : 'white', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
-                    mb
-                </button>
-
-                <button 
-                  onClick={handlePost}
-                  disabled={uploading}
-                  style={{ minHeight: '44px', padding: '0 24px', backgroundColor: uploading ? '#9ca3af' : '#111827', color: 'white', borderRadius: '22px', border: 'none', cursor: uploading ? 'default' : 'pointer', fontWeight: 'bold', marginLeft: 'auto' }}
-                >
-                  {uploading ? '...' : 'Post'}
-                </button>
-             </div>
-           </div>
+            <CreatePostBox user={user} supabase={supabase} showToast={showToast} isCreate={isCreate} router={router} onPostSuccess={handlePostSuccess} />
          )}
 
-         {/* 👇 NEW APP DOWNLOAD BUTTONS ADDED HERE 👇 */}
          <div style={{ marginBottom: '20px', width: '100%' }}>
             <p style={{ textAlign: 'center', fontSize: '12px', fontWeight: '800', color: '#6b7280', margin: '0 0 10px 0', letterSpacing: '0.5px' }}>
                 DOWNLOAD THE MOBILE APP
             </p>
             <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                <a 
-                    href="https://play.google.com/store/apps/details?id=com.vimciety.app" 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-                >
-                    🤖 Android
-                </a>
-                <a 
-                    href="https://testflight.apple.com/join/87KV8sGZ" 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
-                >
-                    🍎 iOS
-                </a>
+                <a href="https://play.google.com/store/apps/details?id=com.vimciety.app" target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>🤖 Android</a>
+                <a href="https://testflight.apple.com/join/87KV8sGZ" target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, minHeight: '44px', backgroundColor: '#111827', color: 'white', textDecoration: 'none', borderRadius: '22px', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '14px', fontWeight: 'bold', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>🍎 iOS</a>
             </div>
          </div>
 
-         {/* Loading and Empty States */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {isLoading ? (
                <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280', fontWeight: 'bold' }}>Loading feed...</div>
@@ -597,6 +575,9 @@ function MessageBoardContent() {
                     
                     return (
                         <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+                            
+                            <PostViewTracker postId={msg.id} userId={user?.id} supabase={supabase} />
+
                             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div onClick={() => router.push(`/profile?u=${username}`)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
@@ -625,10 +606,24 @@ function MessageBoardContent() {
                                   <span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> 
                                   <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.likes?.length || 0}</span>
                                 </button>
+                                
                                 <button onClick={() => toggleComments(msg.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }}>
                                   <span style={{ fontSize: '20px' }}>💬</span> 
                                   <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.comments?.length || 0}</span>
                                 </button>
+
+                                {profilesMap[user?.id]?.is_premium ? (
+                                    <div style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }} title="Total Views">
+                                        <span style={{ fontSize: '20px' }}>👁️</span> 
+                                        <span style={{ fontWeight: '600', fontSize: '14px' }}>{msg.post_views?.length || 0}</span>
+                                    </div>
+                                ) : (
+                                    <button onClick={() => router.push(user ? '/upgrade' : '/login')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0' }} title="Upgrade to see post views!">
+                                        <span style={{ fontSize: '20px' }}>👁️</span> 
+                                        <span style={{ fontSize: '12px', fontWeight: 'bold' }}>⭐</span>
+                                    </button>
+                                )}
+
                                 <button onClick={() => handleSharePost(msg.id, username, msg.content)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '6px', minWidth: '44px', minHeight: '44px', padding: '0', marginLeft: 'auto' }}>
                                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
                                   <span style={{ fontWeight: '600', fontSize: '14px' }}>Share</span>
@@ -637,19 +632,69 @@ function MessageBoardContent() {
 
                             {openComments.has(msg.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
-                                    {msg.comments?.map((c: any) => {
-                                        const commenter = profilesMap[c.user_id]
+                                    
+                                    {/* 👇 RENDER THREADED REPLIES SAFELY 👇 */}
+                                    {(msg.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
+                                        const commenter = profilesMap[c.user_id];
+                                        const isCommentLiked = user && c.comment_likes?.some((l: any) => l.user_id === user.id);
+                                        const replies = (msg.comments || []).filter((r: any) => r.parent_comment_id === c.id);
+
                                         return (
-                                            <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', wordBreak: 'break-word' }}>
-                                                <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>{commenter?.username || 'User'}</span>
-                                                <span style={{ color: '#4b5563' }}>{c.content}</span>
+                                            <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
+                                                <div>
+                                                    <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
+                                                        {commenter?.display_name || commenter?.username || 'User'}
+                                                    </span>
+                                                    <span style={{ color: '#4b5563' }}>{c.content}</span>
+                                                    
+                                                    <div style={{ display: 'flex', gap: '15px', marginTop: '4px', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af' }}>
+                                                        <span style={{ cursor: 'pointer', color: isCommentLiked ? '#ef4444' : '#9ca3af' }} onClick={() => handleLikeComment(msg.id, c.id, !!isCommentLiked)}>
+                                                            {isCommentLiked ? '❤️' : '🤍'} {c.comment_likes?.length || 0}
+                                                        </span>
+                                                        <span style={{ cursor: 'pointer' }} onClick={() => setReplyingTo({ postId: msg.id, commentId: c.id, username: commenter?.display_name || commenter?.username || 'User' })}>
+                                                            Reply
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {replies.length > 0 && (
+                                                    <div style={{ marginLeft: '15px', marginTop: '10px', paddingLeft: '15px', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                        {replies.map((reply: any) => {
+                                                            const replier = profilesMap[reply.user_id];
+                                                            const isReplyLiked = user && reply.comment_likes?.some((l: any) => l.user_id === user.id);
+                                                            return (
+                                                                <div key={reply.id}>
+                                                                    <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
+                                                                        {replier?.display_name || replier?.username || 'User'}
+                                                                    </span>
+                                                                    <span style={{ color: '#4b5563' }}>{reply.content}</span>
+                                                                    <div style={{ marginTop: '2px', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af' }}>
+                                                                        <span style={{ cursor: 'pointer', color: isReplyLiked ? '#ef4444' : '#9ca3af' }} onClick={() => handleLikeComment(msg.id, reply.id, !!isReplyLiked)}>
+                                                                            {isReplyLiked ? '❤️' : '🤍'} {reply.comment_likes?.length || 0}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         )
                                     })}
-                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                        <input type="text" placeholder="Add a comment..." value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} />
-                                        <button onClick={() => handlePostComment(msg.id)} style={{ minHeight: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+                                        {replyingTo?.postId === msg.id && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#e0e7ff', color: '#4338ca', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' }}>
+                                                <span>Replying to {replyingTo?.username}...</span>
+                                                <span style={{ cursor: 'pointer', fontSize: '16px' }} onClick={() => setReplyingTo(null)}>✕</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <input type="text" placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment..."} value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} />
+                                            <button onClick={() => handlePostComment(msg.id)} style={{ minHeight: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
+                                        </div>
                                     </div>
+
                                 </div>
                             )}
                         </div>

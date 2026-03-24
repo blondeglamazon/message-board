@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
-import NativeManagers from '@/components/NativeManagers';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -34,9 +33,6 @@ export const metadata: Metadata = {
   },
 }
 
-// CRITICAL FOR MOBILE APPS
-// This handles the "Notch", prevents auto-zoom on inputs, 
-// and locks the UI scale to feel like a native app.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
@@ -53,11 +49,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className} style={{ margin: 0, padding: 0, backgroundColor: '#ffffff' }}>
+      <body className={inter.className} style={{ 
+        margin: 0, 
+        backgroundColor: '#ffffff',
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)'
+      }}>
         
-        {/* 📱 ADDED: Silently boots up Push Notifications, Tracking, and RevenueCat in the background! */}
-        <NativeManagers />
-
         {/* The Sidebar (Navigation) */}
         <Sidebar />
 

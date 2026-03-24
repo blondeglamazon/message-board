@@ -75,6 +75,36 @@ const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_SIZE_MB = 500;
 
 // ============================================================================
+// 👁️ SILENT POST VIEW TRACKER
+// ============================================================================
+function PostViewTracker({ postId, userId, supabase }: { postId: string, userId: string | undefined, supabase: any }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userId || !ref.current) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      // If 50% of the post is visible on the screen
+      if (entry.isIntersecting) {
+        // Silently log the view (Upsert prevents duplicate views from the same user)
+        supabase.from('post_views').upsert({ 
+            post_id: postId, 
+            viewer_id: userId 
+        }, { onConflict: 'post_id, viewer_id' }).then();
+        
+        // Disconnect so we only count it once per scroll session
+        observer.disconnect(); 
+      }
+    }, { threshold: 0.5 });
+
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [postId, userId, supabase]);
+
+  return <div ref={ref} style={{ height: '1px', width: '100%', marginTop: '-1px' }} />;
+}
+
+// ============================================================================
 // 📹 VIDEO PLAYER WITH MONETIZATION TRACKING
 // ============================================================================
 function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, currentUser: any, supabase: any }) {
@@ -147,7 +177,7 @@ function ProfileContent() {
   const [profilesMap, setProfilesMap] = useState<Record<string, any>>({})
   const [followerCount, setFollowerCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [profileViews, setProfileViews] = useState(0) // 🔥 NEW STATE FOR VIEWS
+  const [profileViews, setProfileViews] = useState(0) 
   
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
@@ -168,6 +198,8 @@ function ProfileContent() {
   
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
+  // 👇 TRACKS WHICH COMMENT THE USER IS REPLYING TO
+  const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
   const [isBlocked, setIsBlocked] = useState(false)
 
   const targetId = searchParams.get('id')
@@ -238,7 +270,8 @@ function ProfileContent() {
         supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userIdToFetch),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', userIdToFetch),
-        supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`).eq('user_id', userIdToFetch).is('is_removed', false).order('created_at', { ascending: false }).range(0, POSTS_PER_PAGE - 1)
+        // 👇 UPDATED: Added parent_comment_id and comment_likes
+        supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`).eq('user_id', userIdToFetch).is('is_removed', false).order('created_at', { ascending: false }).range(0, POSTS_PER_PAGE - 1)
       ]);
       
       const pMap: Record<string, any> = {}
@@ -275,10 +308,10 @@ function ProfileContent() {
         supabase.from('profile_views').insert({
           profile_id: userIdToFetch,
           viewer_id: loggedInUser.id
-        }).then(); // Fire and forget
+        }).then(); 
       }
 
-      // 🔥 FETCH RECENT VIEWS (Only if they are Premium or Admin)
+      // 🔥 FETCH RECENT VIEWS
       if (profileData?.is_premium || profileData?.is_admin) {
         const { data: viewCount } = await supabase.rpc('get_profile_views_30d', { p_id: userIdToFetch });
         setProfileViews(viewCount || 0);
@@ -330,7 +363,7 @@ function ProfileContent() {
       setLoadingMore(true);
       const start = posts.length;
       
-      const { data } = await supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, email, user_id, created_at )`)
+      const { data } = await supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`)
           .eq('user_id', profileUser.id).is('is_removed', false).order('created_at', { ascending: false }).range(start, start + POSTS_PER_PAGE - 1);
 
       if (data) {
@@ -411,14 +444,13 @@ function ProfileContent() {
     }).select().single()
 
     if (!error && data) {
-        setPosts([{ ...data, likes: [], comments: [] }, ...posts])
+        setPosts([{ ...data, likes: [], comments: [], post_views: [] }, ...posts])
         setPostText(''); setPostTopic(''); clearFile(); setIsSelling(false); setProductLink('');
         showToast("Post created!");
     }
     setActionLoading(prev => ({...prev, createPost: false}))
   }
 
-  // 🛡️ ADMIN + OWNER DELETE LOGIC
   async function handleDelete(postId: string, isOwner: boolean) {
       if (isOffline) return showToast("Cannot delete while offline.", 'error');
       setConfirmModal({ message: isOwner ? "Delete this post?" : "🛡️ Admin: Remove this post for violation?", onConfirm: async () => {
@@ -457,16 +489,51 @@ function ProfileContent() {
           await supabase.from('likes').insert({ user_id: currentUser.id, post_id: postId });
           
           if (targetPost && targetPost.user_id !== currentUser.id) {
+            const senderName = profilesMap[currentUser.id]?.display_name || profilesMap[currentUser.id]?.username || 'Someone';
             const pushUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com/api/send-push' : '/api/send-push';
-            fetch(pushUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: targetPost.user_id, title: "New Like! ❤️", body: `${currentUser.display_name || 'Someone'} liked your post.` }) }).catch(err => console.error("Push failed", err));
+            fetch(pushUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: targetPost.user_id, title: "New Like! ❤️", body: `${senderName} liked your post.` }) }).catch(err => console.error("Push failed", err));
           }
         }
     } catch (err) {}
     setActionLoading(prev => ({...prev, [`like-${postId}`]: false}))
   }
 
+  // 👇 NEW: Comment Liking Logic for Profile
+  async function handleLikeComment(postId: string, commentId: string, isLiked: boolean) {
+    if (!currentUser) return showToast("Please login.", 'error');
+
+    // Optimistic UI update immediately
+    setPosts(prev => prev.map(msg => {
+        if (msg.id !== postId) return msg;
+        return {
+            ...msg,
+            comments: (msg.comments || []).map((c: any) => {
+                if (c.id !== commentId) return c;
+                return {
+                    ...c,
+                    comment_likes: isLiked 
+                        ? (c.comment_likes || []).filter((l: any) => l.user_id !== currentUser.id) 
+                        : [...(c.comment_likes || []), { user_id: currentUser.id }]
+                };
+            })
+        };
+    }));
+
+    if (isLiked) {
+        await supabase.from('comment_likes').delete().match({ comment_id: commentId, user_id: currentUser.id });
+    } else {
+        await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: currentUser.id });
+    }
+  }
+
   const toggleComments = (postId: string) => {
-    const newSet = new Set(openComments); newSet.has(postId) ? newSet.delete(postId) : newSet.add(postId);
+    const newSet = new Set(openComments);
+    if (newSet.has(postId)) {
+        newSet.delete(postId);
+        if (replyingTo?.postId === postId) setReplyingTo(null); // clear reply box when closed
+    } else {
+        newSet.add(postId);
+    }
     setOpenComments(newSet);
   }
 
@@ -477,15 +544,21 @@ function ProfileContent() {
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: true}))
     
     const targetPost = posts.find(p => p.id === postId);
+    const parentId = replyingTo?.postId === postId ? replyingTo?.commentId : null;
 
-    const { data } = await supabase.from('comments').insert({ post_id: postId, user_id: currentUser.id, email: currentUser.email, content: cleanText }).select().single()
+    const { data } = await supabase.from('comments').insert({ 
+        post_id: postId, user_id: currentUser.id, content: cleanText, parent_comment_id: parentId
+    }).select('*, comment_likes(user_id)').single()
+    
     if (data) {
         setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), data] } : msg));
         setCommentText(prev => ({ ...prev, [postId]: '' }));
+        if (replyingTo?.postId === postId) setReplyingTo(null);
 
         if (targetPost && targetPost.user_id !== currentUser.id) {
+          const senderName = profilesMap[currentUser.id]?.display_name || profilesMap[currentUser.id]?.username || 'Someone';
           const pushUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com/api/send-push' : '/api/send-push';
-          fetch(pushUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: targetPost.user_id, title: "New Comment! 💬", body: `${currentUser.display_name || 'Someone'}: ${cleanText.substring(0, 50)}${cleanText.length > 50 ? '...' : ''}` }) }).catch(err => console.error("Push failed", err));
+          fetch(pushUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ receiverId: targetPost.user_id, title: "New Comment! 💬", body: `${senderName}: ${cleanText.substring(0, 50)}${cleanText.length > 50 ? '...' : ''}` }) }).catch(err => console.error("Push failed", err));
         }
     }
     setActionLoading(prev => ({...prev, [`comment-${postId}`]: false}))
@@ -506,7 +579,6 @@ function ProfileContent() {
       }});
   }
 
-  // 🛡️ ADMIN USER BAN LOGIC
   async function handleBanUser() {
       setConfirmModal({ message: `🛡️ Admin: Permanently ban this user?`, onConfirm: async () => {
           setConfirmModal(null); setActionLoading(prev => ({...prev, banUser: true}));
@@ -589,28 +661,24 @@ function ProfileContent() {
       <div style={{ position: 'relative', zIndex: 1, backgroundColor: 'rgba(0,0,0,0.5)', minHeight: '100vh', padding: '20px', paddingTop: isOffline ? '60px' : '20px' }}>
         <div style={{ maxWidth: '800px', margin: '0 auto', paddingTop: '40px' }}>
             
-            {/* 🛡️ HEADER WITH BADGES */}
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <h1 style={{ margin: 0, color: 'white', fontSize: '28px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
                         {isMyProfile ? 'My Profile' : `${profileUser.display_name || 'User'}'s Profile`}
                     </h1>
                     
-                    {/* ✅ VERIFIED BADGE */}
                     {profileUser?.is_verified && (
                         <span title="Verified" style={{ color: '#3b82f6', fontSize: '24px', display: 'flex', alignItems: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
                             ☑️
                         </span>
                     )}
 
-                    {/* 🛡️ ADMIN BADGE */}
                     {profileUser?.is_admin && (
                         <span style={{ backgroundColor: '#3b82f6', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
                             🛡️ Admin
                         </span>
                     )}
 
-                    {/* ⭐ VIM+ PREMIUM BADGE */}
                     {profileUser?.is_premium && (
                         <span style={{ backgroundColor: '#fbbf24', color: '#111827', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
                             ⭐ VIM+
@@ -653,7 +721,6 @@ function ProfileContent() {
                         
                         <textarea value={editForm.bio} onChange={e => setEditForm({...editForm, bio: e.target.value})} style={{...STYLES.input, height: '60px'}} placeholder="Bio (Type a few keywords, then click Magic Write!)" />
                         
-                        {/* ⭐ GATED AI BIO BUTTON */}
                         <div style={{ marginBottom: '20px' }}>
                             {profileUser?.is_premium ? (
                                 <>
@@ -687,7 +754,6 @@ function ProfileContent() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
                                 
-                                {/* 🛡️ MODERATION TOOLS: BLOCK & ADMIN BAN */}
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     {!isMyProfile && currentUser && (
                                         <button onClick={handleBlockUser} disabled={actionLoading.blockUser} style={{ ...STYLES.btnDanger, opacity: actionLoading.blockUser ? 0.6 : 1 }}>🚫 Block</button>
@@ -698,7 +764,6 @@ function ProfileContent() {
                                 </div>
                             </div>
 
-                            {/* 🔥 THE NEW VIEW COUNTER BADGE FOR PREMIUM USERS */}
                             {profileUser?.is_premium && (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '900', color: '#ea580c', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', padding: '4px 12px', borderRadius: '9999px', marginBottom: '10px' }} title="Profile views in the last 30 days">
                                     <span>🔥</span>
@@ -715,7 +780,6 @@ function ProfileContent() {
                       </div>
                 </div>
 
-               {/* 🛍️ GATED VIMCIETY STOREFRONT LINK */}
                 <div style={{ width: '100%', marginBottom: '15px' }}>
                     {profileUser?.is_premium ? (
                         <button 
@@ -747,7 +811,6 @@ function ProfileContent() {
                     )}
                 </div>
 
-                {/* Render Store Links as Rich Previews using Microlink */}
                 {(profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px', width: '100%' }}>
                         {profileUser?.store_url && (
@@ -778,7 +841,6 @@ function ProfileContent() {
                 {isMyProfile && !isEditing && (
                     <div style={STYLES.card}>
                         
-                        {/* ⭐ GATED AI POST ASSISTANT SECTION */}
                         <div style={{ padding: '15px', backgroundColor: '#374151', borderRadius: '8px', marginBottom: '15px', border: '1px solid #4b5563' }}>
                             <p style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold', color: profileUser?.is_premium ? '#a855f7' : '#fbbf24' }}>
                                 {profileUser?.is_premium ? '✨ AI Story Assistant' : '⭐ AI Story Assistant (Premium)'}
@@ -823,8 +885,6 @@ function ProfileContent() {
                             <input type="file" ref={fileInputRef} accept="image/*, video/*" onChange={handleFileSelect} hidden />
                             <button onClick={() => fileInputRef.current?.click()} style={{ ...STYLES.btnSecondary, width: '100%', textAlign: 'center' }}>📷 Upload Image or Video</button>
 
-                           
-
                             {postFile && postFilePreview && (
                               <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #374151', marginTop: '4px' }}>
                                 {VALID_VIDEO_TYPES.includes(postFile.type) ? <video src={postFilePreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} /> : <img src={postFilePreview} alt="Upload" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />}
@@ -851,10 +911,13 @@ function ProfileContent() {
                         const isLiked = currentUser && post.likes?.some((l: any) => l.user_id === currentUser.id);
                         return (
                         <div key={post.id} style={STYLES.card}>
+                            
+                            {/* 👇 SILENT POST VIEW TRACKER 👇 */}
+                            <PostViewTracker postId={post.id} userId={currentUser?.id} supabase={supabase} />
+
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
                                 <span>{new Date(post.created_at).toLocaleString()}</span>
                                 
-                                {/* 🛡️ MODERATION TOOLS: DELETE / REPORT / REMOVE */}
                                 <div style={{ display: 'flex', gap: '15px' }}>
                                     {isMyProfile ? (
                                         <button onClick={() => handleDelete(post.id, true)} disabled={actionLoading[`delete-${post.id}`]} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px' }}>Delete</button>
@@ -888,26 +951,99 @@ function ProfileContent() {
                             <div style={{ marginTop: '15px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '15px' }}>
                                 <button aria-label="Like Post" onClick={() => handleLike(post.id, !!isLiked)} style={{ ...STYLES.iconBtn, color: isLiked ? '#ef4444' : '#9ca3af' }}><span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> <span>{post.likes?.length || 0}</span></button>
                                 <button aria-label="Comment on Post" onClick={() => toggleComments(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>💬</span> <span>{post.comments?.length || 0}</span></button>
-                                <button aria-label="Share Post" onClick={() => handleShare(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>↗️</span> <span>Share</span></button>
+                                
+                                {/* 👇 PREMIUM GATED VIEW COUNT 👇 */}
+                                {profilesMap[currentUser?.id]?.is_premium ? (
+                                    <div style={{ ...STYLES.iconBtn, cursor: 'default' }} title="Total Views">
+                                        <span style={{ fontSize: '20px' }}>👁️</span> 
+                                        <span style={{ fontWeight: '600', fontSize: '14px' }}>{post.post_views?.length || 0}</span>
+                                    </div>
+                                ) : (
+                                    <button 
+                                        onClick={() => router.push(currentUser ? '/upgrade' : '/login')} 
+                                        style={{ ...STYLES.iconBtn, color: '#fbbf24' }} 
+                                        title="Upgrade to see post views!"
+                                    >
+                                        <span style={{ fontSize: '20px' }}>👁️</span> 
+                                        <span style={{ fontSize: '12px', fontWeight: 'bold' }}>⭐</span>
+                                    </button>
+                                )}
+
+                                <button aria-label="Share Post" onClick={() => handleShare(post.id)} style={{ ...STYLES.iconBtn, marginLeft: 'auto' }}><span style={{ fontSize: '20px' }}>↗️</span> <span>Share</span></button>
                             </div>
 
                             {openComments.has(post.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
-                                    {post.comments?.map((c: any) => (
-                                        <div key={c.id} style={{ marginBottom: '12px', fontSize: '14px', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '4px' }}>{profilesMap[c.user_id]?.display_name || 'User'}</span>
-                                            
-                                            {/* ✨ ADDED BADGES TO COMMENTS! */}
-                                            {profilesMap[c.user_id]?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
-                                            {profilesMap[c.user_id]?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
-                                            
-                                            <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{c.content}</span>
+                                    
+                                    {/* 👇 RENDER THREADED REPLIES SAFELY IN DARK MODE 👇 */}
+                                    {(post.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
+                                        const commenter = profilesMap[c.user_id];
+                                        const isCommentLiked = currentUser && c.comment_likes?.some((l: any) => l.user_id === currentUser.id);
+                                        const replies = (post.comments || []).filter((r: any) => r.parent_comment_id === c.id);
+
+                                        return (
+                                            <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
+                                                <div>
+                                                    <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '4px' }}>
+                                                        {commenter?.display_name || commenter?.username || 'User'}
+                                                    </span>
+                                                    {commenter?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
+                                                    {commenter?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
+                                                    
+                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{c.content}</span>
+                                                    
+                                                    <div style={{ display: 'flex', gap: '15px', marginTop: '4px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
+                                                        <span style={{ cursor: 'pointer', color: isCommentLiked ? '#ef4444' : '#6b7280' }} onClick={() => handleLikeComment(post.id, c.id, !!isCommentLiked)}>
+                                                            {isCommentLiked ? '❤️' : '🤍'} {c.comment_likes?.length || 0}
+                                                        </span>
+                                                        <span style={{ cursor: 'pointer' }} onClick={() => setReplyingTo({ postId: post.id, commentId: c.id, username: commenter?.display_name || commenter?.username || 'User' })}>
+                                                            Reply
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {replies.length > 0 && (
+                                                    <div style={{ marginLeft: '15px', marginTop: '10px', paddingLeft: '15px', borderLeft: '2px solid #4b5563', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                        {replies.map((reply: any) => {
+                                                            const replier = profilesMap[reply.user_id];
+                                                            const isReplyLiked = currentUser && reply.comment_likes?.some((l: any) => l.user_id === currentUser.id);
+                                                            return (
+                                                                <div key={reply.id}>
+                                                                    <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '4px' }}>
+                                                                        {replier?.display_name || replier?.username || 'User'}
+                                                                    </span>
+                                                                    {replier?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
+                                                                    {replier?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
+                                                                    
+                                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{reply.content}</span>
+                                                                    
+                                                                    <div style={{ marginTop: '2px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
+                                                                        <span style={{ cursor: 'pointer', color: isReplyLiked ? '#ef4444' : '#6b7280' }} onClick={() => handleLikeComment(post.id, reply.id, !!isReplyLiked)}>
+                                                                            {isReplyLiked ? '❤️' : '🤍'} {reply.comment_likes?.length || 0}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+                                        {replyingTo?.postId === post.id && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#374151', color: '#a855f7', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold' }}>
+                                                <span>Replying to {replyingTo?.username}...</span>
+                                                <span style={{ cursor: 'pointer', fontSize: '16px', color: '#d1d5db' }} onClick={() => setReplyingTo(null)}>✕</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', gap: '10px' }}>
+                                            <input type="text" placeholder={replyingTo?.postId === post.id ? "Write a reply..." : "Add a comment..."} value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} />
+                                            <button onClick={() => handlePostComment(post.id)} disabled={actionLoading[`comment-${post.id}`]} style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
                                         </div>
-                                    ))}
-                                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-                                        <input type="text" placeholder="Add a comment..." value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} />
-                                        <button onClick={() => handlePostComment(post.id)} disabled={actionLoading[`comment-${post.id}`]} style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
                                     </div>
+
                                 </div>
                             )}
                         </div>
@@ -929,10 +1065,8 @@ export default function ProfilePage() {
         <ProfileContent />
       </Suspense>
 
-      {/* Referral Dashboard Section */}
       <div style={{ padding: '0 20px', maxWidth: '640px', margin: '40px auto' }}>
         <hr style={{ borderColor: '#374151', marginBottom: '40px' }} />
-        
       </div>
     </>
   )

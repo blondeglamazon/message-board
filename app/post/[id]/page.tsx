@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import PostRedirect from './PostRedirect' // <-- IMPORT THE CLIENT COMPONENT
+import PostRedirect from './PostRedirect' 
 
 type Props = { params: Promise<{ id: string }> }
 
@@ -17,8 +17,8 @@ export function generateStaticParams() {
   return [{ id: 'placeholder' }]
 }
 
-// 2. MOBILE COMPLIANCE: Strictly disable dynamic generation for the native export
-export const dynamicParams = false
+// 2. THE FACEBOOK FIX: Allow Vercel to dynamically generate real posts!
+export const dynamicParams = true 
 
 // 3. SEO: Dynamic Metadata for Links/iMessage
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -47,7 +47,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = `${profile?.display_name || profile?.username || 'Someone'} on VIMciety`
   const description = post.content ? post.content.substring(0, 200) + '...' : 'Check out this post on VIMciety!'
-  const ogImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? post.media_url : 'https://www.vimciety.com/logo.png'
+  
+  // Facebook strictly requires absolute URLs and hates video files in the image tag
+  const ogImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) 
+    ? post.media_url 
+    : 'https://www.vimciety.com/logo.png' // Make sure this logo actually exists on your site!
+    
   const postUrl = `https://www.vimciety.com/post/${id}`
 
   return {
