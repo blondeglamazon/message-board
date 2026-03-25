@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.gms.google-services'
 
 android {
     namespace = "com.vimciety.app"
@@ -10,10 +11,11 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         // 👇 Hardcoded to 36 to match
         targetSdkVersion 36
-        versionCode 35
+        versionCode 36
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        
+
+
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'

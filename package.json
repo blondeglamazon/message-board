@@ -57,6 +57,7 @@
     "eslint-config-next": "16.1.5",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
+    "supabase": "^2.84.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

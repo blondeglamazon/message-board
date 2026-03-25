@@ -16,6 +16,63 @@ import Microlink from '@microlink/react'
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 
+// 👇 1. THE NATIVE PUSH NOTIFICATION HOOK (iOS & Android Compliant)
+export const usePushNotifications = (userId: string | null, supabase: any) => {
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
+
+    const setupPushNotifications = async () => {
+      let permStatus = await PushNotifications.checkPermissions();
+      if (permStatus.receive === 'prompt') {
+        permStatus = await PushNotifications.requestPermissions();
+      }
+
+      if (permStatus.receive !== 'granted') {
+        console.log('User denied push notifications');
+        return;
+      }
+
+      PushNotifications.addListener('registration', async (token) => {
+        console.log('Push registration success! Token: ' + token.value);
+        
+        const { error } = await supabase.from('push_tokens').upsert({
+          user_id: userId,
+          token: token.value,
+          platform: Capacitor.getPlatform(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'token' }); 
+        
+        if (error) {
+          console.error('Supabase failed to save token:', error.message);
+        } else {
+          console.log('Token perfectly saved to database!');
+        }
+      });
+
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('Error on registration: ', error);
+      });
+
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('Push received: ', notification);
+      });
+
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('Push action performed: ', notification);
+        window.location.href = '/notifications';
+      });
+
+      await PushNotifications.register();
+    };
+
+    setupPushNotifications();
+
+    return () => {
+      PushNotifications.removeAllListeners();
+    };
+  }, [userId, supabase]);
+};
+
 function PostViewTracker({ postId, userId, supabase }: { postId: string, userId: string | undefined, supabase: any }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -210,7 +267,6 @@ function MessageBoardContent() {
   
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
-  // 👇 TRACKS WHICH COMMENT THE USER IS REPLYING TO
   const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
   
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
@@ -223,27 +279,12 @@ function MessageBoardContent() {
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
-  const setupPushNotifications = async (userId: string, supabaseClient: any) => {
-    if (!Capacitor.isNativePlatform()) return;
-    try {
-      let permStatus = await PushNotifications.checkPermissions();
-      if (permStatus.receive === 'prompt') {
-        permStatus = await PushNotifications.requestPermissions();
-      }
-      if (permStatus.receive !== 'granted') return; 
-
-      await PushNotifications.removeAllListeners();
-      PushNotifications.addListener('registration', async (token) => {
-        await supabaseClient.from('push_tokens').upsert({ user_id: userId, token: token.value }, { onConflict: 'token' }); 
-      });
-      await PushNotifications.register();
-    } catch (error) { console.error('Push notification setup failed:', error); }
-  };
+  // 👇 2. FIRE THE HOOK HERE - IT WILL AUTOMATICALLY WAIT FOR THE USER TO LOAD
+  usePushNotifications(user?.id, supabase);
 
   async function buildFeedQuery(authUser: any) {
     let query = supabase
       .from('posts')
-      // 👇 UPDATED: Now grabs threaded replies AND comment likes
       .select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`)
       .order('created_at', { ascending: false })
       .limit(50)
@@ -287,8 +328,6 @@ function MessageBoardContent() {
       setIsLoading(true)
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
-
-      if (authUser) setupPushNotifications(authUser.id, supabase);
 
       const { data: allProfiles } = await supabase.from('profiles').select('id, username, display_name, avatar_url, is_premium')
       const pMap: Record<string, any> = {}
@@ -373,11 +412,9 @@ function MessageBoardContent() {
     }
   }
 
-  // 👇 NEW: Comment Liking Logic
   async function handleLikeComment(postId: string, commentId: string, isLiked: boolean) {
     if (!user) return showToast("Please login.", 'error');
 
-    // Optimistic UI update immediately
     setMessages(prev => prev.map(msg => {
         if (msg.id !== postId) return msg;
         return {
@@ -405,7 +442,7 @@ function MessageBoardContent() {
     const newSet = new Set(openComments)
     if (newSet.has(postId)) {
         newSet.delete(postId)
-        if (replyingTo?.postId === postId) setReplyingTo(null) // clear reply box when closed
+        if (replyingTo?.postId === postId) setReplyingTo(null)
     } else {
         newSet.add(postId)
     }
@@ -633,7 +670,6 @@ function MessageBoardContent() {
                             {openComments.has(msg.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #f3f4f6' }}>
                                     
-                                    {/* 👇 RENDER THREADED REPLIES SAFELY 👇 */}
                                     {(msg.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
                                         const commenter = profilesMap[c.user_id];
                                         const isCommentLiked = user && c.comment_likes?.some((l: any) => l.user_id === user.id);

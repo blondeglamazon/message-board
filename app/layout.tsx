@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
+import PushRegistry from '@/components/PushRegistry'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -58,6 +59,7 @@ export default function RootLayout({
         paddingRight: 'env(safe-area-inset-right)'
       }}>
         
+        <PushRegistry />
         {/* The Sidebar (Navigation) */}
         <Sidebar />
 

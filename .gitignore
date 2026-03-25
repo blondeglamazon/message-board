@@ -41,4 +41,4 @@ yarn-error.log*
 next-env.d.ts 
 *.json
 client_secret_*.json
-*.p8
+*.p8env.local
