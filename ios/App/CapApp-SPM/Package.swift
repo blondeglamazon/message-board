@@ -13,7 +13,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "7.6.0"),
         .package(name: "CapacitorCommunityAdmob", path: "..\..\..\node_modules\@capacitor-community\admob"),
-        .package(name: "CapacitorCommunityFcm", path: "..\..\..\node_modules\@capacitor-community\fcm"),
+        .package(name: "CapacitorFirebaseApp", path: "..\..\..\node_modules\@capacitor-firebase\app"),
         .package(name: "CapacitorFirebaseMessaging", path: "..\..\..\node_modules\@capacitor-firebase\messaging"),
         .package(name: "CapacitorApp", path: "..\..\..\node_modules\@capacitor\app"),
         .package(name: "CapacitorNetwork", path: "..\..\..\node_modules\@capacitor\network"),
@@ -30,7 +30,7 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
                 .product(name: "CapacitorCommunityAdmob", package: "CapacitorCommunityAdmob"),
-                .product(name: "CapacitorCommunityFcm", package: "CapacitorCommunityFcm"),
+                .product(name: "CapacitorFirebaseApp", package: "CapacitorFirebaseApp"),
                 .product(name: "CapacitorFirebaseMessaging", package: "CapacitorFirebaseMessaging"),
                 .product(name: "CapacitorApp", package: "CapacitorApp"),
                 .product(name: "CapacitorNetwork", package: "CapacitorNetwork"),
