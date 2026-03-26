@@ -1,15 +1,18 @@
 import { useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
-// The "export const" right here is what fixes your error!
 export const usePushNotifications = (userId: string | null, supabase: any) => {
-  
+
   useEffect(() => {
+    // 1. Array to hold our specific listeners so we don't wipe out others
+    let listeners: PluginListenerHandle[] = [];
+
     if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
 
     const setupPushNotifications = async () => {
       let permStatus = await PushNotifications.checkPermissions();
+      
       if (permStatus.receive === 'prompt') {
         permStatus = await PushNotifications.requestPermissions();
       }
@@ -19,47 +22,66 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         return;
       }
 
-      // 1️⃣ ALWAYS ATTACH THE LISTENER FIRST!
-      PushNotifications.addListener('registration', async (token) => {
-        console.log('Push registration success! Token: ' + token.value);
-        
-        // 💾 SAVE TO SUPABASE
+      // 2. Save the listener references as we create them
+      const regListener = await PushNotifications.addListener('registration', async (token) => {
+        console.log('Raw token from Capacitor:', token.value);
+
+        let fcmToken = token.value;
+
+        // 🍎 Swap APNs for FCM on iOS
+        if (Capacitor.getPlatform() === 'ios') {
+          try {
+            const { FirebaseMessaging } = await import('@capacitor-firebase/messaging');
+            const result = await FirebaseMessaging.getToken();
+            fcmToken = result.token;
+            console.log('FCM token from Firebase:', fcmToken);
+          } catch (err) {
+            console.error('Failed to get FCM token on iOS:', err);
+            return;
+          }
+        }
+
+        // Save token to Supabase
         const { error } = await supabase.from('push_tokens').upsert({
           user_id: userId,
-          token: token.value,
+          token: fcmToken,
           platform: Capacitor.getPlatform(),
           updated_at: new Date().toISOString()
-        }, { onConflict: 'token' }); 
-        
-        // 2️⃣ LOG DATABASE ERRORS IF SUPABASE REJECTS IT
+        }, { onConflict: 'token' });
+
         if (error) {
           console.error('Supabase failed to save token:', error.message);
         } else {
-          console.log('Token perfectly saved to database!');
+          console.log('FCM token saved to database!');
         }
       });
+      listeners.push(regListener);
 
-      PushNotifications.addListener('registrationError', (error) => {
+      const errorListener = await PushNotifications.addListener('registrationError', (error) => {
         console.error('Error on registration: ', error);
       });
+      listeners.push(errorListener);
 
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      const receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
         console.log('Push received: ', notification);
       });
+      listeners.push(receivedListener);
 
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      const actionListener = await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push action performed: ', notification);
         window.location.href = '/notifications';
       });
+      listeners.push(actionListener);
 
-      // 3️⃣ NOW TELL THE OS TO GET THE TOKEN
+      // Finally, trigger the registration
       await PushNotifications.register();
     };
 
     setupPushNotifications();
 
+    // 3. Clean up ONLY these specific listeners when the hook unmounts
     return () => {
-      PushNotifications.removeAllListeners();
+      listeners.forEach(listener => listener.remove());
     };
   }, [userId, supabase]);
 };
