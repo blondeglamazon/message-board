@@ -63,6 +63,7 @@ export default function UpgradePage() {
   const supabase = createClient()
   
   useEffect(() => { 
+      // Now checking for BOTH iOS and Android native platforms
       setIsNative(Capacitor.isNativePlatform())
       supabase.auth.getUser().then(({data}) => setCurrentUser(data.user)) 
   }, [])
@@ -76,7 +77,7 @@ export default function UpgradePage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // 🔄 NEW: Required by Apple - Restore Purchases Function
+  // 🔄 NEW: Required by Apple & Google - Restore Purchases Function
   const handleRestore = async () => {
     if (!isNative) return showToast("Only available on the mobile app.", "error");
     setIsRestoring(true);
@@ -95,7 +96,7 @@ export default function UpgradePage() {
     if (tierId === 'free') return;
     if (!currentUser) return showToast("Please log in to upgrade", 'error');
     
-    // 📱 NATIVE APP LOGIC (iOS & Android) - Triggers RevenueCat
+    // 📱 NATIVE APP LOGIC (iOS & ANDROID) - Triggers RevenueCat
     if (isNative) {
       try {
         const { RevenueCatUI } = await import('@revenuecat/purchases-capacitor-ui');
@@ -219,7 +220,7 @@ export default function UpgradePage() {
         </div>
 
         {/* ========================================================= */}
-        {/* 🚨 REQUIRED BY APPLE: Restore Button & Legal Text           */}
+        {/* 🚨 REQUIRED BY APPLE/GOOGLE: Restore Button & Legal Text  */}
         {/* ========================================================= */}
         <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.5', padding: '0 20px' }}>
           
@@ -228,7 +229,7 @@ export default function UpgradePage() {
              <span style={{ color: '#4b5563' }}>|</span>
              <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
              
-             {/* The Mandatory Restore Button for iOS */}
+             {/* The Mandatory Restore Button for Native Apps */}
              {isNative && (
                <>
                  <span style={{ color: '#4b5563' }}>|</span>
@@ -245,7 +246,7 @@ export default function UpgradePage() {
           {/* The Mandatory Auto-Renew Boilerplate */}
           {isNative ? (
             <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'justify' }}>
-              Payment will be charged to your Apple ID account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your App Store account settings after purchase.
+              Payment will be charged to your App Store or Google Play account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your device's account settings after purchase.
             </p>
           ) : (
             <>
