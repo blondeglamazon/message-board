@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { createClient } from '@/app/lib/supabase/client'
 
 export default function CreateProductForm() {
   const [title, setTitle] = useState('')
@@ -9,6 +11,9 @@ export default function CreateProductForm() {
   
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+
+  // 👈 Initialize Supabase
+  const supabase = createClient() 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,9 +30,20 @@ export default function CreateProductForm() {
     }
 
     try {
-      const res = await fetch('/api/products', {
+      // 1. Grab the user's active session token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      // 2. If on mobile, force the app to talk to the live web server
+      const baseUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com' : ''
+
+      // 3. Pass the token securely in the headers
+      const res = await fetch(`${baseUrl}/api/products`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ 
           title, 
           price_in_cents: priceInCents,
@@ -71,6 +87,18 @@ export default function CreateProductForm() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #4B5563', backgroundColor: '#374151', color: 'white' }}
+          />
+        </div>
+
+        {/* 🛠️ ADDED: Description Input */}
+        <div>
+          <label style={{ display: 'block', color: '#9CA3AF', fontSize: '14px', marginBottom: '6px' }}>Description</label>
+          <textarea
+            required
+            placeholder="Describe what your followers are getting..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #4B5563', backgroundColor: '#374151', color: 'white', minHeight: '80px', resize: 'vertical' }}
           />
         </div>
 

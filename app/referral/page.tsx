@@ -1,25 +1,53 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import ReferralDashboard from '@/components/ReferralDashboard'
 import StripeConnectButton from '@/components/StripeConnectButton'
 import CreateProductForm from '@/components/CreateProductForm'
-import Storefront from '@/components/Storefront' // <-- 1. Imported the Storefront
-import { createClient } from '@/app/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import Storefront from '@/components/Storefront'
+import { createClient } from '@/app/lib/supabase/client' 
 
-export default async function ReferralPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+export default function ReferralPage() {
+  const router = useRouter()
+  const supabase = createClient()
+  
+  const [user, setUser] = useState<any>(null)
+  const [isStripeConnected, setIsStripeConnected] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  if (!user) {
-    redirect('/login')
+  useEffect(() => {
+    async function loadData() {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      if (!authUser) {
+        router.push('/login')
+        return
+      }
+      
+      setUser(authUser)
+
+      // 🛡️ THE AUDIT FIX: Using .maybeSingle() to prevent unhandled crashes
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('stripe_account_id')
+        .eq('id', authUser.id)
+        .maybeSingle() 
+
+      setIsStripeConnected(!!profile?.stripe_account_id)
+      setIsLoading(false)
+    }
+
+    loadData()
+  }, [router, supabase])
+
+  if (isLoading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF' }}>
+        Loading dashboard...
+      </div>
+    )
   }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('stripe_account_id')
-    .eq('id', user.id)
-    .single()
-
-  const isStripeConnected = !!profile?.stripe_account_id
 
   return (
     <div style={{ minHeight: '100vh', padding: '40px 20px', maxWidth: '680px', margin: '0 auto' }}>
@@ -44,7 +72,6 @@ export default async function ReferralPage() {
             <CreateProductForm />
           </div>
 
-          {/* 2. Added the Storefront right below the green box! */}
           <Storefront userId={user.id} />
         </>
       ) : (

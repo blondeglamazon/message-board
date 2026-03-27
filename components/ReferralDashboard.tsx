@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { createClient } from '@/app/lib/supabase/client' // 👈 ADDED SUPABASE
 
 interface ReferralEntry {
   id: string
@@ -10,7 +12,7 @@ interface ReferralEntry {
 }
 
 interface ReferralStats {
-  link: string // <-- Added this so it matches the backend!
+  link: string 
   total_referrals: number
   pending_referrals: number
   paid_referrals: number
@@ -23,10 +25,27 @@ export default function ReferralDashboard() {
   const [stats, setStats] = useState<ReferralStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const supabase = createClient() // 👈 Initialize Supabase
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/referral/stats') 
+      // 1. Grab the user's active session token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      // 2. If on mobile, force the app to talk to the live web server
+      const baseUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com' : ''
+
+      // 3. Pass the token securely in the headers so the API knows who is logged in!
+      const res = await fetch(`${baseUrl}/api/referral/stats`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      }) 
+      
+      if (!res.ok) throw new Error('Failed to fetch stats')
+      
       const data = await res.json()
       setStats(data)
     } catch (err) {
@@ -34,14 +53,13 @@ export default function ReferralDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
 
   const copyLink = async () => {
-    // Check for the correct 'link' property now
     if (!stats?.link) return
     await navigator.clipboard.writeText(stats.link)
     setCopied(true)
@@ -90,7 +108,7 @@ export default function ReferralDashboard() {
           <input
             type="text"
             readOnly
-            value={stats?.link || 'Loading...'} // <-- Perfectly points to the backend link!
+            value={stats?.link || 'Loading...'} 
             style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #4B5563', fontSize: 13, color: 'white', backgroundColor: '#374151' }}
           />
           <button
