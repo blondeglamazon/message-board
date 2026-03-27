@@ -1,4 +1,8 @@
-import { createClient } from '@/app/lib/supabase/server'
+'use client'; // 👈 1. Must add this!
+
+import { useState, useEffect } from 'react'; // 👈 2. Add React hooks 
+
+import { createClient } from '@/app/lib/supabase/client'
 import BuyButton from './BuyButton'
 
 export default async function Storefront({ userId }: { userId: string }) {
