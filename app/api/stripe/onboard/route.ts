@@ -22,7 +22,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
       .from('profiles')
       .select('stripe_account_id')
       .eq('id', user.id)
-      .single();
+      .maybeSingle(); // ✅ Safe!
 
     let accountId = profile?.stripe_account_id;
 
