@@ -7,9 +7,6 @@ import { Capacitor } from '@capacitor/core'
 import { createClient } from '@/app/lib/supabase/client'
 import Link from 'next/link'
 
-// ============================================================================
-// 🎨 CENTRALIZED STYLES 
-// ============================================================================
 const STYLES = {
   btnPrimary: { backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold' as const, border: 'none', padding: '14px', borderRadius: '10px', cursor: 'pointer', width: '100%', fontSize: '16px', transition: 'transform 0.2s, opacity 0.2s' },
   btnPremium: { backgroundColor: '#fbbf24', color: '#111827', fontWeight: 'bold' as const, border: 'none', padding: '14px', borderRadius: '10px', cursor: 'pointer', width: '100%', fontSize: '16px', transition: 'transform 0.2s, opacity 0.2s' },
@@ -63,7 +60,6 @@ export default function UpgradePage() {
   const supabase = createClient()
   
   useEffect(() => { 
-      // Now checking for BOTH iOS and Android native platforms
       setIsNative(Capacitor.isNativePlatform())
       supabase.auth.getUser().then(({data}) => setCurrentUser(data.user)) 
   }, [])
@@ -77,7 +73,6 @@ export default function UpgradePage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // 🔄 NEW: Required by Apple & Google - Restore Purchases Function
   const handleRestore = async () => {
     if (!isNative) return showToast("Only available on the mobile app.", "error");
     setIsRestoring(true);
@@ -96,7 +91,6 @@ export default function UpgradePage() {
     if (tierId === 'free') return;
     if (!currentUser) return showToast("Please log in to upgrade", 'error');
     
-    // 📱 NATIVE APP LOGIC (iOS & ANDROID) - Triggers RevenueCat
     if (isNative) {
       try {
         const { RevenueCatUI } = await import('@revenuecat/purchases-capacitor-ui');
@@ -109,7 +103,6 @@ export default function UpgradePage() {
       }
     }
 
-    // 🌐 WEB LOGIC - Triggers Stripe Checkout
     if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
     setLoadingTier(tierId)
     
@@ -135,7 +128,7 @@ export default function UpgradePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', position: 'relative' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', backgroundColor: '#111827', color: 'white', position: 'relative' }}>
       <Sidebar />
       
       {toast && (
@@ -144,7 +137,7 @@ export default function UpgradePage() {
         </div>
       )}
 
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '80px 20px 60px 20px' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '80px 20px calc(120px + env(safe-area-inset-bottom)) 20px' }}>
         
         <div style={{ textAlign: 'center', marginBottom: '50px' }}>
           <h1 style={{ fontSize: 'clamp(28px, 5vw, 36px)', fontWeight: 'bold', margin: '0 0 15px 0', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
@@ -157,7 +150,7 @@ export default function UpgradePage() {
 
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
           gap: '24px',
           alignItems: 'stretch'
         }}>
@@ -219,9 +212,6 @@ export default function UpgradePage() {
           ))}
         </div>
 
-        {/* ========================================================= */}
-        {/* 🚨 REQUIRED BY APPLE/GOOGLE: Restore Button & Legal Text  */}
-        {/* ========================================================= */}
         <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.5', padding: '0 20px' }}>
           
           <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
@@ -229,7 +219,6 @@ export default function UpgradePage() {
              <span style={{ color: '#4b5563' }}>|</span>
              <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
              
-             {/* The Mandatory Restore Button for Native Apps */}
              {isNative && (
                <>
                  <span style={{ color: '#4b5563' }}>|</span>
@@ -243,7 +232,6 @@ export default function UpgradePage() {
              )}
           </div>
 
-          {/* The Mandatory Auto-Renew Boilerplate */}
           {isNative ? (
             <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'justify' }}>
               Payment will be charged to your App Store or Google Play account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your device's account settings after purchase.

@@ -8,17 +8,22 @@ import ReportButton from '@/components/ReportButton'
 import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import { PushNotifications } from '@capacitor/push-notifications'
-import { Capacitor } from '@capacitor/core'
-
+import { Capacitor, PluginListenerHandle } from '@capacitor/core'
 // @ts-ignore
 import Microlink from '@microlink/react'
 
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 
-// 👇 1. THE NATIVE PUSH NOTIFICATION HOOK (iOS & Android Compliant)
+// 👇 1. THE NATIVE PUSH NOTIFICATION HOOK (iOS & Android Compliant + EULA Safe)
 export const usePushNotifications = (userId: string | null, supabase: any) => {
   useEffect(() => {
+    let listeners: PluginListenerHandle[] = [];
+
+    // 🛑 NEW: Don't ask for push permissions if they haven't agreed to the EULA yet!
+    const hasAgreedToEula = typeof window !== 'undefined' ? localStorage.getItem('vimciety_eula_accepted') : null;
+    if (!hasAgreedToEula) return; 
+
     if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
 
     const setupPushNotifications = async () => {
@@ -32,7 +37,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         return;
       }
 
-      PushNotifications.addListener('registration', async (token) => {
+      const regListener = await PushNotifications.addListener('registration', async (token) => {
         console.log('Push registration success! Token: ' + token.value);
         
         const { error } = await supabase.from('push_tokens').upsert({
@@ -48,19 +53,23 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
           console.log('Token perfectly saved to database!');
         }
       });
+      listeners.push(regListener);
 
-      PushNotifications.addListener('registrationError', (error) => {
+      const errorListener = await PushNotifications.addListener('registrationError', (error) => {
         console.error('Error on registration: ', error);
       });
+      listeners.push(errorListener);
 
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      const receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
         console.log('Push received: ', notification);
       });
+      listeners.push(receivedListener);
 
-      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      const actionListener = await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('Push action performed: ', notification);
         window.location.href = '/notifications';
       });
+      listeners.push(actionListener);
 
       await PushNotifications.register();
     };
@@ -68,7 +77,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
     setupPushNotifications();
 
     return () => {
-      PushNotifications.removeAllListeners();
+      listeners.forEach(listener => listener.remove());
     };
   }, [userId, supabase]);
 };
@@ -269,6 +278,9 @@ function MessageBoardContent() {
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
   
+  // 🛑 FIX: State to track which post is currently submitting a comment to prevent duplicate submissions
+  const [submittingComment, setSubmittingComment] = useState<string | null>(null)
+  
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
   
   const blockedIdsRef = useRef<string[]>([])
@@ -371,7 +383,6 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase])
 
-
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
@@ -449,26 +460,40 @@ function MessageBoardContent() {
     setOpenComments(newSet)
   }
 
+  // 🛑 FIX: Updated handler wrapped in a try/catch to properly prevent rage-clicking
   async function handlePostComment(postId: string) {
     if (!user) return showToast("Please login to comment.", 'error')
     const text = commentText[postId]?.trim()
     if (!text) return
     
-    const parentId = replyingTo?.postId === postId ? replyingTo?.commentId : null;
+    // Safety check: Exit immediately if they are already submitting for this post
+    if (submittingComment === postId) return;
 
-    const { data: newComment, error } = await supabase.from('comments').insert({ 
-        post_id: postId, user_id: user.id, content: text, parent_comment_id: parentId 
-    }).select('*, comment_likes(user_id)').single()
-    
-    if (error) return showToast("Error: " + error.message, 'error')
-    
-    setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
-    setCommentText(prev => ({ ...prev, [postId]: '' }))
-    if (replyingTo?.postId === postId) setReplyingTo(null);
+    // Lock the comment box
+    setSubmittingComment(postId);
 
-    const targetPost = messages.find(m => m.id === postId);
-    if (targetPost && targetPost.user_id !== user.id) { 
-      await supabase.from('notifications').insert({ user_id: targetPost.user_id, actor_id: user.id, type: 'comment', post_id: postId });
+    try {
+        const parentId = replyingTo?.postId === postId ? replyingTo?.commentId : null;
+
+        const { data: newComment, error } = await supabase.from('comments').insert({ 
+            post_id: postId, user_id: user.id, content: text, parent_comment_id: parentId 
+        }).select('*, comment_likes(user_id)').single()
+        
+        if (error) throw error;
+        
+        setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
+        setCommentText(prev => ({ ...prev, [postId]: '' }))
+        if (replyingTo?.postId === postId) setReplyingTo(null);
+
+        const targetPost = messages.find(m => m.id === postId);
+        if (targetPost && targetPost.user_id !== user.id) { 
+            await supabase.from('notifications').insert({ user_id: targetPost.user_id, actor_id: user.id, type: 'comment', post_id: postId });
+        }
+    } catch (error: any) {
+        showToast("Error: " + error.message, 'error')
+    } finally {
+        // Unlock the comment box regardless of success or failure
+        setSubmittingComment(null);
     }
   }
 
@@ -726,8 +751,32 @@ function MessageBoardContent() {
                                             </div>
                                         )}
                                         <div style={{ display: 'flex', gap: '10px' }}>
-                                            <input type="text" placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment..."} value={commentText[msg.id] || ''} onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} />
-                                            <button onClick={() => handlePostComment(msg.id)} style={{ minHeight: '44px', padding: '0 20px', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
+                                            {/* 🛑 FIX: Input is disabled when submitting */}
+                                            <input 
+                                                type="text" 
+                                                placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment..."} 
+                                                value={commentText[msg.id] || ''} 
+                                                onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
+                                                style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} 
+                                                disabled={submittingComment === msg.id}
+                                            />
+                                            {/* 🛑 FIX: Button changes color, text, and disables when submitting */}
+                                            <button 
+                                                onClick={() => handlePostComment(msg.id)} 
+                                                disabled={submittingComment === msg.id}
+                                                style={{ 
+                                                    minHeight: '44px', 
+                                                    padding: '0 20px', 
+                                                    backgroundColor: submittingComment === msg.id ? '#9ca3af' : '#111827', 
+                                                    color: 'white', 
+                                                    border: 'none', 
+                                                    borderRadius: '22px', 
+                                                    fontWeight: 'bold', 
+                                                    cursor: submittingComment === msg.id ? 'not-allowed' : 'pointer' 
+                                                }}
+                                            >
+                                                {submittingComment === msg.id ? 'Posting...' : 'Post'}
+                                            </button>
                                         </div>
                                     </div>
 

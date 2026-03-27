@@ -3,12 +3,16 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
 export const usePushNotifications = (userId: string | null, supabase: any) => {
-
   useEffect(() => {
+    // 🛑 Define the array to hold our listeners so we don't get a ReferenceError!
     let listeners: PluginListenerHandle[] = [];
 
-    if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
+    // 🛑 NEW: Don't ask for push permissions if they haven't agreed to the EULA yet!
+    const hasAgreedToEula = typeof window !== 'undefined' ? localStorage.getItem('vimciety_eula_accepted') : null;
+    if (!hasAgreedToEula) return; 
 
+    if (!Capacitor.isNativePlatform() || !userId || !supabase) return;
+    
     const setupPushNotifications = async () => {
       let permStatus = await PushNotifications.checkPermissions();
       
