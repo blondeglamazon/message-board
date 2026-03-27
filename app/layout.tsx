@@ -4,6 +4,7 @@ import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import PushRegistry from '@/components/PushRegistry'
 import EulaModal from '@/components/EulaModal'
+import RevenueCatSetup from '@/components/RevenueCatSetup' // 👈 Your new initializer import
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -59,6 +60,9 @@ export default function RootLayout({
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)'
       }}>
+        
+        {/* Runs silently in the background on app boot! */}
+        <RevenueCatSetup />
         
         <EulaModal />
         <PushRegistry />

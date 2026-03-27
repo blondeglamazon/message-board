@@ -16,7 +16,6 @@ dependencies {
     implementation project(':capgo-capacitor-app-tracking-transparency')
     implementation project(':capgo-capacitor-social-login')
     implementation project(':revenuecat-purchases-capacitor')
-    implementation project(':revenuecat-purchases-capacitor-ui')
 
 }
 

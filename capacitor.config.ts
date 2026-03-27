@@ -4,19 +4,19 @@ const config: CapacitorConfig = {
   appId: 'com.vimciety.app',
   appName: 'VIMciety',
   webDir: 'out',
-  
-  // ✅ FIX #17: Proper CORS and Network Handling for Android
+
+  // ✅ Proper CORS and Network Handling for Android
   server: {
     androidScheme: 'https',
     cleartext: false,
   },
 
   plugins: {
-    // ✅ FIX #1: Push Notification configurations
+    // ✅ Push Notification configurations
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"]
     },
-    // ✅ NEW FIX: Completely disable and remove the Facebook SDK to prevent Xcode 15 crashes
+    // ✅ Disable Facebook SDK to prevent Xcode crashes
     SocialLogin: {
       providers: {
         facebook: false

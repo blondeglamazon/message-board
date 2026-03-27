@@ -28,7 +28,7 @@ const TIERS = [
     badge: null
   },
   {
-    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VIM_PLUS || '', 
+    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VIM_PLUS || '',
     name: 'VIM+',
     price: '$9.99',
     interval: '/mo',
@@ -40,7 +40,7 @@ const TIERS = [
     badge: 'MOST POPULAR'
   },
   {
-    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VERIFIED || '', 
+    id: process.env.NEXT_PUBLIC_STRIPE_PRICE_VERIFIED || '',
     name: 'Verified',
     price: '$19.99',
     interval: '/mo',
@@ -58,12 +58,12 @@ export default function UpgradePage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isNative, setIsNative] = useState(false)
   const supabase = createClient()
-  
-  useEffect(() => { 
-      setIsNative(Capacitor.isNativePlatform())
-      supabase.auth.getUser().then(({data}) => setCurrentUser(data.user)) 
+
+  useEffect(() => {
+    setIsNative(Capacitor.isNativePlatform())
+    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user))
   }, [])
-  
+
   const [loadingTier, setLoadingTier] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -90,22 +90,76 @@ export default function UpgradePage() {
   const handleUpgrade = async (tierId: string, tierName: string) => {
     if (tierId === 'free') return;
     if (!currentUser) return showToast("Please log in to upgrade", 'error');
-    
+
+    // ============================================================
+    // 📱 NATIVE (iOS & Android) — RevenueCat direct purchase
+    // ============================================================
     if (isNative) {
+      setLoadingTier(tierId);
       try {
-        const { RevenueCatUI } = await import('@revenuecat/purchases-capacitor-ui');
-        await RevenueCatUI.presentPaywall(); 
-        return; 
-      } catch (error) {
-        console.error("RevenueCat Error:", error);
-        showToast("Could not load the upgrade screen.", "error");
-        return;
+        const { Purchases } = await import('@revenuecat/purchases-capacitor');
+
+        // Fetch offerings from RevenueCat
+        const offerings = await Purchases.getOfferings();
+
+        if (!offerings.current || offerings.current.availablePackages.length === 0) {
+          showToast("No subscription packages available.", "error");
+          setLoadingTier(null);
+          return;
+        }
+
+        // Find the right package based on which tier they tapped
+        const packages = offerings.current.availablePackages;
+        let targetPackage = null;
+
+        if (tierName === 'VIM+') {
+          targetPackage = packages.find(p =>
+            p.identifier === '$rc_monthly' ||
+            p.product.identifier.toLowerCase().includes('vim_plus') ||
+            p.product.identifier.toLowerCase().includes('vimplus')
+          ) || packages[0];
+        } else if (tierName === 'Verified') {
+          targetPackage = packages.find(p =>
+            p.product.identifier.toLowerCase().includes('verified')
+          ) || packages[packages.length - 1];
+        }
+
+        if (!targetPackage) {
+          showToast("Package not found. Please try again.", "error");
+          setLoadingTier(null);
+          return;
+        }
+
+        // Open the native Apple/Google payment sheet directly
+        const { customerInfo } = await Purchases.purchasePackage({
+          aPackage: targetPackage
+        });
+
+        // Check if purchase was successful
+        const entitlements = customerInfo.entitlements.active;
+        if (Object.keys(entitlements).length > 0) {
+          showToast("Purchase successful! Welcome to " + tierName + "!", "success");
+          setLoadingTier(null);
+          router.push('/profile');
+        } else {
+          setLoadingTier(null);
+        }
+
+      } catch (error: any) {
+        setLoadingTier(null);
+        if (error?.userCancelled) return;
+        console.error("Purchase Error:", error);
+        showToast(error?.message || "Purchase failed. Please try again.", "error");
       }
+      return; // Always return here — never fall through to Stripe on native
     }
 
+    // ============================================================
+    // 🌐 WEB — Stripe Checkout
+    // ============================================================
     if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
     setLoadingTier(tierId)
-    
+
     try {
       const apiUrl = '/api/checkout';
       const response = await fetch(apiUrl, {
@@ -113,13 +167,13 @@ export default function UpgradePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ priceId: tierId, userId: currentUser.id, tierName: tierName })
       });
-      
+
       const { url } = await response.json();
       if (url) {
-          window.location.href = url;
+        window.location.href = url;
       } else {
-          showToast("Error getting checkout link.", 'error')
-          setLoadingTier(null)
+        showToast("Error getting checkout link.", 'error')
+        setLoadingTier(null)
       }
     } catch (error) {
       showToast("Unable to start checkout. Please try again.", 'error')
@@ -130,15 +184,15 @@ export default function UpgradePage() {
   return (
     <div style={{ height: '100vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', backgroundColor: '#111827', color: 'white', position: 'relative' }}>
       <Sidebar />
-      
+
       {toast && (
         <div style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e', color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)' }}>
-            {toast.msg}
+          {toast.msg}
         </div>
       )}
 
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '80px 20px calc(120px + env(safe-area-inset-bottom)) 20px' }}>
-        
+
         <div style={{ textAlign: 'center', marginBottom: '50px' }}>
           <h1 style={{ fontSize: 'clamp(28px, 5vw, 36px)', fontWeight: 'bold', margin: '0 0 15px 0', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
             Choose Your Experience
@@ -148,14 +202,14 @@ export default function UpgradePage() {
           </p>
         </div>
 
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           gap: '24px',
           alignItems: 'stretch'
         }}>
           {TIERS.map((tier) => (
-            <div 
+            <div
               key={tier.name}
               style={{
                 backgroundColor: '#1f2937',
@@ -169,10 +223,10 @@ export default function UpgradePage() {
               }}
             >
               {tier.badge && (
-                <span style={{ 
+                <span style={{
                   position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
-                  backgroundColor: tier.highlight ? '#fbbf24' : '#3b82f6', 
-                  color: tier.highlight ? '#111827' : 'white', 
+                  backgroundColor: tier.highlight ? '#fbbf24' : '#3b82f6',
+                  color: tier.highlight ? '#111827' : 'white',
                   padding: '6px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', letterSpacing: '0.5px',
                   whiteSpace: 'nowrap'
                 }}>
@@ -188,17 +242,17 @@ export default function UpgradePage() {
               <p style={{ color: '#d1d5db', margin: '0 0 30px 0', fontSize: '14px', lineHeight: '1.6', minHeight: '44px' }}>
                 {tier.description}
               </p>
-              
+
               <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 40px 0', flex: 1 }}>
                 {tier.features.map((feature, idx) => (
                   <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px', fontSize: '14px', color: '#e5e7eb' }}>
-                    <span style={{ color: tier.highlight ? '#fbbf24' : '#22c55e', fontSize: '16px', marginTop: '-2px' }}>✓</span> 
+                    <span style={{ color: tier.highlight ? '#fbbf24' : '#22c55e', fontSize: '16px', marginTop: '-2px' }}>✓</span>
                     <span style={{ lineHeight: '1.4' }}>{feature}</span>
                   </li>
                 ))}
               </ul>
 
-              <button 
+              <button
                 onClick={() => handleUpgrade(tier.id, tier.name)}
                 disabled={tier.id === 'free' || loadingTier === tier.id}
                 style={{
@@ -212,24 +266,25 @@ export default function UpgradePage() {
           ))}
         </div>
 
+        {/* Required by Apple & Google: Restore, Legal, Links */}
         <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.5', padding: '0 20px' }}>
-          
+
           <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
-             <Link href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Use (EULA)</Link>
-             <span style={{ color: '#4b5563' }}>|</span>
-             <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
-             
-             {isNative && (
-               <>
-                 <span style={{ color: '#4b5563' }}>|</span>
-                 <button 
-                    onClick={handleRestore} 
-                    disabled={isRestoring}
-                    style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
-                   {isRestoring ? 'Restoring...' : 'Restore Purchases'}
-                 </button>
-               </>
-             )}
+            <Link href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Use (EULA)</Link>
+            <span style={{ color: '#4b5563' }}>|</span>
+            <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
+
+            {isNative && (
+              <>
+                <span style={{ color: '#4b5563' }}>|</span>
+                <button
+                  onClick={handleRestore}
+                  disabled={isRestoring}
+                  style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                  {isRestoring ? 'Restoring...' : 'Restore Purchases'}
+                </button>
+              </>
+            )}
           </div>
 
           {isNative ? (
