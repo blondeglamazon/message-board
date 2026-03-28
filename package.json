@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "cross-env MOBILE_BUILD=true node build-android.js",
+    "build": "next build",
+    "build:mobile": "cross-env MOBILE_BUILD=true node build-android.js",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "patch-package && node patch-spm.js",
