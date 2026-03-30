@@ -4,19 +4,35 @@ import * as admin from 'firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
-// 1. Initialize Firebase Admin securely outside the handler (prevents memory leaks on cold starts)
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
+// 1. Helper function to initialize Firebase Admin securely.
+// By keeping this inside a function, we prevent Next.js from executing it 
+// globally during the 'next build' step, which stops the Appflow crash!
+function initFirebase() {
+  if (!admin.apps.length) {
+    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+      console.warn('⚠️ Firebase environment variables are missing. Skipping initialization. (Normal during build phase)');
+      return false;
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      }),
+    });
+  }
+  return true;
 }
 
 export async function POST(req: Request) {
   try {
+    // Run the initialization check right when the API is actually called at runtime
+    const isFirebaseReady = initFirebase();
+    if (!isFirebaseReady) {
+      return NextResponse.json({ error: 'Server misconfiguration: Firebase is not initialized.' }, { status: 500 });
+    }
+
     // 2. Initialize Supabase Admin client
     // ⚠️ CRITICAL: Must use the SERVICE_ROLE_KEY to bypass RLS and read all push tokens!
     const supabaseAdmin = createClient(
