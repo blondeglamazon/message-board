@@ -2,18 +2,19 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-});
-
-// Initialize Supabase with the SERVICE_ROLE key (Bypasses security rules to make Admin edits)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! 
-);
-
 export async function POST(req: Request) {
+  // 1. Initialize Stripe safely inside the handler
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'dummy_key_for_build', {
+    apiVersion: '2026-02-25.clover' as any,
+  });
+
+  // 2. Initialize Supabase safely inside the handler
+  // The fallback strings prevent the "Neither apiKey nor config" crash during Next.js static builds!
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy-for-build.supabase.co',
+    process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key_for_build'
+  );
+
   const body = await req.text();
   const signature = req.headers.get('stripe-signature') as string;
 
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET || 'dummy_webhook_secret'
     );
   } catch (err: any) {
     console.error(`Webhook Error: ${err.message}`);

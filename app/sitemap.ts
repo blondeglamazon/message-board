@@ -1,17 +1,29 @@
 import { MetadataRoute } from 'next'
 import { createClient } from '@supabase/supabase-js'
 
-// ✅ FIX: This tells Next.js to safely bake the sitemap into a static XML file during the build!
-export const dynamic = 'force-static'
+// ✅ FIX 1: Tell Next.js to generate this dynamically when Google asks for it, NOT during the build!
+export const dynamic = 'force-dynamic'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // 1. Initialize Supabase (Using standard Keys since this runs safely on the server/during build)
+  const baseUrl = 'https://www.vimciety.com'
+
+  // ✅ FIX 2: Add dummy fallbacks so the static analyzer doesn't panic
   const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy-for-build.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_key_for_build'
   )
 
-  const baseUrl = 'https://www.vimciety.com'
+  // ✅ FIX 3: Short-circuit during the build phase so it doesn't try to query the dummy database
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return [
+      {
+        url: baseUrl, 
+        lastModified: new Date(),
+        changeFrequency: 'always',
+        priority: 1.0, 
+      }
+    ]
+  }
 
   // 2. Fetch all posts from Supabase
   const { data: posts } = await supabase

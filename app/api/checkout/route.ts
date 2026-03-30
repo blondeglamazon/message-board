@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
-// Initialize Stripe securely
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover', // Use the standard API version
-});
-
 export async function POST(request: Request) {
   try {
+    // 🛡️ FIX: Initialize Stripe securely INSIDE the handler!
+    // The fallback 'dummy_key' stops the Stripe SDK from panicking during Next.js static analysis.
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'dummy_key_for_build', {
+      apiVersion: '2026-02-25.clover' as any, // Cast as any just in case TypeScript complains about the custom version tag
+    });
+
     const body = await request.json();
     const { priceId, userId, tierName } = body; 
 
