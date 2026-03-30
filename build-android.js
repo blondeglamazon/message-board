@@ -29,7 +29,10 @@ const routesToHide = [
   { dir: path.join(__dirname, 'app', 'admin'), backup: path.join(__dirname, 'app', '_admin_hidden'), name: 'Admin Dashboard' },
   // 👇 NEW: Hiding Sitemaps to prevent Supabase data-fetching crashes on mobile!
   { dir: path.join(__dirname, 'app', 'sitemap.ts'), backup: path.join(__dirname, 'app', '_sitemap.ts.bak'), name: 'Sitemap (TS)' },
-  { dir: path.join(__dirname, 'app', 'sitemap.xml'), backup: path.join(__dirname, 'app', '_sitemap.xml.bak'), name: 'Sitemap (XML)' }
+  { dir: path.join(__dirname, 'app', 'sitemap.xml'), backup: path.join(__dirname, 'app', '_sitemap.xml.bak'), name: 'Sitemap (XML)' },
+  // 👇 Hide Stripe routes for mobile
+  { dir: path.join(__dirname, 'app', 'api', 'stripe'), backup: path.join(__dirname, 'app', 'api', '_stripe_hidden'), name: 'Stripe' },
+  { dir: path.join(__dirname, 'app', 'api', 'products'), backup: path.join(__dirname, 'app', 'api', '_products_hidden'), name: 'Products' }
 ];
 
 // Helper: Pause execution for X milliseconds
