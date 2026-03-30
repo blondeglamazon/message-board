@@ -84,15 +84,11 @@ function PostViewTracker({ postId, userId, supabase }: { postId: string, userId:
     if (!userId || !ref.current) return;
 
     const observer = new IntersectionObserver(([entry]) => {
-      // If 50% of the post is visible on the screen
       if (entry.isIntersecting) {
-        // Silently log the view (Upsert prevents duplicate views from the same user)
         supabase.from('post_views').upsert({ 
             post_id: postId, 
             viewer_id: userId 
         }, { onConflict: 'post_id, viewer_id' }).then();
-        
-        // Disconnect so we only count it once per scroll session
         observer.disconnect(); 
       }
     }, { threshold: 0.5 });
@@ -198,7 +194,6 @@ function ProfileContent() {
   
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
-  // 👇 TRACKS WHICH COMMENT THE USER IS REPLYING TO
   const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
   const [isBlocked, setIsBlocked] = useState(false)
 
@@ -270,7 +265,6 @@ function ProfileContent() {
         supabase.from('posts').select('created_at').eq('user_id', userIdToFetch).order('created_at', { ascending: true }).limit(1),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', userIdToFetch),
         supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', userIdToFetch),
-        // 👇 UPDATED: Added parent_comment_id and comment_likes
         supabase.from('posts').select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`).eq('user_id', userIdToFetch).is('is_removed', false).order('created_at', { ascending: false }).range(0, POSTS_PER_PAGE - 1)
       ]);
       
@@ -303,7 +297,6 @@ function ProfileContent() {
           setEditForm({ ...profileData, display_name: profileData?.display_name || '' })
       }
 
-      // 📈 SILENT TRACKER: LOG A PROFILE VIEW
       if (loggedInUser && loggedInUser.id !== userIdToFetch) {
         supabase.from('profile_views').insert({
           profile_id: userIdToFetch,
@@ -311,7 +304,6 @@ function ProfileContent() {
         }).then(); 
       }
 
-      // 🔥 FETCH RECENT VIEWS
       if (profileData?.is_premium || profileData?.is_admin) {
         const { data: viewCount } = await supabase.rpc('get_profile_views_30d', { p_id: userIdToFetch });
         setProfileViews(viewCount || 0);
@@ -498,11 +490,9 @@ function ProfileContent() {
     setActionLoading(prev => ({...prev, [`like-${postId}`]: false}))
   }
 
-  // 👇 NEW: Comment Liking Logic for Profile
   async function handleLikeComment(postId: string, commentId: string, isLiked: boolean) {
     if (!currentUser) return showToast("Please login.", 'error');
 
-    // Optimistic UI update immediately
     setPosts(prev => prev.map(msg => {
         if (msg.id !== postId) return msg;
         return {
@@ -530,7 +520,7 @@ function ProfileContent() {
     const newSet = new Set(openComments);
     if (newSet.has(postId)) {
         newSet.delete(postId);
-        if (replyingTo?.postId === postId) setReplyingTo(null); // clear reply box when closed
+        if (replyingTo?.postId === postId) setReplyingTo(null); 
     } else {
         newSet.add(postId);
     }
@@ -793,7 +783,7 @@ function ProfileContent() {
                         >
                             🛍️ Visit VIMciety Storefront
                         </button>
-                    ) : (
+                    ) : isMyProfile ? (
                         <div style={{ padding: '20px', backgroundColor: '#374151', borderRadius: '12px', border: '1px solid #4b5563', textAlign: 'center' }}>
                             <p style={{ margin: '0 0 10px 0', color: '#d1d5db', fontSize: '14px' }}>
                                 Want to sell products directly on your profile?
@@ -808,7 +798,7 @@ function ProfileContent() {
                                 ⭐ Upgrade to Unlock Storefront
                             </button>
                         </div>
-                    )}
+                    ) : null}
                 </div>
 
                 {(profileUser?.store_url || profileUser?.store_url_2 || profileUser?.store_url_3) && (

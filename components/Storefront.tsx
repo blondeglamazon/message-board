@@ -1,27 +1,51 @@
-'use client'; // 👈 1. Must add this!
+'use client'; 
 
-import { useState, useEffect } from 'react'; // 👈 2. Add React hooks 
-
+import { useState, useEffect } from 'react'; 
 import { createClient } from '@/app/lib/supabase/client'
 import BuyButton from './BuyButton'
 
-export default async function Storefront({ userId }: { userId: string }) {
-  const supabase = await createClient()
+export default function Storefront({ userId }: { userId: string }) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  
+  // ✅ FIX: useState ensures supabase is created ONCE and stays stable across renders.
+  // Previously, createClient() was called on every render, producing a new reference
+  // that triggered the useEffect dependency check → re-fetch → re-render → infinite loop.
+  const [supabase] = useState(() => createClient());
 
-  // 1. Fetch all products created by this specific user
-  const { data: products, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('seller_id', userId)
-    .order('created_at', { ascending: false })
+  useEffect(() => {
+    const fetchProducts = async () => {
+      if (!userId) return;
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('seller_id', userId)
+        .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching products:', error)
-    return <div style={{ color: '#F87171' }}>Error loading storefront.</div>
+      if (error) {
+        console.error('Error fetching products:', error);
+        setHasError(true);
+      } else {
+        setProducts(data || []);
+      }
+      setIsLoading(false);
+    };
+
+    fetchProducts();
+  }, [userId, supabase]);
+
+  if (isLoading) {
+    return <div style={{ color: '#9CA3AF', textAlign: 'center', marginTop: '32px' }}>Loading storefront...</div>;
   }
 
-  // 2. If they haven't created anything yet, show a nice empty state
-  if (!products || products.length === 0) {
+  if (hasError) {
+    return <div style={{ color: '#F87171', textAlign: 'center', marginTop: '32px' }}>Error loading storefront.</div>;
+  }
+
+  if (products.length === 0) {
     return (
       <div style={{ padding: '24px', textAlign: 'center', color: '#9CA3AF', backgroundColor: '#1F2937', borderRadius: '12px', border: '1px dashed #4B5563', marginTop: '24px' }}>
         You haven't created any products yet. Use the form above to add your first item!
@@ -29,11 +53,8 @@ export default async function Storefront({ userId }: { userId: string }) {
     )
   }
 
-  // 3. Loop through their products and display a card for each one!
   return (
     <div style={{ marginTop: '32px' }}>
-      
-      
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
         {products.map((product) => (
           <div key={product.id} style={{ backgroundColor: '#1F2937', padding: '20px', borderRadius: '12px', border: '1px solid #374151', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -52,7 +73,6 @@ export default async function Storefront({ userId }: { userId: string }) {
               </div>
             </div>
             
-            {/* Reusing your awesome Stripe BuyButton! */}
             <BuyButton 
               sellerId={product.seller_id}
               priceInCents={product.price_in_cents}

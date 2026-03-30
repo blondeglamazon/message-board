@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Capacitor } from '@capacitor/core'
-import { createClient } from '@/app/lib/supabase/client' // 👈 ADDED SUPABASE
+import { createClient } from '@/app/lib/supabase/client'
 
 interface ReferralEntry {
   id: string
@@ -25,18 +25,20 @@ export default function ReferralDashboard() {
   const [stats, setStats] = useState<ReferralStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
-  const supabase = createClient() // 👈 Initialize Supabase
+
+  // ✅ FIX: useState ensures supabase is created ONCE and stays stable across renders.
+  // Previously, createClient() was called bare on every render, which meant the
+  // useCallback dependency on `supabase` changed every time → fetchStats changed →
+  // useEffect re-ran → infinite loop of API calls.
+  const [supabase] = useState(() => createClient())
 
   const fetchStats = useCallback(async () => {
     try {
-      // 1. Grab the user's active session token
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
 
-      // 2. If on mobile, force the app to talk to the live web server
       const baseUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com' : ''
 
-      // 3. Pass the token securely in the headers so the API knows who is logged in!
       const res = await fetch(`${baseUrl}/api/referral/stats`, {
         headers: {
           'Content-Type': 'application/json',
