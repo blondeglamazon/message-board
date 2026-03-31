@@ -218,7 +218,7 @@ function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSucc
         {mediaPreview && (
             <div style={{ marginBottom: '15px', position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                 {postType === 'video' ? (
-                <video src={mediaPreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} />
+                <video src={`${mediaPreview}#t=0.001`} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} />
                 ) : postType === 'audio' ? (
                 <div style={{padding:'20px', background:'#f3f4f6'}}><audio controls src={mediaPreview} style={{width:'100%'}} /></div>
                 ) : (
@@ -549,7 +549,7 @@ function MessageBoardContent() {
         {msg.media_url && (
           <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
             {msg.media_url.match(/\.(mp4|webm|ogg|mov)$/i) ? (
-              <video src={msg.media_url} controls playsInline preload="metadata" style={{ width: '100%', display: 'block' }} />
+              <video src={`${msg.media_url}#t=0.001`} controls playsInline preload="metadata" style={{ width: '100%', display: 'block' }} />
             ) : msg.media_url.match(/\.(mp3|wav|m4a)$/i) ? (
               <div style={{padding:'20px', background:'#f3f4f6'}}>
                 <audio controls src={msg.media_url} preload="metadata" style={{ width: '100%' }} />

@@ -136,7 +136,7 @@ function MonetizedVideoPlayer({ post, currentUser, supabase }: { post: any, curr
 
   return (
     <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
-      <video ref={videoRef} src={post.media_url} controls playsInline preload="metadata" onTimeUpdate={handleTimeUpdate} style={{ width: '100%', display: 'block' }} />
+      <video ref={videoRef} src={`${post.media_url}#t=0.001`} controls playsInline preload="metadata" onTimeUpdate={handleTimeUpdate} style={{ width: '100%', display: 'block' }} />
     </div>
   );
 }
@@ -877,7 +877,7 @@ function ProfileContent() {
 
                             {postFile && postFilePreview && (
                               <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid #374151', marginTop: '4px' }}>
-                                {VALID_VIDEO_TYPES.includes(postFile.type) ? <video src={postFilePreview} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} /> : <img src={postFilePreview} alt="Upload" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />}
+                                {VALID_VIDEO_TYPES.includes(postFile.type) ? <video src={`${postFilePreview}#t=0.001`} controls playsInline style={{ width: '100%', display: 'block', maxHeight: '300px' }} /> : <img src={postFilePreview} alt="Upload" style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }} />}
                                 <button onClick={clearFile} style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '44px', height: '44px', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                               </div>
                             )}
