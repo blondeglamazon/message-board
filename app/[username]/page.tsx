@@ -1,13 +1,15 @@
-'use client'; // 👈 1. Add this at the very top!
+'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/app/lib/supabase/client'; // 👈 2. Use the CLIENT import
+import { createClient } from '@/app/lib/supabase/client';
 import Storefront from '@/components/Storefront';
-import { useParams } from 'next/navigation'; // 👈 3. Use the hook for params
+import { useParams } from 'next/navigation';
 
 export default function PublicProfilePage() {
   const params = useParams();
-  const supabase = createClient();
+  
+  // ✅ FIX: Stable supabase reference — prevents infinite re-render loop
+  const [supabase] = useState(() => createClient());
   
   const [profile, setProfile] = useState<any>(null);
   const [userPosts, setUserPosts] = useState<any[]>([]);
@@ -22,7 +24,6 @@ export default function PublicProfilePage() {
     async function loadProfileData() {
       if (!targetUsername) return;
 
-      // Fetch Profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -37,7 +38,6 @@ export default function PublicProfilePage() {
 
       setProfile(profileData);
 
-      // Fetch Posts
       const { data: posts } = await supabase
         .from('posts')
         .select('*')
@@ -49,7 +49,7 @@ export default function PublicProfilePage() {
     }
 
     loadProfileData();
-  }, [targetUsername]);
+  }, [targetUsername, supabase]);
 
   if (loading) return <div style={{ color: 'white', textAlign: 'center', padding: '50px' }}>Loading...</div>;
 
@@ -62,6 +62,9 @@ export default function PublicProfilePage() {
       </div>
     );
   }
+
+  // ✅ FIX: Treat admins as premium so their storefront renders
+  const showStorefront = profile.is_premium || profile.is_admin;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#111827', padding: '40px 20px' }}>
@@ -80,11 +83,14 @@ export default function PublicProfilePage() {
           <p style={{ color: '#9CA3AF' }}>@{profile.username}</p>
         </div>
 
-        {/* SECTION 1: The Storefront */}
-        <h2 style={{ color: 'white', marginBottom: '20px' }}>🛍️ Shop</h2>
-        <Storefront userId={profile.id} />
-
-        <hr style={{ margin: '40px 0', border: '0', borderTop: '1px solid #374151' }} />
+        {/* SECTION 1: The Storefront (only for premium/admin users) */}
+        {showStorefront && (
+          <>
+            <h2 style={{ color: 'white', marginBottom: '20px' }}>🛍️ Shop</h2>
+            <Storefront userId={profile.id} />
+            <hr style={{ margin: '40px 0', border: '0', borderTop: '1px solid #374151' }} />
+          </>
+        )}
 
         {/* SECTION 2: The Social Feed */}
         <h2 style={{ color: 'white', marginBottom: '20px' }}>📱 Feed</h2>

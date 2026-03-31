@@ -11,7 +11,6 @@ import ReportButton from '@/components/ReportButton'
 
 // --- Helper Functions ---
 
-// 1. Safe HTML Renderer (Used by Smart Content)
 const renderSafeHTML = (html: string, isFullBackground: boolean = false) => {
   if (!html) return null;
   const clean = DOMPurify.sanitize(html, {
@@ -35,12 +34,10 @@ const renderSafeHTML = (html: string, isFullBackground: boolean = false) => {
   )
 }
 
-// 2. RESTORED: Smart Media Content (Handles Links & HTML)
 const getSmartMediaContent = (content: string) => {
   if (!content) return null
   const trimmed = content.trim()
 
-  // A. Check for Spotify Link -> Convert to Embed
   if (trimmed.includes('open.spotify.com')) {
     const match = trimmed.match(/open\.spotify\.com\/(track|album|playlist|artist)\/([a-zA-Z0-9]+)/)
     if (match) {
@@ -57,12 +54,10 @@ const getSmartMediaContent = (content: string) => {
     }
   }
 
-  // B. Check for HTML Tags (Safe Render)
   if (trimmed.startsWith('<')) {
     return renderSafeHTML(trimmed)
   }
 
-  // C. Fallback: Plain Text
   return <p style={{ color: '#111827', fontSize: '16px', margin: 0, lineHeight: '1.4', fontWeight: '500' }}>{content}</p>
 }
 
@@ -101,7 +96,8 @@ interface UserProfileProps {
 }
 
 export default function UserProfile({ username }: UserProfileProps) {
-  const supabase = createClient()
+  // ✅ FIX: Stable supabase reference
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
 
   const [profile, setProfile] = useState<any>(null)
@@ -181,7 +177,6 @@ export default function UserProfile({ username }: UserProfileProps) {
     }
   }
 
-  // Mobile Compliant Image Upload Handler
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>, field: 'avatar_url' | 'background_url') => {
     try {
       if (!event.target.files || event.target.files.length === 0) return;
@@ -266,7 +261,6 @@ export default function UserProfile({ username }: UserProfileProps) {
           <div style={{ position: 'relative', width: '90px', height: '90px', borderRadius: '50%', overflow: 'hidden', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', marginBottom: '10px' }}>
             <img src={(isEditing ? editForm.avatar_url : profile.avatar_url) || '/default-avatar.png'} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             
-            {/* Clickable camera overlay when editing */}
             {isEditing && (
               <label style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: '24px', zIndex: 10 }}>
                  {uploadingAvatar ? '⏳' : '📷'}
@@ -297,7 +291,6 @@ export default function UserProfile({ username }: UserProfileProps) {
                 <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Display Name</label>
                 <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={{width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
                 
-                {/* Compliant Avatar Upload Field */}
                 <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Avatar Image</label>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                   <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} placeholder="URL or click upload..." style={{flex: 1, padding:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
@@ -307,7 +300,6 @@ export default function UserProfile({ username }: UserProfileProps) {
                   </label>
                 </div>
 
-                {/* Compliant Background Upload Field */}
                 <label style={{display:'block', fontSize:'14px', fontWeight:'bold', marginBottom:'5px'}}>Background (URL, Embed, or Image)</label>
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                   <input type="text" value={editForm.background_url} onChange={e => setEditForm({...editForm, background_url: e.target.value})} placeholder="URL, iframe, or upload..." style={{flex: 1, padding:'10px', borderRadius:'8px', border:'1px solid #d1d5db', fontSize:'16px'}} />
@@ -330,7 +322,6 @@ export default function UserProfile({ username }: UserProfileProps) {
             </div>
           )}
 
-          {/* Use Smart Renderer here */}
           {!isEditing && profile.music_embed && getSmartMediaContent(profile.music_embed)}
           
           {!isEditing && canvaId && renderSafeHTML(`<div style="position: relative; width: 100%; height: 0; padding-top: 56.25%; overflow: hidden; border-radius: 12px;"><iframe loading="lazy" style="position: absolute; width: 100%; height: 100%; top: 0; left: 0; border: none;" src="https://www.canva.com/design/${canvaId}/view?embed" allowfullscreen="allowfullscreen" allow="fullscreen"></iframe></div>`, true)}
@@ -353,7 +344,8 @@ export default function UserProfile({ username }: UserProfileProps) {
 }
 
 function PostCard({ post, currentUser, isOwnProfile, onDelete }: { post: any, currentUser: any, isOwnProfile: boolean, onDelete: (id: string) => void }) {
-  const supabase = createClient()
+  // ✅ FIX: Stable supabase reference in PostCard too
+  const [supabase] = useState(() => createClient())
   const [liked, setLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
   const [commentsCount, setCommentsCount] = useState(0)
@@ -398,7 +390,6 @@ function PostCard({ post, currentUser, isOwnProfile, onDelete }: { post: any, cu
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', minHeight: '44px', alignItems: 'center' }}>
          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '900' }}>{new Date(post.created_at).toLocaleDateString()}</span>
          
-         {/* Compliance: 44px Delete/Report Targets */}
          {isOwnProfile ? (
             <button onClick={() => onDelete(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 'bold', fontSize: '14px', minHeight: '44px', minWidth: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 Delete
@@ -408,12 +399,10 @@ function PostCard({ post, currentUser, isOwnProfile, onDelete }: { post: any, cu
          )}
       </div>
       
-      {/* Use Smart Renderer for Posts */}
       {getSmartMediaContent(post.content)}
       
       {post.media_url && renderMedia(post.media_url)}
 
-      {/* Compliance: 44px Interaction Targets */}
       <div style={{ display: 'flex', gap: '20px', marginTop: '15px', borderTop: '1px solid #e5e7eb', paddingTop: '10px' }}>
         <button onClick={toggleLike} style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '16px', color: liked ? '#ef4444' : '#111827', padding: '0 10px', minHeight: '44px', minWidth: '44px' }}>
            <span style={{ fontSize: '20px' }}>{liked ? '❤️' : '🤍'}</span>

@@ -581,7 +581,7 @@ function ProfileContent() {
   async function handleReportPost(postId: string) {
       setConfirmModal({ message: "Why are you reporting this?", showInput: true, onConfirm: async (inputValue) => {
           setConfirmModal(null); setConfirmInput(''); setActionLoading(prev => ({...prev, [`report-${postId}`]: true}));
-          await supabase.from('reports').insert({ reported_post_id: postId, reported_user_id: profileUser.id, reporter_id: currentUser.id, reason: inputValue?.trim() || 'No reason provided' });
+          await supabase.from('reports').insert({ post_id: postId, reporter_id: currentUser.id, reason: inputValue?.trim() || 'No reason provided' });
           showToast("Report submitted.");
           setActionLoading(prev => ({...prev, [`report-${postId}`]: false}));
       }});
