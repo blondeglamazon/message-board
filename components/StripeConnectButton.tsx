@@ -1,15 +1,30 @@
 'use client'
 
 import { useState } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { createClient } from '@/app/lib/supabase/client'
 
 export default function StripeConnectButton() {
   const [loading, setLoading] = useState(false)
+  const [supabase] = useState(() => createClient())
 
   const handleConnect = async () => {
     setLoading(true)
     try {
-      // Look how clean this is! No ID needed, the backend handles it via cookies.
-      const res = await fetch('/api/stripe/onboard', { method: 'POST' })
+      // Get the auth token so the API can identify the user on mobile
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      // On mobile, API routes don't exist locally — call the live server
+      const baseUrl = Capacitor.isNativePlatform() ? 'https://www.vimciety.com' : ''
+
+      const res = await fetch(`${baseUrl}/api/stripe/onboard`, { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
+      })
       const data = await res.json()
       
       if (data.url) {

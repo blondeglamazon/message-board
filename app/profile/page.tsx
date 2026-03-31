@@ -285,7 +285,7 @@ function ProfileContent() {
       setFollowingCount(followingRes.count || 0)
 
       setProfileUser({ 
-          id: userIdToFetch, email, memberSince,
+          id: userIdToFetch, email, memberSince, username: profileData?.username || '',
           display_name: profileData?.display_name || '', avatar_url: profileData?.avatar_url || '', background_url: profileData?.background_url || '', music_embed: profileData?.music_embed || '',
           bio: profileData?.bio || '', calendly_url: profileData?.calendly_url || '', google_calendar_url: profileData?.google_calendar_url || '', store_url: profileData?.store_url || '', store_url_2: profileData?.store_url_2 || '', store_url_3: profileData?.store_url_3 || '',
           is_admin: profileData?.is_admin || false,
@@ -773,7 +773,7 @@ function ProfileContent() {
                 <div style={{ width: '100%', marginBottom: '15px' }}>
                     {profileUser?.is_premium ? (
                         <button 
-                            onClick={() => router.push(`/${profilesMap?.[profileUser?.id]?.username || ''}`)} 
+                            onClick={() => router.push(`/storefront?u=${encodeURIComponent(profileUser?.username || '')}`)} 
                             style={{ 
                                 width: '100%', padding: '14px 24px', backgroundColor: '#10B981', color: 'white', 
                                 border: 'none', borderRadius: '10px', fontWeight: 'bold', fontSize: '16px',

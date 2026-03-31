@@ -1,28 +1,47 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { createClient } from '@/app/lib/supabase/server'; // Adjust if your path is different
+import { createClient } from '@/app/lib/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-02-25.clover',
-});
-
-
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+    apiVersion: '2026-02-25.clover',
+  });
 
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    let user = null;
 
-    if (authError || !user) {
+    // Try cookie-based auth first (works on web)
+    const supabase = await createClient();
+    const { data: { user: cookieUser } } = await supabase.auth.getUser();
+    
+    if (cookieUser) {
+      user = cookieUser;
+    } else {
+      // Fallback: read Bearer token from Authorization header (works on mobile)
+      const authHeader = req.headers.get('Authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.replace('Bearer ', '');
+        const supabaseService = createServiceClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        );
+        const { data: { user: tokenUser } } = await supabaseService.auth.getUser(token);
+        user = tokenUser;
+      }
+    }
+
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // 1. Check if they already have a Stripe account ID in your database
-    const { data: profile } = await supabase
+    const supabaseForQuery = await createClient();
+    const { data: profile } = await supabaseForQuery
       .from('profiles')
       .select('stripe_account_id')
       .eq('id', user.id)
-      .maybeSingle(); // ✅ Safe!
+      .maybeSingle();
 
     let accountId = profile?.stripe_account_id;
 
@@ -34,20 +53,19 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
       accountId = account.id;
 
       // Save this new ID to their Supabase profile
-      await supabase
+      await supabaseForQuery
         .from('profiles')
         .update({ stripe_account_id: accountId })
         .eq('id', user.id);
     }
 
     // 3. Generate the onboarding link
-    // Stripe needs to know where to send them if they hit "Back" or finish the process
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${baseUrl}/settings?stripe=refresh`, // If the link expires, send them here
-      return_url: `${baseUrl}/settings?stripe=success`,  // When they finish, send them here
+      refresh_url: `${baseUrl}/settings?stripe=refresh`,
+      return_url: `${baseUrl}/settings?stripe=success`,
       type: 'account_onboarding',
     });
 

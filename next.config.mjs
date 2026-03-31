@@ -9,35 +9,45 @@ const nextConfig = {
   // ==========================================================
   // 📱 AUTOMATIC MOBILE CAPACITOR SETTINGS 
   // ==========================================================
-  // ✅ MAGIC TOGGLE: Automatically turns on static export ONLY during mobile builds!
-  // Vercel will ignore this and safely deploy your API routes.
   output: process.env.MOBILE_BUILD === 'true' ? 'export' : undefined, 
 
   images: {
-    // Automatically disables Next.js image optimization ONLY for mobile apps
     unoptimized: process.env.MOBILE_BUILD === 'true' ? true : undefined,
+  },
+
+  // ==========================================================
+  // 🌐 CORS HEADERS FOR MOBILE API ACCESS
+  // ==========================================================
+  // Capacitor mobile apps make cross-origin requests to vimciety.com API routes.
+  // Without these headers, the browser engine blocks the requests after preflight.
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+        ],
+      },
+    ];
   },
 
   // ==========================================================
   // 🔒 SECURITY SETTINGS
   // ==========================================================
-  // Prevents source code from being exposed in production (App Store Requirement)
   productionBrowserSourceMaps: false,
 
   // ==========================================================
   // 🚀 PERFORMANCE & BUNDLE OPTIMIZATIONS
   // ==========================================================
   
-  // Strips console.log in production to speed up the app
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
 
-  // Silences the crash when using custom Webpack rules.
   turbopack: {},
 
-  // Force Next.js to aggressively share duplicate code chunks 
-  // This slashes the app's JS bundle size and stops duplicate router modules
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.optimization.splitChunks = {
@@ -54,7 +64,7 @@ const nextConfig = {
           },
           commons: {
             name: 'commons',
-            minChunks: 2, // If a module is used in 2+ places, put it in a shared chunk!
+            minChunks: 2,
             priority: 20,
           },
         },
@@ -64,5 +74,4 @@ const nextConfig = {
   },
 };
 
-// Wrap your existing config with the analyzer before exporting
 export default bundleAnalyzer(nextConfig);
