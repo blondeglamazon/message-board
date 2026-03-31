@@ -24,6 +24,7 @@ const routesToHide = [
   { dir: path.join(__dirname, 'app', 'api', 'checkout'), backup: path.join(__dirname, 'app', 'api', '_checkout_hidden'), name: 'Checkout' },
   { dir: path.join(__dirname, 'app', 'api', 'webhooks'), backup: path.join(__dirname, 'app', 'api', '_webhooks_hidden'), name: 'Webhooks' },
   { dir: path.join(__dirname, 'app', '[username]'), backup: path.join(__dirname, 'app', '_username_hidden'), name: '[username]' },
+  { dir: path.join(__dirname, 'app', 'u', '[username]'), backup: path.join(__dirname, 'app', 'u', '_username_hidden'), name: 'u/[username]' },
   { dir: path.join(__dirname, 'app', 'post', '[id]'), backup: path.join(__dirname, 'app', 'post', '_id_hidden'), name: 'post/[id]' },
   { dir: path.join(__dirname, 'app', 'post', '[postId]'), backup: path.join(__dirname, 'app', 'post', '_postId_hidden'), name: 'post/[postId]' },
   { dir: path.join(__dirname, 'app', 'admin'), backup: path.join(__dirname, 'app', '_admin_hidden'), name: 'Admin Dashboard' },
