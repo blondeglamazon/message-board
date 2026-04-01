@@ -5,7 +5,8 @@ import Sidebar from '@/components/Sidebar'
 import PushRegistry from '@/components/PushRegistry'
 import EulaModal from '@/components/EulaModal'
 import RevenueCatSetup from '@/components/RevenueCatSetup' 
-import Script from 'next/script' // 👈 Perfect import
+import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler' // 👈 Added the Stripe deep link listener
+import Script from 'next/script'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -54,7 +55,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* 👈 Google AdSense Verification Script */}
+        {/* Google AdSense Verification Script */}
         <Script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3035141160822131"
@@ -71,9 +72,9 @@ export default function RootLayout({
         paddingRight: 'env(safe-area-inset-right)'
       }}>
         
-        {/* Runs silently in the background on app boot! */}
+        {/* Background Listeners & Modals */}
         <RevenueCatSetup />
-        
+        <StripeDeepLinkHandler /> {/* 👈 Listens silently for Stripe return URLs */}
         <EulaModal />
         <PushRegistry />
         

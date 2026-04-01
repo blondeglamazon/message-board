@@ -48,14 +48,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = `${profile?.display_name || profile?.username || 'Someone'} on VIMciety`
   const description = post.content ? post.content.substring(0, 200) + '...' : 'Check out this post on VIMciety!'
   
-  // Facebook strictly requires absolute URLs and hates video files in the image tag
-  const ogImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i) 
-    ? post.media_url 
-    : 'https://www.vimciety.com/logo.png' // Make sure this logo actually exists on your site!
-    
   const postUrl = `https://www.vimciety.com/post/${id}`
 
-  return {
+  // 👇 DETECT MEDIA TYPE
+  const isVideo = post.media_url?.match(/\.(mp4|webm|ogg|mov)$/i)
+  const isImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+
+  // Facebook strictly requires an image fallback even for videos
+  const ogImage = isImage 
+    ? post.media_url 
+    : 'https://www.vimciety.com/logo.png' // You can later update this to a generated video thumbnail
+
+  // 👇 DYNAMIC METADATA PAYLOAD
+  // We build the base object, then conditionally add video properties
+  const metadata: Metadata = {
     title,
     description,
     alternates: { canonical: postUrl },
@@ -65,12 +71,36 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: postUrl,
       siteName: 'VIMciety',
       images: [{ url: ogImage, width: 1200, height: 630 }],
-      type: 'article',
+      type: isVideo ? 'video.other' : 'article',
       publishedTime: post.created_at,
       authors: [profile?.username || 'VIMciety User'], 
+      ...(isVideo && {
+        videos: [{
+          url: post.media_url,
+          secureUrl: post.media_url,
+          type: `video/${post.media_url.split('.').pop()}`, // Auto-detects video/mp4, video/webm, etc.
+          width: 1280,
+          height: 720,
+        }]
+      })
     },
-    twitter: { card: 'summary_large_image', title, description, images: [ogImage] }
+    twitter: { 
+      card: isVideo ? 'player' : 'summary_large_image', 
+      title, 
+      description, 
+      images: [ogImage],
+      ...(isVideo && {
+        players: [{
+          playerUrl: post.media_url,
+          streamUrl: post.media_url,
+          width: 1280,
+          height: 720,
+        }]
+      })
+    }
   }
+
+  return metadata
 }
 
 // 4. MAIN PAGE COMPONENT

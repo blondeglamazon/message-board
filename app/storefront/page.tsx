@@ -14,12 +14,20 @@ function StorefrontContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Grab the params
   const userId = searchParams.get('id')
   const username = searchParams.get('u')
 
   useEffect(() => {
     async function loadStorefront() {
       setLoading(true)
+
+      // 1. Check if Capacitor actually read the URL parameters
+      if (!userId && !username) {
+        setError(`URL Param Error: Could not find ?id or ?u in the app URL.`)
+        setLoading(false)
+        return
+      }
 
       let query = supabase
         .from('profiles')
@@ -29,16 +37,19 @@ function StorefrontContent() {
         query = query.eq('id', userId)
       } else if (username) {
         query = query.eq('username', username)
-      } else {
-        setError('No user specified.')
-        setLoading(false)
-        return
       }
 
       const { data, error: fetchError } = await query.maybeSingle()
 
-      if (fetchError || !data) {
-        setError('Storefront not found.')
+      // 2. Expose the actual Supabase error to the mobile UI
+      if (fetchError) {
+        setError(`Supabase Error: ${fetchError.message || fetchError.details}`)
+        setLoading(false)
+        return
+      }
+
+      if (!data) {
+        setError('Storefront not found in database.')
         setLoading(false)
         return
       }
@@ -66,9 +77,10 @@ function StorefrontContent() {
 
   if (error || !profile) {
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100vh', backgroundColor: '#111827', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <div style={{ textAlign: 'center' }}>
-          <h2 style={{ marginBottom: '16px' }}>{error || 'Storefront not found.'}</h2>
+          {/* This will now show the EXACT reason it failed on mobile */}
+          <h2 style={{ marginBottom: '16px', color: '#EF4444' }}>{error}</h2>
           <button
             onClick={() => router.back()}
             style={{ padding: '10px 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}

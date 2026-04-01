@@ -18,20 +18,22 @@ const nextConfig = {
   // ==========================================================
   // 🌐 CORS HEADERS FOR MOBILE API ACCESS
   // ==========================================================
-  // Capacitor mobile apps make cross-origin requests to vimciety.com API routes.
-  // Without these headers, the browser engine blocks the requests after preflight.
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
-        ],
-      },
-    ];
-  },
+  // Conditionally apply headers ONLY for the live web server build.
+  // Next.js will crash if headers() exists during a static export!
+  ...(process.env.MOBILE_BUILD !== 'true' && {
+    async headers() {
+      return [
+        {
+          source: '/api/:path*',
+          headers: [
+            { key: 'Access-Control-Allow-Origin', value: '*' },
+            { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
+            { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
+          ],
+        },
+      ];
+    },
+  }),
 
   // ==========================================================
   // 🔒 SECURITY SETTINGS

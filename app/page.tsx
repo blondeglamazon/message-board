@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense, useMemo } from 'react'
+import { useState, useEffect, useRef, Suspense, useMemo, useCallback } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DOMPurify from 'isomorphic-dompurify'
@@ -14,13 +14,13 @@ import Microlink from '@microlink/react'
 
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
+const PAGE_SIZE = 20; // Number of posts to load per infinite scroll batch
 
-// 👇 1. THE NATIVE PUSH NOTIFICATION HOOK (iOS & Android Compliant + EULA Safe)
+// 👇 1. THE NATIVE PUSH NOTIFICATION HOOK
 export const usePushNotifications = (userId: string | null, supabase: any) => {
   useEffect(() => {
     let listeners: PluginListenerHandle[] = [];
 
-    // 🛑 NEW: Don't ask for push permissions if they haven't agreed to the EULA yet!
     const hasAgreedToEula = typeof window !== 'undefined' ? localStorage.getItem('vimciety_eula_accepted') : null;
     if (!hasAgreedToEula) return; 
 
@@ -38,8 +38,6 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
       }
 
       const regListener = await PushNotifications.addListener('registration', async (token) => {
-        console.log('Push registration success! Token: ' + token.value);
-        
         const { error } = await supabase.from('push_tokens').upsert({
           user_id: userId,
           token: token.value,
@@ -47,11 +45,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
           updated_at: new Date().toISOString()
         }, { onConflict: 'token' }); 
         
-        if (error) {
-          console.error('Supabase failed to save token:', error.message);
-        } else {
-          console.log('Token perfectly saved to database!');
-        }
+        if (error) console.error('Supabase failed to save token:', error.message);
       });
       listeners.push(regListener);
 
@@ -66,7 +60,6 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
       listeners.push(receivedListener);
 
       const actionListener = await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('Push action performed: ', notification);
         window.location.href = '/notifications';
       });
       listeners.push(actionListener);
@@ -82,29 +75,43 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
   }, [userId, supabase]);
 };
 
+// 👇 2. UPDATED: POST VIEW TRACKER WITH 1.5s DELAY (DDOS PROTECTION)
 function PostViewTracker({ postId, userId, supabase }: { postId: string, userId: string | undefined, supabase: any }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!userId || !ref.current) return;
 
+    let timeoutId: NodeJS.Timeout;
+
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
-        supabase.from('post_views').upsert({ 
-            post_id: postId, 
-            viewer_id: userId 
-        }, { onConflict: 'post_id, viewer_id' }).then();
-        observer.disconnect(); 
+        // Only count as a view if they look at it for 1.5 seconds
+        timeoutId = setTimeout(() => {
+          supabase.from('post_views').upsert({ 
+              post_id: postId, 
+              viewer_id: userId 
+          }, { onConflict: 'post_id, viewer_id' }).then();
+          observer.disconnect(); 
+        }, 1500);
+      } else {
+        // They scrolled past too quickly, cancel the database call!
+        clearTimeout(timeoutId);
       }
     }, { threshold: 0.5 });
 
     observer.observe(ref.current);
-    return () => observer.disconnect();
+    
+    return () => {
+        observer.disconnect();
+        clearTimeout(timeoutId);
+    };
   }, [postId, userId, supabase]);
 
   return <div ref={ref} style={{ height: '1px', width: '100%', marginTop: '-1px' }} />;
 }
 
+// 👇 3. UPDATED: CREATE POST BOX WITH AUTO-RESIZING TEXTAREA
 function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSuccess }: any) {
   const [newMessage, setNewMessage] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
@@ -208,11 +215,25 @@ function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSucc
 
   return (
     <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: 'white', borderRadius: '20px', border: '1px solid #e5e7eb', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        {/* Auto-resizing textarea */}
         <textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${target.scrollHeight}px`;
+            }}
             placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind?"}
-            style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #d1d5db', marginBottom: '15px', minHeight: '80px', backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', color: isEmbedMode ? '#00ff00' : '#111827', fontSize: '16px', resize: 'none', boxSizing: 'border-box' }}
+            style={{ 
+                width: '100%', padding: '12px', borderRadius: '12px', 
+                border: '1px solid #d1d5db', marginBottom: '15px', 
+                minHeight: '80px', maxHeight: '300px', 
+                backgroundColor: isEmbedMode ? '#1f2937' : '#ffffff', 
+                color: isEmbedMode ? '#00ff00' : '#111827', 
+                fontSize: '16px', resize: 'none', boxSizing: 'border-box',
+                overflowY: 'auto'
+            }}
         />
         
         {mediaPreview && (
@@ -268,6 +289,11 @@ function MessageBoardContent() {
   const [isMobile, setIsMobile] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   
+  // Infinite Scroll State
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
       setToast({ msg, type })
@@ -277,12 +303,9 @@ function MessageBoardContent() {
   const [commentText, setCommentText] = useState<{ [key: string]: string }>({})
   const [openComments, setOpenComments] = useState<Set<string>>(new Set())
   const [replyingTo, setReplyingTo] = useState<{ postId: string, commentId: string, username: string } | null>(null)
-  
-  // 🛑 FIX: State to track which post is currently submitting a comment to prevent duplicate submissions
   const [submittingComment, setSubmittingComment] = useState<string | null>(null)
   
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
-  
   const blockedIdsRef = useRef<string[]>([])
   const [blockedIds, setBlockedIds] = useState<string[]>([])
   const followingIdsRef = useRef<Set<string>>(new Set())
@@ -291,15 +314,19 @@ function MessageBoardContent() {
   const urlSearchQuery = searchParams.get('q') || ''
   const isCreate = searchParams.get('create') === 'true'
 
-  // 👇 2. FIRE THE HOOK HERE - IT WILL AUTOMATICALLY WAIT FOR THE USER TO LOAD
   usePushNotifications(user?.id, supabase);
 
-  async function buildFeedQuery(authUser: any) {
+  // 👇 4. UPDATED: QUERY NOW ACCEPTS AN OLDEST DATE FOR PAGINATION
+  async function buildFeedQuery(authUser: any, oldestDate?: string) {
     let query = supabase
       .from('posts')
       .select(`*, likes ( user_id ), comments ( id, content, user_id, created_at, parent_comment_id, comment_likes ( user_id ) ), post_views ( viewer_id )`)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(PAGE_SIZE)
+
+    if (oldestDate) {
+      query = query.lt('created_at', oldestDate);
+    }
 
     if (blockedIdsRef.current.length > 0) {
       query = query.not('user_id', 'in', `(${blockedIdsRef.current.join(',')})`)
@@ -318,16 +345,6 @@ function MessageBoardContent() {
     return query
   }
 
-  const handleSharePost = async (postId: string, postUsername: string, postContent: string) => {
-    const shareUrl = `https://www.vimciety.com/post/${postId}`;
-    const shareData = { title: `Post by @${postUsername} | VIMciety`, text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post!`, url: shareUrl };
-    if (navigator.share) {
-      try { await navigator.share(shareData); } catch (err) {}
-    } else {
-      try { await navigator.clipboard.writeText(shareUrl); showToast('Post link copied to clipboard!'); } catch (err) { showToast('Failed to copy link.', 'error'); }
-    }
-  };
-
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768)
     handleResize()
@@ -338,6 +355,8 @@ function MessageBoardContent() {
   useEffect(() => {
     async function initData() {
       setIsLoading(true)
+      setHasMore(true) // Reset pagination on feed change
+      
       const { data: { user: authUser } } = await supabase.auth.getUser()
       setUser(authUser)
 
@@ -360,7 +379,10 @@ function MessageBoardContent() {
 
       const query = await buildFeedQuery(authUser)
       const { data: posts } = await query
-      if (posts) setMessages(posts)
+      if (posts) {
+        setMessages(posts)
+        if (posts.length < PAGE_SIZE) setHasMore(false)
+      }
       
       setIsLoading(false)
     }
@@ -382,6 +404,58 @@ function MessageBoardContent() {
 
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase])
+
+  // 👇 5. INFINITE SCROLL LOADER
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    setLoadingMore(true);
+    
+    try {
+      const oldestDate = messages[messages.length - 1].created_at;
+      const query = await buildFeedQuery(user, oldestDate);
+      const { data: olderPosts } = await query;
+
+      if (olderPosts && olderPosts.length > 0) {
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const newPosts = olderPosts.filter((p: any) => !existingIds.has(p.id));
+          return [...prev, ...newPosts];
+        });
+        if (olderPosts.length < PAGE_SIZE) setHasMore(false);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error("Failed to load more posts", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, messages, user, currentFeed]);
+
+  // Observer to trigger infinite scroll when reaching the bottom
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && hasMore && !loadingMore && !isLoading) {
+        handleLoadMore();
+      }
+    }, { threshold: 0.1 });
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [handleLoadMore, hasMore, loadingMore, isLoading]);
+
+  const handleSharePost = async (postId: string, postUsername: string, postContent: string) => {
+    const shareUrl = `https://www.vimciety.com/post/${postId}`;
+    const shareData = { title: `Post by @${postUsername} | VIMciety`, text: postContent ? postContent.substring(0, 100) + '...' : `Check out this post!`, url: shareUrl };
+    if (navigator.share) {
+      try { await navigator.share(shareData); } catch (err) {}
+    } else {
+      try { await navigator.clipboard.writeText(shareUrl); showToast('Post link copied to clipboard!'); } catch (err) { showToast('Failed to copy link.', 'error'); }
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -460,16 +534,12 @@ function MessageBoardContent() {
     setOpenComments(newSet)
   }
 
-  // 🛑 FIX: Updated handler wrapped in a try/catch to properly prevent rage-clicking
   async function handlePostComment(postId: string) {
     if (!user) return showToast("Please login to comment.", 'error')
     const text = commentText[postId]?.trim()
     if (!text) return
     
-    // Safety check: Exit immediately if they are already submitting for this post
     if (submittingComment === postId) return;
-
-    // Lock the comment box
     setSubmittingComment(postId);
 
     try {
@@ -492,7 +562,6 @@ function MessageBoardContent() {
     } catch (error: any) {
         showToast("Error: " + error.message, 'error')
     } finally {
-        // Unlock the comment box regardless of success or failure
         setSubmittingComment(null);
     }
   }
@@ -751,7 +820,6 @@ function MessageBoardContent() {
                                             </div>
                                         )}
                                         <div style={{ display: 'flex', gap: '10px' }}>
-                                            {/* 🛑 FIX: Input is disabled when submitting */}
                                             <input 
                                                 type="text" 
                                                 placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment..."} 
@@ -760,7 +828,6 @@ function MessageBoardContent() {
                                                 style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} 
                                                 disabled={submittingComment === msg.id}
                                             />
-                                            {/* 🛑 FIX: Button changes color, text, and disables when submitting */}
                                             <button 
                                                 onClick={() => handlePostComment(msg.id)} 
                                                 disabled={submittingComment === msg.id}
@@ -786,6 +853,19 @@ function MessageBoardContent() {
                     )
                 })
             )}
+
+            {/* 👇 6. INFINITE SCROLL TRIGGER OR FALLBACK BUTTON */}
+            {hasMore && filteredMessages.length > 0 && (
+              <div ref={loadMoreRef} style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontWeight: 'bold' }}>
+                {loadingMore ? 'Loading more posts...' : 'Scroll down for more'}
+              </div>
+            )}
+            {!hasMore && filteredMessages.length > 0 && (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af', fontSize: '14px', fontWeight: 'bold' }}>
+                You've reached the end of the feed!
+              </div>
+            )}
+
          </div>
 
          <footer style={{ marginTop: '60px', padding: '20px', textAlign: 'center' }}>

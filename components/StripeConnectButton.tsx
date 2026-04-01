@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 import { createClient } from '@/app/lib/supabase/client'
 
 export default function StripeConnectButton() {
@@ -25,16 +26,29 @@ export default function StripeConnectButton() {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       })
+      
+      // Catch non-200 responses before trying to parse JSON
+      if (!res.ok) {
+        const textError = await res.text()
+        throw new Error(`API Error ${res.status}: ${textError}`)
+      }
+
       const data = await res.json()
       
       if (data.url) {
-        window.location.href = data.url
+        // Open Stripe in a native modal over the app for mobile, or redirect normally for web
+        if (Capacitor.isNativePlatform()) {
+          await Browser.open({ url: data.url });
+        } else {
+          window.location.href = data.url;
+        }
       } else {
         alert(data.error || 'Failed to generate onboarding link')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      alert('Something went wrong')
+      // Alert the actual error message to make debugging easier
+      alert(`Error: ${error.message || 'Something went wrong'}`)
     } finally {
       setLoading(false)
     }
