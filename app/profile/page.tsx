@@ -7,8 +7,9 @@ import DOMPurify from 'isomorphic-dompurify'
 import Sidebar from '@/components/Sidebar'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core'
 import BuyButton from '@/components/BuyButton'
+import { renderTextWithMentions, extractAndSaveTags } from '@/app/utils/tagging' // 👈 Imported the Tagging Utilities
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -436,6 +437,11 @@ function ProfileContent() {
     }).select().single()
 
     if (!error && data) {
+        // 👇 TAGGING SYSTEM TRIGGER 👇
+        if (cleanText) {
+          await extractAndSaveTags(cleanText, data.id, currentUser.id, profilesMap, supabase);
+        }
+
         setPosts([{ ...data, likes: [], comments: [], post_views: [] }, ...posts])
         setPostText(''); setPostTopic(''); clearFile(); setIsSelling(false); setProductLink('');
         showToast("Post created!");
@@ -600,7 +606,8 @@ function ProfileContent() {
     return (
       <div style={{ lineHeight: '1.5' }}>
         <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word' }}>
-            {post.content?.split(/(https?:\/\/[^\s]+)/g).map((part: string, i: number) => part.match(/(https?:\/\/[^\s]+)/g) ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a> : <span key={i}>{part}</span>)}
+            {/* 👇 RENDER TEXT WITH MENTIONS 👇 */}
+            {renderTextWithMentions(post.content, profilesMap, router)}
         </p>
         {urls && urls[0] && (
           <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>

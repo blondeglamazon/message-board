@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/app/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import Sidebar from '@/components/Sidebar' // ADDED SIDEBAR
+import Sidebar from '@/components/Sidebar'
 
 export default function NotificationsPage() {
   const supabase = createClient()
@@ -67,6 +67,7 @@ export default function NotificationsPage() {
     if (type === 'like') return 'liked your post.'
     if (type === 'comment') return 'commented on your post.'
     if (type === 'follow') return 'started following you.'
+    if (type === 'tag') return 'tagged you in a post.' // 👈 ADDED TAG NOTIFICATION TEXT
     return 'interacted with you.'
   }
 

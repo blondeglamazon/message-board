@@ -9,6 +9,7 @@ import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { Capacitor, PluginListenerHandle } from '@capacitor/core'
+import { renderTextWithMentions, extractAndSaveTags } from '@/app/utils/tagging' // 🏷️ TAGGING
 // @ts-ignore
 import Microlink from '@microlink/react'
 
@@ -112,7 +113,8 @@ function PostViewTracker({ postId, userId, supabase }: { postId: string, userId:
 }
 
 // 👇 3. UPDATED: CREATE POST BOX WITH AUTO-RESIZING TEXTAREA
-function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSuccess }: any) {
+// 🏷️ TAGGING: Added profilesMap prop
+function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSuccess, profilesMap }: any) {
   const [newMessage, setNewMessage] = useState('');
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
@@ -196,6 +198,11 @@ function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSucc
 
         if (error) throw error;
 
+        // 🏷️ TAGGING: Extract @mentions and save tags + send notifications
+        if (newPost && newMessage) {
+          await extractAndSaveTags(newMessage, newPost.id, user.id, profilesMap, supabase);
+        }
+
         setNewMessage('');
         clearFile();
         setIsEmbedMode(false);
@@ -224,7 +231,7 @@ function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSucc
                 target.style.height = 'auto';
                 target.style.height = `${target.scrollHeight}px`;
             }}
-            placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind?"}
+            placeholder={isEmbedMode ? "Paste embed code here..." : "What's on your mind? Tag people with @username"}
             style={{ 
                 width: '100%', padding: '12px', borderRadius: '12px', 
                 border: '1px solid #d1d5db', marginBottom: '15px', 
@@ -592,20 +599,12 @@ function MessageBoardContent() {
     const urls = msg.content?.match(urlRegex);
     const firstUrl = urls ? urls[0] : null;
 
-    const renderTextWithLinks = (text: string) => {
-      if (!text) return null;
-      const parts = text.split(urlRegex);
-      return parts.map((part, i) => {
-        if (part.match(urlRegex)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'underline' }}>{part}</a>;
-        return <span key={i}>{part}</span>;
-      });
-    };
-
     return (
       <div>
         <div style={{ lineHeight: '1.6', color: '#111827', fontSize: '16px' }}>
           <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
-            {renderTextWithLinks(msg.content)}
+            {/* 🏷️ TAGGING: Replaced renderTextWithLinks with renderTextWithMentions */}
+            {renderTextWithMentions(msg.content, profilesMap, router)}
           </p>
           
           {firstUrl && (
@@ -675,8 +674,9 @@ function MessageBoardContent() {
             </h2>
          </div>
 
+         {/* 🏷️ TAGGING: Pass profilesMap to CreatePostBox */}
          {user && (
-            <CreatePostBox user={user} supabase={supabase} showToast={showToast} isCreate={isCreate} router={router} onPostSuccess={handlePostSuccess} />
+            <CreatePostBox user={user} supabase={supabase} showToast={showToast} isCreate={isCreate} router={router} onPostSuccess={handlePostSuccess} profilesMap={profilesMap} />
          )}
 
          <div style={{ marginBottom: '20px', width: '100%' }}>
