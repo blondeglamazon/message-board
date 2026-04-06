@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import { PushNotifications } from '@capacitor/push-notifications'
 import { Capacitor, PluginListenerHandle } from '@capacitor/core'
-import { renderTextWithMentions, extractAndSaveTags } from '@/app/utils/tagging' // 🏷️ TAGGING
+import { renderTextWithMentions, extractAndSaveTags, extractAndSaveCommentTags } from '@/app/utils/tagging' // 🏷️ TAGGING
 // @ts-ignore
 import Microlink from '@microlink/react'
 
@@ -557,6 +557,11 @@ function MessageBoardContent() {
         }).select('*, comment_likes(user_id)').single()
         
         if (error) throw error;
+
+        // 🏷️ TAGGING: Extract @mentions from comment
+        if (newComment && text) {
+          await extractAndSaveCommentTags(text, newComment.id, postId, user.id, profilesMap, supabase);
+        }
         
         setMessages(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), newComment] } : msg))
         setCommentText(prev => ({ ...prev, [postId]: '' }))
@@ -603,7 +608,7 @@ function MessageBoardContent() {
       <div>
         <div style={{ lineHeight: '1.6', color: '#111827', fontSize: '16px' }}>
           <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
-            {/* 🏷️ TAGGING: Replaced renderTextWithLinks with renderTextWithMentions */}
+            {/* 🏷️ TAGGING: Render post text with clickable @mentions */}
             {renderTextWithMentions(msg.content, profilesMap, router)}
           </p>
           
@@ -775,7 +780,8 @@ function MessageBoardContent() {
                                                     <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
                                                         {commenter?.display_name || commenter?.username || 'User'}
                                                     </span>
-                                                    <span style={{ color: '#4b5563' }}>{c.content}</span>
+                                                    {/* 🏷️ TAGGING: Render comment text with clickable @mentions */}
+                                                    <span style={{ color: '#4b5563' }}>{renderTextWithMentions(c.content, profilesMap, router)}</span>
                                                     
                                                     <div style={{ display: 'flex', gap: '15px', marginTop: '4px', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af' }}>
                                                         <span style={{ cursor: 'pointer', color: isCommentLiked ? '#ef4444' : '#9ca3af' }} onClick={() => handleLikeComment(msg.id, c.id, !!isCommentLiked)}>
@@ -797,7 +803,8 @@ function MessageBoardContent() {
                                                                     <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
                                                                         {replier?.display_name || replier?.username || 'User'}
                                                                     </span>
-                                                                    <span style={{ color: '#4b5563' }}>{reply.content}</span>
+                                                                    {/* 🏷️ TAGGING: Render reply text with clickable @mentions */}
+                                                                    <span style={{ color: '#4b5563' }}>{renderTextWithMentions(reply.content, profilesMap, router)}</span>
                                                                     <div style={{ marginTop: '2px', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af' }}>
                                                                         <span style={{ cursor: 'pointer', color: isReplyLiked ? '#ef4444' : '#9ca3af' }} onClick={() => handleLikeComment(msg.id, reply.id, !!isReplyLiked)}>
                                                                             {isReplyLiked ? '❤️' : '🤍'} {reply.comment_likes?.length || 0}
@@ -822,7 +829,7 @@ function MessageBoardContent() {
                                         <div style={{ display: 'flex', gap: '10px' }}>
                                             <input 
                                                 type="text" 
-                                                placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment..."} 
+                                                placeholder={replyingTo?.postId === msg.id ? "Write a reply..." : "Add a comment... Tag with @username"} 
                                                 value={commentText[msg.id] || ''} 
                                                 onChange={(e) => setCommentText({ ...commentText, [msg.id]: e.target.value })} 
                                                 style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box' }} 

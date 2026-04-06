@@ -67,7 +67,8 @@ export default function NotificationsPage() {
     if (type === 'like') return 'liked your post.'
     if (type === 'comment') return 'commented on your post.'
     if (type === 'follow') return 'started following you.'
-    if (type === 'tag') return 'tagged you in a post.' // 👈 ADDED TAG NOTIFICATION TEXT
+    if (type === 'tag') return 'tagged you in a post.'
+    if (type === 'comment_tag') return 'mentioned you in a comment.' // 🏷️ TAGGING
     return 'interacted with you.'
   }
 

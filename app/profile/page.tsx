@@ -9,7 +9,7 @@ import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
 import { Capacitor } from '@capacitor/core'
 import BuyButton from '@/components/BuyButton'
-import { renderTextWithMentions, extractAndSaveTags } from '@/app/utils/tagging' // 👈 Imported the Tagging Utilities
+import { renderTextWithMentions, extractAndSaveTags, extractAndSaveCommentTags } from '@/app/utils/tagging' // 🏷️ TAGGING
 
 // @ts-ignore
 import Microlink from '@microlink/react'
@@ -437,7 +437,7 @@ function ProfileContent() {
     }).select().single()
 
     if (!error && data) {
-        // 👇 TAGGING SYSTEM TRIGGER 👇
+        // 🏷️ TAGGING: Extract @mentions from post
         if (cleanText) {
           await extractAndSaveTags(cleanText, data.id, currentUser.id, profilesMap, supabase);
         }
@@ -547,6 +547,11 @@ function ProfileContent() {
     }).select('*, comment_likes(user_id)').single()
     
     if (data) {
+        // 🏷️ TAGGING: Extract @mentions from comment
+        if (cleanText) {
+          await extractAndSaveCommentTags(cleanText, data.id, postId, currentUser.id, profilesMap, supabase);
+        }
+
         setPosts(prev => prev.map(msg => msg.id === postId ? { ...msg, comments: [...(msg.comments || []), data] } : msg));
         setCommentText(prev => ({ ...prev, [postId]: '' }));
         if (replyingTo?.postId === postId) setReplyingTo(null);
@@ -606,7 +611,7 @@ function ProfileContent() {
     return (
       <div style={{ lineHeight: '1.5' }}>
         <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word' }}>
-            {/* 👇 RENDER TEXT WITH MENTIONS 👇 */}
+            {/* 🏷️ TAGGING: Render post text with clickable @mentions */}
             {renderTextWithMentions(post.content, profilesMap, router)}
         </p>
         {urls && urls[0] && (
@@ -873,7 +878,7 @@ function ProfileContent() {
                             )}
                         </div>
 
-                        <textarea placeholder="What's on your mind? Or what are you selling?" value={postText} maxLength={MAX_POST_LENGTH} onChange={(e) => setPostText(e.target.value)} style={{ ...STYLES.input, minHeight: '80px', marginBottom: '4px' }} />
+                        <textarea placeholder="What's on your mind? Tag people with @username" value={postText} maxLength={MAX_POST_LENGTH} onChange={(e) => setPostText(e.target.value)} style={{ ...STYLES.input, minHeight: '80px', marginBottom: '4px' }} />
                         <div style={{ textAlign: 'right', fontSize: '12px', color: postText.length >= MAX_POST_LENGTH ? '#ef4444' : '#9ca3af', marginBottom: '10px' }}>
                             {postText.length} / {MAX_POST_LENGTH}
                         </div>
@@ -909,7 +914,6 @@ function ProfileContent() {
                         return (
                         <div key={post.id} style={STYLES.card}>
                             
-                            {/* 👇 SILENT POST VIEW TRACKER 👇 */}
                             <PostViewTracker postId={post.id} userId={currentUser?.id} supabase={supabase} />
 
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
@@ -949,7 +953,6 @@ function ProfileContent() {
                                 <button aria-label="Like Post" onClick={() => handleLike(post.id, !!isLiked)} style={{ ...STYLES.iconBtn, color: isLiked ? '#ef4444' : '#9ca3af' }}><span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> <span>{post.likes?.length || 0}</span></button>
                                 <button aria-label="Comment on Post" onClick={() => toggleComments(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>💬</span> <span>{post.comments?.length || 0}</span></button>
                                 
-                                {/* 👇 PREMIUM GATED VIEW COUNT 👇 */}
                                 {profilesMap[currentUser?.id]?.is_premium ? (
                                     <div style={{ ...STYLES.iconBtn, cursor: 'default' }} title="Total Views">
                                         <span style={{ fontSize: '20px' }}>👁️</span> 
@@ -972,7 +975,6 @@ function ProfileContent() {
                             {openComments.has(post.id) && (
                                 <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
                                     
-                                    {/* 👇 RENDER THREADED REPLIES SAFELY IN DARK MODE 👇 */}
                                     {(post.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
                                         const commenter = profilesMap[c.user_id];
                                         const isCommentLiked = currentUser && c.comment_likes?.some((l: any) => l.user_id === currentUser.id);
@@ -987,7 +989,8 @@ function ProfileContent() {
                                                     {commenter?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
                                                     {commenter?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
                                                     
-                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{c.content}</span>
+                                                    {/* 🏷️ TAGGING: Render comment text with clickable @mentions */}
+                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{renderTextWithMentions(c.content, profilesMap, router)}</span>
                                                     
                                                     <div style={{ display: 'flex', gap: '15px', marginTop: '4px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
                                                         <span style={{ cursor: 'pointer', color: isCommentLiked ? '#ef4444' : '#6b7280' }} onClick={() => handleLikeComment(post.id, c.id, !!isCommentLiked)}>
@@ -1012,7 +1015,8 @@ function ProfileContent() {
                                                                     {replier?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
                                                                     {replier?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
                                                                     
-                                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{reply.content}</span>
+                                                                    {/* 🏷️ TAGGING: Render reply text with clickable @mentions */}
+                                                                    <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{renderTextWithMentions(reply.content, profilesMap, router)}</span>
                                                                     
                                                                     <div style={{ marginTop: '2px', fontSize: '12px', fontWeight: 'bold', color: '#6b7280' }}>
                                                                         <span style={{ cursor: 'pointer', color: isReplyLiked ? '#ef4444' : '#6b7280' }} onClick={() => handleLikeComment(post.id, reply.id, !!isReplyLiked)}>
@@ -1036,7 +1040,7 @@ function ProfileContent() {
                                             </div>
                                         )}
                                         <div style={{ display: 'flex', gap: '10px' }}>
-                                            <input type="text" placeholder={replyingTo?.postId === post.id ? "Write a reply..." : "Add a comment..."} value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} />
+                                            <input type="text" placeholder={replyingTo?.postId === post.id ? "Write a reply..." : "Add a comment... Tag with @username"} value={commentText[post.id] || ''} onChange={(e) => setCommentText({ ...commentText, [post.id]: e.target.value })} style={{ flex: 1, minWidth: 0, height: '44px', padding: '0 15px', borderRadius: '22px', border: '1px solid #4b5563', backgroundColor: '#374151', color: 'white', fontSize: '14px', boxSizing: 'border-box' }} />
                                             <button onClick={() => handlePostComment(post.id)} disabled={actionLoading[`comment-${post.id}`]} style={{ height: '44px', padding: '0 20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '22px', fontWeight: 'bold', cursor: 'pointer' }}>Post</button>
                                         </div>
                                     </div>
