@@ -45,7 +45,7 @@ const TIERS = [
     price: '$19.99',
     interval: '/mo',
     description: 'For influencers and brands who need total trust and security.',
-    features: ['✅ Verified Checkmark', 'Identity Verification (ID.me style)', 'All VIM+ Features', 'Impersonation Protection', 'Advanced Shop Features'],
+    features: ['✅ Verified Checkmark', 'Identity Verification', 'All VIM+ Features', 'Impersonation Protection', 'Advanced Shop Features'],
     buttonText: 'Get Verified',
     buttonStyle: STYLES.btnVerified,
     highlight: false,
@@ -101,34 +101,51 @@ export default function UpgradePage() {
 
         // Fetch offerings from RevenueCat
         const offerings = await Purchases.getOfferings();
+        console.log("[Upgrade] Offerings:", JSON.stringify(offerings.current));
 
         if (!offerings.current || offerings.current.availablePackages.length === 0) {
-          showToast("No subscription packages available.", "error");
+          showToast("No subscription packages available. Please try again later.", "error");
           setLoadingTier(null);
           return;
         }
 
-        // Find the right package based on which tier they tapped
         const packages = offerings.current.availablePackages;
+        console.log("[Upgrade] Available packages:", packages.map(p => `${p.identifier} | ${p.product.identifier}`));
+
+        // Find the right package — search by product identifier and package identifier
         let targetPackage = null;
 
         if (tierName === 'VIM+') {
-          targetPackage = packages.find(p =>
-            p.identifier === '$rc_monthly' ||
-            p.product.identifier.toLowerCase().includes('vim_plus') ||
-            p.product.identifier.toLowerCase().includes('vimplus')
-          ) || packages[0];
+          targetPackage = packages.find(p => {
+            const pid = p.product.identifier.toLowerCase();
+            const pkgId = p.identifier.toLowerCase();
+            return pid.includes('vim_plus') || pid.includes('vimplus') || pid.includes('vim.plus') ||
+                   pkgId === '$rc_monthly' || pkgId.includes('vim');
+          });
+          // Fallback: if only one package exists, use it for VIM+
+          if (!targetPackage && packages.length >= 1) {
+            targetPackage = packages[0];
+          }
         } else if (tierName === 'Verified') {
-          targetPackage = packages.find(p =>
-            p.product.identifier.toLowerCase().includes('verified')
-          ) || packages[packages.length - 1];
+          targetPackage = packages.find(p => {
+            const pid = p.product.identifier.toLowerCase();
+            const pkgId = p.identifier.toLowerCase();
+            return pid.includes('verified') || pkgId.includes('verified');
+          });
+          // Fallback: use last package if multiple exist
+          if (!targetPackage && packages.length >= 2) {
+            targetPackage = packages[packages.length - 1];
+          }
         }
 
         if (!targetPackage) {
-          showToast("Package not found. Please try again.", "error");
+          console.error("[Upgrade] No matching package found for tier:", tierName);
+          showToast("This plan is not yet available. Please try again later.", "error");
           setLoadingTier(null);
           return;
         }
+
+        console.log("[Upgrade] Purchasing package:", targetPackage.identifier, targetPackage.product.identifier);
 
         // Open the native Apple/Google payment sheet directly
         const { customerInfo } = await Purchases.purchasePackage({
@@ -137,21 +154,28 @@ export default function UpgradePage() {
 
         // Check if purchase was successful
         const entitlements = customerInfo.entitlements.active;
+        console.log("[Upgrade] Active entitlements:", JSON.stringify(entitlements));
+
         if (Object.keys(entitlements).length > 0) {
           showToast("Purchase successful! Welcome to " + tierName + "!", "success");
           setLoadingTier(null);
           router.push('/profile');
         } else {
+          showToast("Purchase completed but entitlements not yet active. Please restart the app.", "success");
           setLoadingTier(null);
         }
 
       } catch (error: any) {
         setLoadingTier(null);
-        if (error?.userCancelled) return;
-        console.error("Purchase Error:", error);
+        // RevenueCat uses userCancelled flag
+        if (error?.userCancelled || error?.code === '1' || error?.message?.includes('cancelled') || error?.message?.includes('canceled')) {
+          console.log("[Upgrade] User cancelled purchase");
+          return;
+        }
+        console.error("[Upgrade] Purchase Error:", JSON.stringify(error));
         showToast(error?.message || "Purchase failed. Please try again.", "error");
       }
-      return; // Always return here — never fall through to Stripe on native
+      return;
     }
 
     // ============================================================
@@ -186,67 +210,73 @@ export default function UpgradePage() {
       <Sidebar />
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e', color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)' }}>
+        <div style={{ position: 'fixed', bottom: '40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: toast.type === 'error' ? '#ef4444' : '#22c55e', color: 'white', padding: '12px 24px', borderRadius: '24px', zIndex: 9999, fontWeight: 'bold', fontSize: '14px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', maxWidth: 'calc(100% - 40px)', textAlign: 'center' }}>
           {toast.msg}
         </div>
       )}
 
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '80px 20px calc(120px + env(safe-area-inset-bottom)) 20px' }}>
 
-        <div style={{ textAlign: 'center', marginBottom: '50px' }}>
-          <h1 style={{ fontSize: 'clamp(28px, 5vw, 36px)', fontWeight: 'bold', margin: '0 0 15px 0', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <h1 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 'bold', margin: '0 0 12px 0', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
             Choose Your Experience
           </h1>
-          <p style={{ color: '#9ca3af', fontSize: '16px', maxWidth: '600px', margin: '0 auto', lineHeight: '1.5' }}>
+          <p style={{ color: '#9ca3af', fontSize: '15px', maxWidth: '600px', margin: '0 auto', lineHeight: '1.5', padding: '0 10px' }}>
             Upgrade your account to unlock powerful AI tools, stand out with exclusive badges, and build trust with your community.
           </p>
         </div>
 
+        {/* 
+          iPad fix: Use flex column on smaller/medium screens, grid on wide screens.
+          This prevents overlapping cards on iPad.
+        */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '24px',
-          alignItems: 'stretch'
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          maxWidth: '400px',
+          margin: '0 auto',
         }}>
           {TIERS.map((tier) => (
             <div
               key={tier.name}
               style={{
                 backgroundColor: '#1f2937',
-                borderRadius: '20px',
-                padding: '40px 20px',
+                borderRadius: '16px',
+                padding: '28px 20px',
                 border: tier.highlight ? '2px solid #fbbf24' : '1px solid #374151',
                 position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
-                boxShadow: tier.highlight ? '0 10px 30px -10px rgba(251, 191, 36, 0.3)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                boxShadow: tier.highlight ? '0 8px 24px -8px rgba(251, 191, 36, 0.3)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                overflow: 'hidden',
               }}
             >
               {tier.badge && (
                 <span style={{
-                  position: 'absolute', top: '-14px', left: '50%', transform: 'translateX(-50%)',
+                  position: 'absolute', top: '0', right: '0',
                   backgroundColor: tier.highlight ? '#fbbf24' : '#3b82f6',
                   color: tier.highlight ? '#111827' : 'white',
-                  padding: '6px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', letterSpacing: '0.5px',
+                  padding: '6px 14px', borderBottomLeftRadius: '12px', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px',
                   whiteSpace: 'nowrap'
                 }}>
                   {tier.badge}
                 </span>
               )}
 
-              <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 10px 0' }}>{tier.name}</h2>
-              <div style={{ marginBottom: '20px' }}>
-                <span style={{ fontSize: 'clamp(32px, 4vw, 42px)', fontWeight: 'bold' }}>{tier.price}</span>
-                <span style={{ color: '#9ca3af', fontSize: '16px' }}>{tier.interval}</span>
+              <h2 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0 0 8px 0' }}>{tier.name}</h2>
+              <div style={{ marginBottom: '12px' }}>
+                <span style={{ fontSize: '32px', fontWeight: 'bold' }}>{tier.price}</span>
+                <span style={{ color: '#9ca3af', fontSize: '15px' }}>{tier.interval}</span>
               </div>
-              <p style={{ color: '#d1d5db', margin: '0 0 30px 0', fontSize: '14px', lineHeight: '1.6', minHeight: '44px' }}>
+              <p style={{ color: '#d1d5db', margin: '0 0 20px 0', fontSize: '14px', lineHeight: '1.5' }}>
                 {tier.description}
               </p>
 
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 40px 0', flex: 1 }}>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 24px 0', flex: 1 }}>
                 {tier.features.map((feature, idx) => (
-                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '16px', fontSize: '14px', color: '#e5e7eb' }}>
-                    <span style={{ color: tier.highlight ? '#fbbf24' : '#22c55e', fontSize: '16px', marginTop: '-2px' }}>✓</span>
+                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px', fontSize: '14px', color: '#e5e7eb' }}>
+                    <span style={{ color: tier.highlight ? '#fbbf24' : '#22c55e', fontSize: '14px', flexShrink: 0 }}>✓</span>
                     <span style={{ lineHeight: '1.4' }}>{feature}</span>
                   </li>
                 ))}
@@ -257,7 +287,8 @@ export default function UpgradePage() {
                 disabled={tier.id === 'free' || loadingTier === tier.id}
                 style={{
                   ...tier.buttonStyle,
-                  opacity: loadingTier === tier.id ? 0.7 : 1
+                  opacity: loadingTier === tier.id ? 0.7 : 1,
+                  minHeight: '48px',
                 }}
               >
                 {loadingTier === tier.id ? 'Loading...' : tier.buttonText}
@@ -267,9 +298,9 @@ export default function UpgradePage() {
         </div>
 
         {/* Required by Apple & Google: Restore, Legal, Links */}
-        <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.5', padding: '0 20px' }}>
+        <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.6', padding: '0 20px', maxWidth: '600px', margin: '40px auto 0' }}>
 
-          <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '15px' }}>
+          <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
             <Link href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Use (EULA)</Link>
             <span style={{ color: '#4b5563' }}>|</span>
             <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
@@ -280,7 +311,7 @@ export default function UpgradePage() {
                 <button
                   onClick={handleRestore}
                   disabled={isRestoring}
-                  style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0 }}>
+                  style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0, minHeight: '44px' }}>
                   {isRestoring ? 'Restoring...' : 'Restore Purchases'}
                 </button>
               </>
@@ -288,7 +319,7 @@ export default function UpgradePage() {
           </div>
 
           {isNative ? (
-            <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'justify' }}>
+            <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'left' }}>
               Payment will be charged to your App Store or Google Play account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your device's account settings after purchase.
             </p>
           ) : (

@@ -75,7 +75,9 @@ export async function GET(req: Request) {
       total = referrals.length;
       pending = referrals.filter(r => r.status === 'pending').length;
       paid = referrals.filter(r => r.status === 'paid').length;
-      earned = paid * 0.05; 
+      
+      // ✅ FIX: Updated referral payout rate to $0.003 to match the new economics
+      earned = paid * 0.001; 
     }
 
     // 5. Return stats
