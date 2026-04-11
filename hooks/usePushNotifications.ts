@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core'; // 👈 Moved PluginListenerHandle here!
 import { PushNotifications } from '@capacitor/push-notifications';
 
 export const usePushNotifications = (userId: string | null, supabase: any) => {
@@ -46,6 +46,11 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
   useEffect(() => {
     if (!hasAgreedToEula || !Capacitor.isNativePlatform() || !userId || !supabase) return;
 
+    // We store the handles here so we can clean them up safely without nuking the layout listener
+    let regListener: PluginListenerHandle;
+    let regErrorListener: PluginListenerHandle;
+    let receivedListener: PluginListenerHandle;
+
     const setupPushNotifications = async () => {
       let permStatus = await PushNotifications.checkPermissions();
 
@@ -58,7 +63,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         return;
       }
 
-      await PushNotifications.addListener('registration', async (token) => {
+      regListener = await PushNotifications.addListener('registration', async (token) => {
         console.log('Push registration success! Token: ' + token.value);
         currentToken.current = token.value;
 
@@ -79,17 +84,12 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
         }
       });
 
-      await PushNotifications.addListener('registrationError', (error) => {
+      regErrorListener = await PushNotifications.addListener('registrationError', (error) => {
         console.error('Error on registration: ', error);
       });
 
-      await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
         console.log('Push received: ', notification);
-      });
-
-      await PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-        console.log('Push action performed: ', notification);
-        window.location.href = '/notifications';
       });
 
       await PushNotifications.register();
@@ -98,7 +98,10 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
     setupPushNotifications();
 
     return () => {
-      PushNotifications.removeAllListeners();
+      // Safely remove only THESE specific listeners
+      if (regListener) regListener.remove();
+      if (regErrorListener) regErrorListener.remove();
+      if (receivedListener) receivedListener.remove();
     };
   }, [userId, supabase, hasAgreedToEula]);
 };
