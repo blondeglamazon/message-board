@@ -28,6 +28,8 @@ const routesToHide = [
   { dir: path.join(__dirname, 'app', 'post', '[id]'), backup: path.join(__dirname, 'app', 'post', '_id_hidden'), name: 'post/[id]' },
   { dir: path.join(__dirname, 'app', 'post', '[postId]'), backup: path.join(__dirname, 'app', 'post', '_postId_hidden'), name: 'post/[postId]' },
   { dir: path.join(__dirname, 'app', 'admin'), backup: path.join(__dirname, 'app', '_admin_hidden'), name: 'Admin Dashboard' },
+  // 👇 NEW: Hide the Admin API (which includes the broadcast-push route) to prevent the build crash!
+  { dir: path.join(__dirname, 'app', 'api', 'admin'), backup: path.join(__dirname, 'app', 'api', '_admin_hidden'), name: 'Admin API' },
   // 👇 NEW: Hiding Sitemaps to prevent Supabase data-fetching crashes on mobile!
   { dir: path.join(__dirname, 'app', 'sitemap.ts'), backup: path.join(__dirname, 'app', '_sitemap.ts.bak'), name: 'Sitemap (TS)' },
   { dir: path.join(__dirname, 'app', 'sitemap.xml'), backup: path.join(__dirname, 'app', '_sitemap.xml.bak'), name: 'Sitemap (XML)' },
