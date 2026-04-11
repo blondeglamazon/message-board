@@ -178,9 +178,9 @@ function ProfileContent() {
   
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({ 
-      display_name: '', avatar_url: '', background_url: '', music_embed: '', 
-      bio: '', calendly_url: '', google_calendar_url: '', store_url: '', store_url_2: '', store_url_3: ''
-  })
+    display_name: '', username: '', avatar_url: '', background_url: '', music_embed: '', 
+    bio: '', calendly_url: '', google_calendar_url: '', store_url: '', store_url_2: '', store_url_3: ''
+})
 
   const [postText, setPostText] = useState('')
   const [postFile, setPostFile] = useState<File | null>(null)
@@ -295,8 +295,20 @@ function ProfileContent() {
       })
       
       if (loggedInUser && loggedInUser.id === userIdToFetch) {
-          setEditForm({ ...profileData, display_name: profileData?.display_name || '' })
-      }
+    setEditForm({
+        display_name: profileData?.display_name || '',
+        username: profileData?.username || '',
+        avatar_url: profileData?.avatar_url || '',
+        background_url: profileData?.background_url || '',
+        music_embed: profileData?.music_embed || '',
+        bio: profileData?.bio || '',
+        calendly_url: profileData?.calendly_url || '',
+        google_calendar_url: profileData?.google_calendar_url || '',
+        store_url: profileData?.store_url || '',
+        store_url_2: profileData?.store_url_2 || '',
+        store_url_3: profileData?.store_url_3 || '',
+    })
+}
 
       if (loggedInUser && loggedInUser.id !== userIdToFetch) {
         supabase.from('profile_views').insert({
@@ -367,12 +379,40 @@ function ProfileContent() {
   }
 
   async function handleSaveProfile() {
-      if (!currentUser || isOffline) return isOffline && showToast("Cannot save while offline.", 'error');
-      setActionLoading(prev => ({...prev, saveProfile: true}))
-      const { error } = await supabase.from('profiles').upsert({ id: currentUser.id, ...editForm })
-      if (!error) { setProfileUser({ ...profileUser, ...editForm }); setIsEditing(false); showToast("Profile saved!"); }
-      setActionLoading(prev => ({...prev, saveProfile: false}))
-  }
+    if (!currentUser || isOffline) return isOffline && showToast("Cannot save while offline.", 'error');
+    
+    // Validate username before sending to DB
+    const username = (editForm.username || '').trim();
+    if (!username) {
+        return showToast("Username cannot be empty.", 'error');
+    }
+    if (username.length < 3) {
+        return showToast("Username must be at least 3 characters.", 'error');
+    }
+    if (!/^[a-z0-9._-]+$/.test(username)) {
+        return showToast("Username can only contain lowercase letters, numbers, dots, hyphens, and underscores.", 'error');
+    }
+    
+    setActionLoading(prev => ({...prev, saveProfile: true}))
+    const { error } = await supabase.from('profiles').upsert({ id: currentUser.id, ...editForm, username })
+    
+    if (error) {
+        if (error.code === '23505') {
+            // Unique constraint violation
+            showToast("That username is already taken. Please choose another.", 'error');
+        } else if (error.code === '23514') {
+            // Check constraint violation (the one we added in March)
+            showToast("Username contains invalid characters.", 'error');
+        } else {
+            showToast("Failed to save profile.", 'error');
+        }
+    } else { 
+        setProfileUser({ ...profileUser, ...editForm, username }); 
+        setIsEditing(false); 
+        showToast("Profile saved!"); 
+    }
+    setActionLoading(prev => ({...prev, saveProfile: false}))
+}
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -699,6 +739,22 @@ function ProfileContent() {
                         <h3 style={{ color: 'white', marginTop: 0 }}>Edit Profile Theme</h3>
                         
                         <input type="text" value={editForm.display_name} onChange={e => setEditForm({...editForm, display_name: e.target.value})} style={STYLES.input} placeholder="Display Name" />
+
+<input 
+    type="text" 
+    value={editForm.username || ''} 
+    onChange={e => {
+        // Auto-clean as they type: lowercase, strip invalid chars
+        const cleaned = e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+        setEditForm({...editForm, username: cleaned});
+    }} 
+    style={STYLES.input} 
+    placeholder="Username (used for @tagging, e.g. theamazonalchemist)" 
+    maxLength={30}
+/>
+<p style={{ margin: '-4px 0 10px 0', fontSize: '11px', color: '#9ca3af' }}>
+    Letters, numbers, dots, hyphens, and underscores only. This is your @handle for tagging.
+</p>
                         
                         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                             <input type="text" value={editForm.avatar_url} onChange={e => setEditForm({...editForm, avatar_url: e.target.value})} style={{...STYLES.input, marginBottom: 0}} placeholder="Avatar URL" />
@@ -754,7 +810,16 @@ function ProfileContent() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <h2 style={{ margin: '0 0 5px 0', fontSize: '24px', color: '#111827' }}>{profileUser?.display_name || profileUser?.email}</h2>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+    <h2 style={{ margin: 0, fontSize: '24px', color: '#111827', lineHeight: 1.2 }}>
+        {profileUser?.display_name || profileUser?.email}
+    </h2>
+    {profileUser?.username && (
+        <span style={{ fontSize: '14px', color: '#6b7280', fontWeight: 500 }}>
+            @{profileUser.username}
+        </span>
+    )}
+</div>
                                 
                                 <div style={{ display: 'flex', gap: '10px' }}>
                                     {!isMyProfile && currentUser && (
