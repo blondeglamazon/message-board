@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function AdminBroadcastDashboard() {
+export default function BroadcastForm() {
   const [adminSecret, setAdminSecret] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');

@@ -109,7 +109,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
     };
   }, [hasAgreedToEula]);
 
-  // ---- DB writer effect ----
+ // ---- DB writer effect: call the register_push_token RPC ----
   useEffect(() => {
     debugLog('writer_effect_fired', {
       hasUserId: !!userId,
@@ -132,37 +132,24 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
       const token = currentToken;
       const platform = Capacitor.getPlatform();
 
-      const { error: delError } = await supabase
-        .from('push_tokens')
-        .delete()
-        .eq('token', token);
-
-      if (delError) {
-        debugLog('delete_failed', { message: delError.message });
-      } else {
-        debugLog('delete_ok');
-      }
+      const { error } = await supabase.rpc('register_push_token', {
+        p_token: token,
+        p_platform: platform,
+      });
 
       if (cancelled) return;
 
-      const { error: insError } = await supabase.from('push_tokens').insert({
-        user_id: userId,
-        token,
-        platform,
-        updated_at: new Date().toISOString(),
-      });
-
-      if (insError) {
-        debugLog('insert_failed', { message: insError.message });
+      if (error) {
+        debugLog('rpc_failed', { message: error.message });
       } else {
-        debugLog('insert_ok', { userId, platform });
+        debugLog('rpc_ok', { userId, platform });
       }
     };
 
     writeToken();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, supabase, currentToken]);
-};
+      return () => {
+        cancelled = true;
+      };
+    }, [userId, supabase, currentToken]);
+  };
