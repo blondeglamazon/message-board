@@ -5,7 +5,8 @@ import Sidebar from '@/components/Sidebar'
 import PushRegistry from '@/components/PushRegistry'
 import EulaModal from '@/components/EulaModal'
 import RevenueCatSetup from '@/components/RevenueCatSetup' 
-import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler' // 👈 Added the Stripe deep link listener
+import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler'
+import PushNotificationListener from '@/components/PushNotificationListener' // 👈 Restored the push listener
 import Script from 'next/script'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -62,6 +63,21 @@ export default function RootLayout({
           crossOrigin="anonymous"
           strategy="afterInteractive"
         />
+
+        {/* 👇 NEW: Google Analytics Script */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-8FL5M9VGNF"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-8FL5M9VGNF');
+          `}
+        </Script>
       </head>
       <body className={inter.className} style={{ 
         margin: 0, 
@@ -73,6 +89,7 @@ export default function RootLayout({
       }}>
         
         {/* Background Listeners & Modals */}
+        <PushNotificationListener /> {/* 👈 Handles tap-to-open logic for push notifications */}
         <RevenueCatSetup />
         <StripeDeepLinkHandler /> 
         <EulaModal />

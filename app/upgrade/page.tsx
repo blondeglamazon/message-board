@@ -226,10 +226,6 @@ export default function UpgradePage() {
           </p>
         </div>
 
-        {/* 
-          iPad fix: Use flex column on smaller/medium screens, grid on wide screens.
-          This prevents overlapping cards on iPad.
-        */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
@@ -300,27 +296,40 @@ export default function UpgradePage() {
         {/* Required by Apple & Google: Restore, Legal, Links */}
         <div style={{ textAlign: 'center', marginTop: '40px', color: '#6b7280', fontSize: '12px', lineHeight: '1.6', padding: '0 20px', maxWidth: '600px', margin: '40px auto 0' }}>
 
-          <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
+          {/* 1. STANDALONE RESTORE BUTTON (Fixes Guideline 4 Overlap) */}
+          {isNative && (
+            <div style={{ marginBottom: '24px' }}>
+              <button
+                onClick={handleRestore}
+                disabled={isRestoring}
+                style={{ 
+                  backgroundColor: 'transparent', 
+                  border: '1px solid #6b7280', 
+                  color: '#d1d5db', 
+                  borderRadius: '24px', 
+                  padding: '12px 24px', 
+                  fontSize: '14px', 
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  minHeight: '44px',
+                  transition: 'opacity 0.2s'
+                }}>
+                {isRestoring ? 'Restoring...' : 'Restore Purchases'}
+              </button>
+            </div>
+          )}
+
+          {/* 2. LEGAL LINKS (Own Line) */}
+          <div style={{ marginBottom: '24px', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px' }}>
             <Link href="/terms" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Terms of Use (EULA)</Link>
             <span style={{ color: '#4b5563' }}>|</span>
             <Link href="/privacy" style={{ color: '#9ca3af', textDecoration: 'underline' }}>Privacy Policy</Link>
-
-            {isNative && (
-              <>
-                <span style={{ color: '#4b5563' }}>|</span>
-                <button
-                  onClick={handleRestore}
-                  disabled={isRestoring}
-                  style={{ background: 'none', border: 'none', color: '#9ca3af', textDecoration: 'underline', cursor: 'pointer', fontSize: '12px', padding: 0, minHeight: '44px' }}>
-                  {isRestoring ? 'Restoring...' : 'Restore Purchases'}
-                </button>
-              </>
-            )}
           </div>
 
+          {/* 3. SCRUBBED PLATFORM TEXT (Fixes Guideline 2.3.10 Android Mention) */}
           {isNative ? (
             <p style={{ margin: '0 auto', maxWidth: '700px', color: '#6b7280', textAlign: 'left' }}>
-              Payment will be charged to your App Store or Google Play account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your device's account settings after purchase.
+              Payment will be charged to your App Store account at the confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. You can manage and cancel your subscriptions by going to your device's account settings after purchase.
             </p>
           ) : (
             <>
@@ -330,7 +339,6 @@ export default function UpgradePage() {
           )}
 
         </div>
-
       </div>
     </div>
   )
