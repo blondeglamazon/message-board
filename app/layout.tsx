@@ -7,7 +7,6 @@ import EulaModal from '@/components/EulaModal'
 import RevenueCatSetup from '@/components/RevenueCatSetup' 
 import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler' // 👈 Added the Stripe deep link listener
 import Script from 'next/script'
-import PushNotificationListener from '@/components/PushNotificationListener';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -74,7 +73,6 @@ export default function RootLayout({
       }}>
         
         {/* Background Listeners & Modals */}
-        <PushNotificationListener /> {/* 👈 Listens for tapped push notifications to handle deep linking */}
         <RevenueCatSetup />
         <StripeDeepLinkHandler /> 
         <EulaModal />
