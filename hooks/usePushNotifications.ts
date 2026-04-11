@@ -1,107 +1,123 @@
-import { useEffect, useState, useRef } from 'react';
-import { Capacitor, PluginListenerHandle } from '@capacitor/core'; // 👈 Moved PluginListenerHandle here!
+import { useEffect, useState } from 'react';
+import { Capacitor, PluginListenerHandle } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
 export const usePushNotifications = (userId: string | null, supabase: any) => {
   const [hasAgreedToEula, setHasAgreedToEula] = useState<boolean>(false);
-  const currentToken = useRef<string | null>(null);
+  const [currentToken, setCurrentToken] = useState<string | null>(null);
 
+  // ---- EULA gate (unchanged) ----
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const eulaStatus = localStorage.getItem('vimciety_eula_accepted');
-      if (eulaStatus === 'true') {
-        setHasAgreedToEula(true);
-      }
+    if (typeof window === 'undefined') return;
 
-      const handleEulaAccepted = () => setHasAgreedToEula(true);
-      window.addEventListener('eula_accepted', handleEulaAccepted);
-      return () => window.removeEventListener('eula_accepted', handleEulaAccepted);
-    }
+    const eulaStatus = localStorage.getItem('vimciety_eula_accepted');
+    if (eulaStatus === 'true') setHasAgreedToEula(true);
+
+    const handleEulaAccepted = () => setHasAgreedToEula(true);
+    window.addEventListener('eula_accepted', handleEulaAccepted);
+    return () => window.removeEventListener('eula_accepted', handleEulaAccepted);
   }, []);
 
-  // Re-register token whenever userId changes
+  // ---- One-time Capacitor push setup (register + listeners) ----
+  // This effect only depends on the EULA + native platform. It does NOT depend
+  // on userId, so we don't tear down and re-register listeners on every account
+  // switch. The `registration` listener just captures the token into state.
   useEffect(() => {
-    if (!userId || !supabase || !currentToken.current) return;
+    if (!hasAgreedToEula || !Capacitor.isNativePlatform()) return;
 
-    const updateToken = async () => {
-      const { error } = await supabase.from('push_tokens').upsert(
-        {
-          user_id: userId,
-          token: currentToken.current,
-          platform: Capacitor.getPlatform(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'token' }
-      );
-      if (error) {
-        console.error('Failed to update token for new user:', error.message);
-      } else {
-        console.log('Token reassigned to user:', userId);
-      }
-    };
+    let regListener: PluginListenerHandle | undefined;
+    let regErrorListener: PluginListenerHandle | undefined;
+    let receivedListener: PluginListenerHandle | undefined;
+    let cancelled = false;
 
-    updateToken();
-  }, [userId, supabase]);
+    const setup = async () => {
+      try {
+        let permStatus = await PushNotifications.checkPermissions();
+        if (permStatus.receive === 'prompt') {
+          permStatus = await PushNotifications.requestPermissions();
+        }
+        if (permStatus.receive !== 'granted') {
+          console.log('[push] permission not granted:', permStatus.receive);
+          return;
+        }
 
-  useEffect(() => {
-    if (!hasAgreedToEula || !Capacitor.isNativePlatform() || !userId || !supabase) return;
+        regListener = await PushNotifications.addListener('registration', (token) => {
+          if (cancelled) return;
+          console.log('[push] registration success, token prefix:', token.value.slice(0, 12));
+          setCurrentToken(token.value);
+        });
 
-    // We store the handles here so we can clean them up safely without nuking the layout listener
-    let regListener: PluginListenerHandle;
-    let regErrorListener: PluginListenerHandle;
-    let receivedListener: PluginListenerHandle;
+        regErrorListener = await PushNotifications.addListener('registrationError', (err) => {
+          console.error('[push] registration error:', err);
+        });
 
-    const setupPushNotifications = async () => {
-      let permStatus = await PushNotifications.checkPermissions();
-
-      if (permStatus.receive === 'prompt') {
-        permStatus = await PushNotifications.requestPermissions();
-      }
-
-      if (permStatus.receive !== 'granted') {
-        console.log('User denied push notifications');
-        return;
-      }
-
-      regListener = await PushNotifications.addListener('registration', async (token) => {
-        console.log('Push registration success! Token: ' + token.value);
-        currentToken.current = token.value;
-
-        const { error } = await supabase.from('push_tokens').upsert(
-          {
-            user_id: userId,
-            token: token.value,
-            platform: Capacitor.getPlatform(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'token' }
+        receivedListener = await PushNotifications.addListener(
+          'pushNotificationReceived',
+          (notification) => {
+            console.log('[push] received:', notification);
+          }
         );
 
-        if (error) {
-          console.error('Supabase failed to save token:', error.message);
-        } else {
-          console.log('Token saved to database!');
-        }
-      });
-
-      regErrorListener = await PushNotifications.addListener('registrationError', (error) => {
-        console.error('Error on registration: ', error);
-      });
-
-      receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        console.log('Push received: ', notification);
-      });
-
-      await PushNotifications.register();
+        await PushNotifications.register();
+      } catch (e) {
+        console.error('[push] setup failed:', e);
+      }
     };
 
-    setupPushNotifications();
+    setup();
 
     return () => {
-      // Safely remove only THESE specific listeners
-      if (regListener) regListener.remove();
-      if (regErrorListener) regErrorListener.remove();
-      if (receivedListener) receivedListener.remove();
+      cancelled = true;
+      regListener?.remove();
+      regErrorListener?.remove();
+      receivedListener?.remove();
     };
-  }, [userId, supabase, hasAgreedToEula]);
+  }, [hasAgreedToEula]);
+
+  // ---- Write the token to the DB any time userId OR token changes ----
+  // Delete-then-insert pattern: first release the token from whatever user
+  // previously owned it on this device, then insert it under the current user.
+  // The "Anyone can release a token" RLS policy allows the delete.
+  useEffect(() => {
+    if (!userId || !supabase || !currentToken) return;
+
+    let cancelled = false;
+
+    const writeToken = async () => {
+      const token = currentToken;
+      const platform = Capacitor.getPlatform();
+
+      // 1. Release the token from any previous owner (or no-op if unowned)
+      const { error: delError } = await supabase
+        .from('push_tokens')
+        .delete()
+        .eq('token', token);
+      if (delError) {
+        console.error('[push] release-old-token failed:', delError.message);
+        // Don't return — still try the insert in case the row didn't exist
+      }
+
+      if (cancelled) return;
+
+      // 2. Insert fresh row for current user
+      const { error: insError } = await supabase.from('push_tokens').insert({
+        user_id: userId,
+        token,
+        platform,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (insError) {
+        console.error('[push] insert token failed:', insError.message);
+      } else {
+        console.log('[push] token registered for user', userId);
+      }
+    };
+
+    writeToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, supabase, currentToken]);
 };
