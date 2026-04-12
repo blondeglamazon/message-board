@@ -8,6 +8,7 @@ import RevenueCatSetup from '@/components/RevenueCatSetup'
 import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler'
 import PushNotificationListener from '@/components/PushNotificationListener' // 👈 Restored the push listener
 import Script from 'next/script'
+import AdSenseWrapper from '@/components/AdSenseWrapper';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -79,6 +80,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
+      <AdSenseWrapper />
       <body className={inter.className} style={{ 
         margin: 0, 
         backgroundColor: '#ffffff',
