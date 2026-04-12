@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:cap": "node detect-build.js && rm -rf www && mv out www",
+    "build": "node detect-build.js",
+"build:cap": "node detect-build.js",
     "build:mobile": "cross-env MOBILE_BUILD=true node build-android.js",
     "start": "next start",
     "lint": "next lint",
