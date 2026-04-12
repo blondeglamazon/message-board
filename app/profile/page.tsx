@@ -9,6 +9,7 @@ import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
 import { Capacitor } from '@capacitor/core'
 import BuyButton from '@/components/BuyButton'
+import { AdMob } from '@capacitor-community/admob'
 import { renderTextWithMentions, extractAndSaveTags, extractAndSaveCommentTags } from '@/app/utils/tagging' // 🏷️ TAGGING
 
 // @ts-ignore
@@ -64,6 +65,8 @@ const STYLES = {
   btnDanger: { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: '6px', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold' as const, minHeight: '44px' },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex' as const, alignItems: 'center' as const, gap: '6px', minWidth: '44px', minHeight: '44px', padding: 0 }
 };
+
+const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000'; // deleted user UUID
 
 const MAX_POST_LENGTH = 500;
 const MAX_COMMENT_LENGTH = 300;
@@ -257,7 +260,8 @@ function ProfileContent() {
       else if (loggedInUser) profileData = (await supabase.from('profiles').select('*').eq('id', loggedInUser.id).single()).data
 
       if (!profileData) { setLoading(false); return; }
-      const userIdToFetch = profileData.id
+if (profileData.id === DELETED_USER_ID) { setLoading(false); return; }
+const userIdToFetch = profileData.id
 
       const [allProfilesRes, blockDataRes, userPostsRes, firstPostRes, followersRes, followingRes, historyRes] = await Promise.all([
         supabase.from('profiles').select('id, username, display_name, avatar_url, is_admin, is_premium, is_verified, role'),
@@ -611,6 +615,16 @@ function ProfileContent() {
       else { await navigator.clipboard.writeText(url); showToast("Link copied to clipboard!"); }
   };
 
+  const handleManageAdPrivacy = async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await AdMob.showPrivacyOptionsForm();
+    } catch (error) {
+      console.error("Privacy form error:", error);
+      showToast("Ad privacy settings are not required in your region.", 'error');
+    }
+  };
+
   async function handleBlockUser() {
       setConfirmModal({ message: `Block user?`, onConfirm: async () => {
           setConfirmModal(null); setActionLoading(prev => ({...prev, blockUser: true}));
@@ -664,7 +678,7 @@ function ProfileContent() {
   }
 
   if (loading) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Loading Profile...</div>
-  if (!profileUser) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>Profile not found.</div>
+ if (!profileUser) return <div style={{ color: 'white', padding: '20px', textAlign: 'center' }}>This profile is no longer available.</div>
 
   const isMyProfile = currentUser && profileUser && currentUser.id === profileUser.id
   const isEmbedBackground = profileUser?.background_url && profileUser.background_url.trim().startsWith('<');
@@ -897,6 +911,15 @@ function ProfileContent() {
                         ✏️ Edit Profile
                     </button>
                 )}
+
+                {isMyProfile && !isEditing && Capacitor.isNativePlatform() && (
+                    <button 
+                        onClick={handleManageAdPrivacy} 
+                        style={{ ...STYLES.btnSecondary, width: '100%', marginTop: '10px' }}
+                    >
+                        🛡️ Manage Ad Privacy (GDPR)
+                    </button>
+                )}
             </div>
 
             {!isEditing && profileUser?.music_embed && (
@@ -1042,17 +1065,18 @@ function ProfileContent() {
                                     
                                     {(post.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
                                         const commenter = profilesMap[c.user_id];
-                                        const isCommentLiked = currentUser && c.comment_likes?.some((l: any) => l.user_id === currentUser.id);
-                                        const replies = (post.comments || []).filter((r: any) => r.parent_comment_id === c.id);
+const isCommentDeleted = c.user_id === DELETED_USER_ID;
+const isCommentLiked = currentUser && c.comment_likes?.some((l: any) => l.user_id === currentUser.id);
+const replies = (post.comments || []).filter((r: any) => r.parent_comment_id === c.id);
 
-                                        return (
-                                            <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
-                                                <div>
-                                                    <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '4px' }}>
-                                                        {commenter?.display_name || commenter?.username || 'User'}
-                                                    </span>
-                                                    {commenter?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
-                                                    {commenter?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
+return (
+    <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
+        <div>
+            <span style={{ fontWeight: 'bold', color: isCommentDeleted ? '#6b7280' : '#d1d5db', marginRight: '4px', fontStyle: isCommentDeleted ? 'italic' : 'normal' }}>
+                {isCommentDeleted ? 'Deleted User' : (commenter?.display_name || commenter?.username || 'User')}
+            </span>
+            {!isCommentDeleted && commenter?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
+            {!isCommentDeleted && commenter?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
                                                     
                                                     {/* 🏷️ TAGGING: Render comment text with clickable @mentions */}
                                                     <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{renderTextWithMentions(c.content, profilesMap, router)}</span>
@@ -1070,15 +1094,16 @@ function ProfileContent() {
                                                 {replies.length > 0 && (
                                                     <div style={{ marginLeft: '15px', marginTop: '10px', paddingLeft: '15px', borderLeft: '2px solid #4b5563', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                         {replies.map((reply: any) => {
-                                                            const replier = profilesMap[reply.user_id];
-                                                            const isReplyLiked = currentUser && reply.comment_likes?.some((l: any) => l.user_id === currentUser.id);
-                                                            return (
-                                                                <div key={reply.id}>
-                                                                    <span style={{ fontWeight: 'bold', color: '#d1d5db', marginRight: '4px' }}>
-                                                                        {replier?.display_name || replier?.username || 'User'}
-                                                                    </span>
-                                                                    {replier?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
-                                                                    {replier?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
+    const replier = profilesMap[reply.user_id];
+    const isReplyDeleted = reply.user_id === DELETED_USER_ID;
+    const isReplyLiked = currentUser && reply.comment_likes?.some((l: any) => l.user_id === currentUser.id);
+    return (
+        <div key={reply.id}>
+            <span style={{ fontWeight: 'bold', color: isReplyDeleted ? '#6b7280' : '#d1d5db', marginRight: '4px', fontStyle: isReplyDeleted ? 'italic' : 'normal' }}>
+                {isReplyDeleted ? 'Deleted User' : (replier?.display_name || replier?.username || 'User')}
+            </span>
+            {!isReplyDeleted && replier?.is_verified && <span title="Verified" style={{ color: '#3b82f6', fontSize: '14px', marginRight: '4px' }}>☑️</span>}
+            {!isReplyDeleted && replier?.is_premium && <span title="VIM+" style={{ color: '#fbbf24', fontSize: '12px', marginRight: '8px' }}>⭐</span>}
                                                                     
                                                                     {/* 🏷️ TAGGING: Render reply text with clickable @mentions */}
                                                                     <span style={{ color: '#9ca3af', marginLeft: '4px' }}>{renderTextWithMentions(reply.content, profilesMap, router)}</span>

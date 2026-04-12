@@ -8,6 +8,8 @@ import DOMPurify from 'isomorphic-dompurify'
 // @ts-ignore
 import Microlink from '@microlink/react'
 
+const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
+
 export default function PostRedirect({ id }: { id: string }) {
   const [post, setPost] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -16,30 +18,30 @@ export default function PostRedirect({ id }: { id: string }) {
   useEffect(() => {
     async function loadPost() {
       if (!id) return
-      
+
       const { data, error } = await supabase
         .from('posts')
-        // 👇 Added display_name to match your feed's schema
         .select('*, profiles(username, display_name, avatar_url)')
-        .eq('id', id) 
+        .eq('id', id)
         .single()
-      
+
       if (!error) setPost(data)
       setLoading(false)
     }
     loadPost()
   }, [id, supabase])
 
-  // --- REUSED FROM HOME PAGE FOR CONSISTENCY ---
+  // ... renderSafeHTML and renderContent unchanged ...
+
   const renderSafeHTML = (html: string) => {
     if (!html) return null;
     const clean = DOMPurify.sanitize(html, {
         ALLOWED_TAGS: ['iframe', 'div', 'p', 'span', 'a', 'img', 'br', 'strong', 'em', 'b', 'i', 'ul', 'li', 'link'],
         ALLOWED_ATTR: [
-          'src', 'width', 'height', 'style', 'frameborder', 'allow', 
-          'allowfullscreen', 'scrolling', 'href', 'target', 'rel', 
+          'src', 'width', 'height', 'style', 'frameborder', 'allow',
+          'allowfullscreen', 'scrolling', 'href', 'target', 'rel',
           'title', 'class', 'id', 'loading', 'referrerpolicy',
-          'data-url', 'data-image', 'data-description' 
+          'data-url', 'data-image', 'data-description'
         ],
         ADD_TAGS: ['iframe']
     })
@@ -70,7 +72,7 @@ export default function PostRedirect({ id }: { id: string }) {
           <p style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
             {renderTextWithLinks(msg.content)}
           </p>
-          
+
           {firstUrl && (
             <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
                 <Microlink url={firstUrl} size="large" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#ffffff', color: '#111827' }} />
@@ -98,28 +100,31 @@ export default function PostRedirect({ id }: { id: string }) {
   if (loading) return <div aria-live="polite" style={{ padding: '40px', textAlign: 'center', color: '#6b7280', fontWeight: 'bold' }}>Loading post...</div>
   if (!post) return <div role="alert" style={{ padding: '40px', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>Post not found.</div>
 
+  // 👇 CHANGED: detect deleted author and fall back to clean display values
+  const isAuthorDeleted = post.user_id === DELETED_USER_ID;
   const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
-  const username = profile?.username || 'Anonymous';
-  const displayName = profile?.display_name || username;
+  const username = isAuthorDeleted ? 'deleted' : (profile?.username || 'Anonymous');
+  const displayName = isAuthorDeleted ? 'Deleted User' : (profile?.display_name || username);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
         <main style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', paddingTop: '40px' }}>
-        
+
         <nav aria-label="Breadcrumb">
             <Link href="/" style={{ color: '#6b7280', display: 'inline-block', marginBottom: '20px', textDecoration: 'none', fontWeight: 'bold' }}>
             ← Back to Feed
             </Link>
         </nav>
-        
+
         <article style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '20px', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            
+
+            {/* 👇 CHANGED: header shows "Deleted User" in muted italics when applicable */}
             <header style={{ marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                    <img src={profile?.avatar_url || '/default-avatar.png'} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={isAuthorDeleted ? '/default-avatar.png' : (profile?.avatar_url || '/default-avatar.png')} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
                 <div>
-                    <h1 style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', margin: 0 }}>
+                    <h1 style={{ fontSize: '15px', fontWeight: 'bold', color: isAuthorDeleted ? '#9ca3af' : '#111827', margin: 0, fontStyle: isAuthorDeleted ? 'italic' : 'normal' }}>
                         {displayName}
                     </h1>
                     {post.created_at && (
@@ -129,10 +134,9 @@ export default function PostRedirect({ id }: { id: string }) {
                     )}
                 </div>
             </header>
-            
-            {/* Render the post exactly like the home feed does! */}
+
             {renderContent(post)}
-            
+
         </article>
         </main>
     </div>

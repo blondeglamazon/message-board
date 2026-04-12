@@ -1,10 +1,11 @@
 import { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import PostRedirect from './PostRedirect' 
+import PostRedirect from './PostRedirect'
+
+const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 type Props = { params: Promise<{ id: string }> }
 
-// Helper: Keep Supabase logic clean
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,19 +13,14 @@ function getSupabase() {
   )
 }
 
-// 1. MUST DEFINE PLACEHOLDER for the Capacitor export
 export function generateStaticParams() {
   return [{ id: 'placeholder' }]
 }
 
-// 2. THE FACEBOOK FIX: Allow Vercel to dynamically generate real posts!
-export const dynamicParams = true 
+export const dynamicParams = true
 
-// 3. SEO: Dynamic Metadata for Links/iMessage
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params
-
-  // CRITICAL MOBILE FIX: Short circuit to prevent Supabase crashes during static build
   if (id === 'placeholder') return { title: 'VIMciety' }
 
   const supabase = getSupabase()
@@ -39,28 +35,32 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: 'Post not found | VIMciety' }
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('username, display_name, avatar_url')
-    .eq('id', post.user_id)
-    .single()
+  const isAuthorDeleted = post.user_id === DELETED_USER_ID
 
-  const title = `${profile?.display_name || profile?.username || 'Someone'} on VIMciety`
-  const description = post.content ? post.content.substring(0, 200) + '...' : 'Check out this post on VIMciety!'
-  
+  let authorLabel = 'Deleted User'
+  let authorForOg: string[] = ['VIMciety User']
+
+  if (!isAuthorDeleted) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username, display_name, avatar_url')
+      .eq('id', post.user_id)
+      .single()
+
+    authorLabel = profile?.display_name || profile?.username || 'Someone'
+    authorForOg = [profile?.username || 'VIMciety User']
+  }
+
+  const title = `${authorLabel} on VIMciety`
+  const description = post.content
+    ? post.content.substring(0, 200) + '...'
+    : 'Check out this post on VIMciety!'
   const postUrl = `https://www.vimciety.com/post/${id}`
 
-  // 👇 DETECT MEDIA TYPE
   const isVideo = post.media_url?.match(/\.(mp4|webm|ogg|mov)$/i)
   const isImage = post.media_url?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+  const ogImage = isImage ? post.media_url : 'https://www.vimciety.com/logo.png'
 
-  // Facebook strictly requires an image fallback even for videos
-  const ogImage = isImage 
-    ? post.media_url 
-    : 'https://www.vimciety.com/logo.png' // You can later update this to a generated video thumbnail
-
-  // 👇 DYNAMIC METADATA PAYLOAD
-  // We build the base object, then conditionally add video properties
   const metadata: Metadata = {
     title,
     description,
@@ -73,21 +73,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: [{ url: ogImage, width: 1200, height: 630 }],
       type: isVideo ? 'video.other' : 'article',
       publishedTime: post.created_at,
-      authors: [profile?.username || 'VIMciety User'], 
+      authors: authorForOg,
       ...(isVideo && {
         videos: [{
           url: post.media_url,
           secureUrl: post.media_url,
-          type: `video/${post.media_url.split('.').pop()}`, // Auto-detects video/mp4, video/webm, etc.
+          type: `video/${post.media_url.split('.').pop()}`,
           width: 1280,
           height: 720,
         }]
       })
     },
-    twitter: { 
-      card: isVideo ? 'player' : 'summary_large_image', 
-      title, 
-      description, 
+    twitter: {
+      card: isVideo ? 'player' : 'summary_large_image',
+      title,
+      description,
       images: [ogImage],
       ...(isVideo && {
         players: [{
@@ -103,24 +103,29 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return metadata
 }
 
-// 4. MAIN PAGE COMPONENT
 export default async function PostPage({ params }: Props) {
   const { id } = await params
+  if (id === 'placeholder') return null
 
-  // CRITICAL MOBILE FIX: Stop the component from rendering/fetching the placeholder!
-  if (id === 'placeholder') return null;
-
-  // Fetch data again for the page body (Next.js auto-caches this so it doesn't double-charge your DB)
   const supabase = getSupabase()
-  const { data: post } = await supabase.from('posts').select('id, content, media_url, user_id, created_at').eq('id', id).single()
-  
-  let authorName = 'VIMciety User'
-  if (post) {
-    const { data: profile } = await supabase.from('profiles').select('username, display_name').eq('id', post.user_id).single()
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, content, media_url, user_id, created_at')
+    .eq('id', id)
+    .single()
+
+  const isAuthorDeleted = post?.user_id === DELETED_USER_ID
+  let authorName = isAuthorDeleted ? 'Deleted User' : 'VIMciety User'
+
+  if (post && !isAuthorDeleted) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username, display_name')
+      .eq('id', post.user_id)
+      .single()
     authorName = profile?.display_name || profile?.username || 'VIMciety User'
   }
 
-  // SEO: JSON-LD Structured Data for Google Rich Snippets
   const jsonLd = post ? {
     '@context': 'https://schema.org',
     '@type': 'SocialMediaPosting',
@@ -132,13 +137,15 @@ export default async function PostPage({ params }: Props) {
     author: {
       '@type': 'Person',
       name: authorName,
-      url: `https://www.vimciety.com/${authorName}`
+      // Omit the author URL entirely for deleted users so crawlers don't follow a dead link
+      ...(!isAuthorDeleted && {
+        url: `https://www.vimciety.com/${authorName}`
+      })
     }
   } : null;
 
   return (
     <>
-      {/* Inject JSON-LD directly into HTML head for Googlebot */}
       {jsonLd && (
         <script
           type="application/ld+json"
@@ -146,7 +153,6 @@ export default async function PostPage({ params }: Props) {
         />
       )}
 
-      {/* SEO HTML Fallback: Hidden semantic HTML for scrapers/bots that ignore JS */}
       {post && (
         <noscript>
           <article style={{ display: 'none' }}>
@@ -158,7 +164,6 @@ export default async function PostPage({ params }: Props) {
         </noscript>
       )}
 
-      {/* Delegate interactive logic to the Client Component */}
       <PostRedirect id={id} />
     </>
   )

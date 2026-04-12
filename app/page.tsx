@@ -17,6 +17,7 @@ import BannerAd from '@/components/BannerAd'; // Make sure the path matches
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 const PAGE_SIZE = 20; // Number of posts to load per infinite scroll batch
+const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
 
 // 👇 1. THE NATIVE PUSH NOTIFICATION HOOK
 export const usePushNotifications = (userId: string | null, supabase: any) => {
@@ -342,13 +343,15 @@ function MessageBoardContent() {
 
     if (authUser && currentFeed === 'following') {
       const ids = Array.from(followingIdsRef.current)
-      query = ids.length > 0 ? query.in('user_id', ids) : query.in('user_id', ['00000000-0000-0000-0000-000000000000']);
+      if (ids.length === 0) return null; // caller treats null as "no results"
+      query = query.in('user_id', ids);
     } 
     else if (authUser && currentFeed === 'friends') {
       const { data: followsMe } = await supabase.from('followers').select('follower_id').eq('following_id', authUser.id)
       const theirIds = new Set(followsMe?.map(f => f.follower_id) || [])
       const friendIds = Array.from(followingIdsRef.current).filter(id => theirIds.has(id))
-      query = friendIds.length > 0 ? query.in('user_id', friendIds) : query.in('user_id', ['00000000-0000-0000-0000-000000000000']);
+      if (friendIds.length === 0) return null;
+      query = query.in('user_id', friendIds);
     }
     return query
   }
@@ -386,6 +389,13 @@ function MessageBoardContent() {
       }
 
       const query = await buildFeedQuery(authUser)
+      if (!query) { 
+        setMessages([]); 
+        setHasMore(false); 
+        setIsLoading(false); 
+        return; 
+      }
+      
       const { data: posts } = await query
       if (posts) {
         setMessages(posts)
@@ -413,7 +423,6 @@ function MessageBoardContent() {
     return () => { supabase.removeChannel(channel) }
   }, [currentFeed, supabase])
 
-  // 👇 5. INFINITE SCROLL LOADER
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || !hasMore || messages.length === 0) return;
     setLoadingMore(true);
@@ -421,6 +430,13 @@ function MessageBoardContent() {
     try {
       const oldestDate = messages[messages.length - 1].created_at;
       const query = await buildFeedQuery(user, oldestDate);
+      
+      if (!query) {
+        setHasMore(false);
+        setLoadingMore(false);
+        return;
+      }
+
       const { data: olderPosts } = await query;
 
       if (olderPosts && olderPosts.length > 0) {
@@ -710,9 +726,10 @@ function MessageBoardContent() {
             ) : (
                 filteredMessages.map((msg) => {
                     const profile = profilesMap[msg.user_id]
-                    const username = profile?.username || 'Anonymous';
-                    const displayName = profile?.display_name || username;
-                    const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
+const isPostDeleted = msg.user_id === DELETED_USER_ID;
+const username = isPostDeleted ? 'deleted' : (profile?.username || 'Anonymous');
+const displayName = isPostDeleted ? 'Deleted User' : (profile?.display_name || username);
+const isLiked = user && msg.likes?.some((l: any) => l.user_id === user.id);
                     
                     return (
                         <div key={msg.id} style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e5e7eb', backgroundColor: 'white', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
@@ -720,18 +737,21 @@ function MessageBoardContent() {
                             <PostViewTracker postId={msg.id} userId={user?.id} supabase={supabase} />
 
                             <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div onClick={() => router.push(`/profile?u=${username}`)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                                        <img src={profile?.avatar_url || '/default-avatar.png'} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 'bold', color: '#111827', fontSize: '15px' }}>{displayName}</div>
-                                        <div style={{ fontSize: '12px', color: '#6b7280' }}>{new Date(msg.created_at).toLocaleDateString()}</div>
-                                    </div>
-                                </div>
+                                <div
+  onClick={() => !isPostDeleted && router.push(`/profile?u=${username}`)}
+  style={{ cursor: isPostDeleted ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+>
+    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f3f4f6', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+        <img src={isPostDeleted ? '/default-avatar.png' : (profile?.avatar_url || '/default-avatar.png')} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    </div>
+    <div>
+        <div style={{ fontWeight: 'bold', color: isPostDeleted ? '#9ca3af' : '#111827', fontSize: '15px', fontStyle: isPostDeleted ? 'italic' : 'normal' }}>{displayName}</div>
+        <div style={{ fontSize: '12px', color: '#6b7280' }}>{new Date(msg.created_at).toLocaleDateString()}</div>
+    </div>
+</div>
                                 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    {user && user.id !== msg.user_id && (
+                                    {user && user.id !== msg.user_id && !isPostDeleted && (
                                         <button onClick={() => handleFollow(msg.user_id)} style={{ padding: '6px 14px', minHeight: '44px', borderRadius: '20px', border: followingIds.has(msg.user_id) ? '1px solid #d1d5db' : 'none', backgroundColor: followingIds.has(msg.user_id) ? 'white' : '#111827', color: followingIds.has(msg.user_id) ? '#374151' : 'white', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
                                           {followingIds.has(msg.user_id) ? 'Following' : 'Follow'}
                                         </button>
@@ -776,15 +796,16 @@ function MessageBoardContent() {
                                     
                                     {(msg.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
                                         const commenter = profilesMap[c.user_id];
-                                        const isCommentLiked = user && c.comment_likes?.some((l: any) => l.user_id === user.id);
-                                        const replies = (msg.comments || []).filter((r: any) => r.parent_comment_id === c.id);
+const isCommentDeleted = c.user_id === DELETED_USER_ID;
+const isCommentLiked = user && c.comment_likes?.some((l: any) => l.user_id === user.id);
+const replies = (msg.comments || []).filter((r: any) => r.parent_comment_id === c.id);
 
-                                        return (
-                                            <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
-                                                <div>
-                                                    <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
-                                                        {commenter?.display_name || commenter?.username || 'User'}
-                                                    </span>
+return (
+    <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
+        <div>
+            <span style={{ fontWeight: 'bold', color: isCommentDeleted ? '#9ca3af' : '#111827', marginRight: '8px', fontStyle: isCommentDeleted ? 'italic' : 'normal' }}>
+                {isCommentDeleted ? 'Deleted User' : (commenter?.display_name || commenter?.username || 'User')}
+            </span>
                                                     {/* 🏷️ TAGGING: Render comment text with clickable @mentions */}
                                                     <span style={{ color: '#4b5563' }}>{renderTextWithMentions(c.content, profilesMap, router)}</span>
                                                     
@@ -801,13 +822,14 @@ function MessageBoardContent() {
                                                 {replies.length > 0 && (
                                                     <div style={{ marginLeft: '15px', marginTop: '10px', paddingLeft: '15px', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                                         {replies.map((reply: any) => {
-                                                            const replier = profilesMap[reply.user_id];
-                                                            const isReplyLiked = user && reply.comment_likes?.some((l: any) => l.user_id === user.id);
-                                                            return (
-                                                                <div key={reply.id}>
-                                                                    <span style={{ fontWeight: 'bold', color: '#111827', marginRight: '8px' }}>
-                                                                        {replier?.display_name || replier?.username || 'User'}
-                                                                    </span>
+    const replier = profilesMap[reply.user_id];
+    const isReplyDeleted = reply.user_id === DELETED_USER_ID;
+    const isReplyLiked = user && reply.comment_likes?.some((l: any) => l.user_id === user.id);
+    return (
+        <div key={reply.id}>
+            <span style={{ fontWeight: 'bold', color: isReplyDeleted ? '#9ca3af' : '#111827', marginRight: '8px', fontStyle: isReplyDeleted ? 'italic' : 'normal' }}>
+                {isReplyDeleted ? 'Deleted User' : (replier?.display_name || replier?.username || 'User')}
+            </span>
                                                                     {/* 🏷️ TAGGING: Render reply text with clickable @mentions */}
                                                                     <span style={{ color: '#4b5563' }}>{renderTextWithMentions(reply.content, profilesMap, router)}</span>
                                                                     <div style={{ marginTop: '2px', fontSize: '12px', fontWeight: 'bold', color: '#9ca3af' }}>
@@ -880,8 +902,11 @@ function MessageBoardContent() {
 
          </div>
 
-         <footer style={{ marginTop: '60px', padding: '20px', textAlign: 'center' }}>
-            <Link href="/privacy" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 'bold' }}>
+         <footer style={{ marginTop: '60px', padding: '20px', textAlign: 'center', display: 'flex', gap: '30px', justifyContent: 'center' }}>
+            <Link href="/about" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 'bold', fontSize: '15px' }}>
+               About Us
+            </Link>
+            <Link href="/privacy" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: 'bold', fontSize: '15px' }}>
                Privacy Policy
             </Link>
          </footer>
