@@ -11,10 +11,22 @@ export default function BannerAd() {
 
     const showAd = async () => {
       try {
-        // 👇 THIS IS THE MISSING MAGIC LINE 👇
-        await AdMob.initialize();
-        
         const isIOS = Capacitor.getPlatform() === 'ios';
+
+        // 👇 NEW: App Tracking Transparency (ATT) for iOS 👇
+        if (isIOS) {
+          // Check if we have asked the user for permission yet
+          const trackingInfo = await AdMob.trackingAuthorizationStatus();
+          
+          if (trackingInfo.status === 'notDetermined') {
+            // This triggers the native Apple popup asking for permission!
+            await AdMob.requestTrackingAuthorization();
+          }
+        }
+        // 👆 END ATT CODE 👆
+
+        // Initialize AdMob AFTER the prompt is handled
+        await AdMob.initialize();
         
         // Dynamically switch between the IDs
         const adId = isIOS 
