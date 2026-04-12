@@ -11,9 +11,12 @@ export default function BannerAd() {
 
     const showAd = async () => {
       try {
+        // 👇 THIS IS THE MISSING MAGIC LINE 👇
+        await AdMob.initialize();
+        
         const isIOS = Capacitor.getPlatform() === 'ios';
         
-        // Dynamically switch between the IDs you generated!
+        // Dynamically switch between the IDs
         const adId = isIOS 
           ? 'ca-app-pub-3035141160822131/1590519117' // 🍎 iOS Banner ID
           : 'ca-app-pub-3035141160822131/2503933506'; // 🤖 Android Banner ID
