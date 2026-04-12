@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.vimciety.app',
   appName: 'VIMciety',
-  webDir: 'out',
+  webDir: 'www',
 
   // ✅ Proper CORS and Network Handling for Android
   server: {

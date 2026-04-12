@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node detect-build.js",
+    "build": "node detect-build.js && rm -rf www && mv out www",
     "build:web": "next build",
     "build:mobile": "cross-env MOBILE_BUILD=true node build-android.js",
     "start": "next start",
