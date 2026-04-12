@@ -21,8 +21,11 @@ const config: CapacitorConfig = {
       providers: {
         facebook: false
       }
-    }
-  }
-};
-
-export default config;
+    },
+        // 👇 UPDATED: Google AdMob Initialization for Both Platforms
+        AdMob: {
+          androidAppId: 'ca-app-pub-3035141160822131~5703355644', 
+          iosAppId: 'ca-app-pub-3035141160822131~[PASTE_YOUR_IOS_APP_ID_HERE]',
+        }
+      }
+    };

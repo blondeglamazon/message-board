@@ -12,6 +12,7 @@ import { Capacitor, PluginListenerHandle } from '@capacitor/core'
 import { renderTextWithMentions, extractAndSaveTags, extractAndSaveCommentTags } from '@/app/utils/tagging' // 🏷️ TAGGING
 // @ts-ignore
 import Microlink from '@microlink/react'
+import BannerAd from '@/components/BannerAd'; // Make sure the path matches
 
 const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
@@ -678,6 +679,8 @@ function MessageBoardContent() {
                 {currentFeed === 'global' ? 'EXPLORE' : `${currentFeed.toUpperCase()} FEED`}
             </h2>
          </div>
+
+         <BannerAd />
 
          {/* 🏷️ TAGGING: Pass profilesMap to CreatePostBox */}
          {user && (
