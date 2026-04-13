@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "3F6HFR6XWL.com.vimciety.app",
+        "paths": [
+          "/settings",
+          "/settings/*",
+          "/storefront",
+          "/storefront/*"
+        ]
+      }
+    ]
+  }
+}

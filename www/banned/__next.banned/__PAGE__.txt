@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/d2be314c3ece3fbe.js"],"OutletBoundary"]
+3:"$Sreact.suspense"
+0:{"buildId":"i0H31N57xvy49-0rrU9Sp","rsc":["$","$1","c",{"children":[["$","div",null,{"style":{"height":"100vh","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","fontFamily":"sans-serif","textAlign":"center"},"children":[["$","h1",null,{"style":{"fontSize":"3rem","color":"#ff4d4d"},"children":"🚫 Access Denied"}],["$","p",null,{"style":{"fontSize":"1.2rem","color":"#666"},"children":"Your account has been restricted due to a violation of our community guidelines."}],["$","a",null,{"href":"/","style":{"marginTop":"20px","color":"#0070f3","textDecoration":"none"},"children":"Return to Home"}]]}],null,["$","$L2",null,{"children":["$","$3",null,{"name":"Next.MetadataOutlet","children":"$@4"}]}]]}],"loading":null,"isPartial":false}
+4:null

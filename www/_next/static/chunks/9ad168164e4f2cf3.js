@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,32571,e=>{"use strict";var s=e.i(82568);class t extends s.WebPlugin{async getStatus(){return{status:"authorized"}}async requestPermission(){return{status:"authorized"}}async getPluginVersion(){return{version:"web"}}}e.s(["AppTrackingTransparencyWeb",()=>t])}]);

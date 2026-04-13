@@ -41,7 +41,7 @@ export default function AppOpenAdManager() {
 
         const options: AdOptions = {
           adId,
-          isTesting: true, // flip to false for production
+          isTesting: false, // flip to false for production
         };
 
         await AdMob.prepareInterstitial(options);

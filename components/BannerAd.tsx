@@ -43,7 +43,7 @@ export default function BannerAd() {
           adSize: BannerAdSize.ADAPTIVE_BANNER,
           position: BannerAdPosition.BOTTOM_CENTER,
           margin: 0,
-          isTesting: true, // flip to false for production
+          isTesting: false, // flip to false for production
         };
 
         await AdMob.showBanner(options);
