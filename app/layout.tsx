@@ -3,10 +3,10 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import Sidebar from '@/components/Sidebar'
 import PushRegistry from '@/components/PushRegistry'
-import EulaModal from '@/components/EulaModal'
+import PermissionOrchestrator from '@/components/PermissionOrchestrator'
 import RevenueCatSetup from '@/components/RevenueCatSetup' 
 import StripeDeepLinkHandler from '@/components/StripeDeepLinkHandler'
-import PushNotificationListener from '@/components/PushNotificationListener' // 👈 Restored the push listener
+import PushNotificationListener from '@/components/PushNotificationListener'
 import Script from 'next/script'
 import AdSenseWrapper from '@/components/AdSenseWrapper';
 
@@ -65,7 +65,7 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
 
-        {/* 👇 NEW: Google Analytics Script */}
+        {/* Google Analytics Script */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8FL5M9VGNF"
           strategy="afterInteractive"
@@ -80,7 +80,6 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <AdSenseWrapper />
       <body className={inter.className} style={{ 
         margin: 0, 
         backgroundColor: '#ffffff',
@@ -90,11 +89,19 @@ export default function RootLayout({
         paddingRight: 'env(safe-area-inset-right)'
       }}>
         
-        {/* Background Listeners & Modals */}
-        <PushNotificationListener /> {/* 👈 Handles tap-to-open logic for push notifications */}
+        {/* AdSense (web only — silently no-ops on native) */}
+        <AdSenseWrapper />
+
+        {/* Permission orchestration — MUST mount first.
+            Handles EULA → ATT → UMP/AdMob in strict sequence.
+            All other native managers below internally gate on `vimciety_eula_accepted`. */}
+        <PermissionOrchestrator />
+
+        {/* Background listeners & native managers.
+            These all check localStorage.vimciety_eula_accepted before doing anything. */}
+        <PushNotificationListener />
         <RevenueCatSetup />
         <StripeDeepLinkHandler /> 
-        <EulaModal />
         <PushRegistry />
         
         <Sidebar />
