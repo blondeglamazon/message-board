@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* In your globals.css */
+
+.main-content {
+  margin-left: 0;
+  /* Matches the 0.3s transition speed of your sidebar for a smooth effect */
+  transition: margin-left 0.3s ease; 
+}
+
+/* On screens 1200px and wider (Desktop/Mac), push the content right by 75px */
+@media (min-width: 1200px) {
+  .main-content {
+    margin-left: 75px;
+  }
+}

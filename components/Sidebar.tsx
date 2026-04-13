@@ -20,7 +20,9 @@ export default function Sidebar() {
   // 1. Handle Screen Resize (Responsive Logic)
   useEffect(() => {
     const checkScreenSize = () => {
-      const mobile = window.innerWidth < 768
+      // Increased breakpoint to 1200 to cover iPad Air 11" in both portrait (834px) 
+      // and landscape (1194px) orientations.
+      const mobile = window.innerWidth < 1200
       setIsMobile(mobile)
       if (!mobile) setIsOpen(false) 
     }
@@ -31,7 +33,7 @@ export default function Sidebar() {
     return () => window.removeEventListener('resize', checkScreenSize)
   }, [])
 
-  // 2. Auto-close sidebar on mobile when navigating
+  // 2. Auto-close sidebar on mobile/tablet when navigating
   useEffect(() => {
     if (isMobile) {
       setIsOpen(false)
@@ -49,7 +51,7 @@ export default function Sidebar() {
       setUser(authUser)
 
       if (authUser) {
-        // Get Profile - ADDED is_admin and role here so we don't have to fetch twice!
+        // Get Profile
         const { data: profileData } = await supabase
           .from('profiles')
           .select('username, avatar_url, calendly_url, google_calendar_url, store_url, is_admin, role')
@@ -61,7 +63,7 @@ export default function Sidebar() {
         // Get Unread Notifications Count
         const { count } = await supabase
           .from('notifications')
-          .select('*', { count: 'exact', head: true })
+          .select('*', { count: 'estimated', head: true })
           .eq('user_id', authUser.id)
           .eq('is_read', false)
         
