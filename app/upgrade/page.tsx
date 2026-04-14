@@ -184,6 +184,12 @@ export default function UpgradePage() {
     if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
     setLoadingTier(tierId)
 
+   // ============================================================
+    // 🌐 WEB — Stripe Checkout
+    // ============================================================
+    if (!tierId) return showToast("Checkout is currently unavailable.", 'error');
+    setLoadingTier(tierId)
+
     try {
       const apiUrl = '/api/checkout';
       const response = await fetch(apiUrl, {
@@ -192,16 +198,18 @@ export default function UpgradePage() {
         body: JSON.stringify({ priceId: tierId, userId: currentUser.id, tierName: tierName })
       });
 
-      const { url } = await response.json();
-      if (url) {
-        window.location.href = url;
+      const data = await response.json();
+
+      if (response.ok && data.url) {
+        window.location.href = data.url;
       } else {
-        showToast("Error getting checkout link.", 'error')
-        setLoadingTier(null)
+        // 🚨 This will now display the exact error Stripe is throwing!
+        showToast(data.error || "Error getting checkout link.", 'error');
+        setLoadingTier(null);
       }
-    } catch (error) {
-      showToast("Unable to start checkout. Please try again.", 'error')
-      setLoadingTier(null)
+    } catch (error: any) {
+      showToast(error.message || "Unable to start checkout. Please try again.", 'error');
+      setLoadingTier(null);
     }
   }
 

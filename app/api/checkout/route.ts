@@ -3,52 +3,62 @@ import Stripe from 'stripe';
 
 export async function POST(request: Request) {
   try {
-    // 🛡️ FIX: Initialize Stripe securely INSIDE the handler!
-    // The fallback 'dummy_key' stops the Stripe SDK from panicking during Next.js static analysis.
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'dummy_key_for_build', {
-      apiVersion: '2026-02-25.clover' as any, // Cast as any just in case TypeScript complains about the custom version tag
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error('[api/checkout] STRIPE_SECRET_KEY not set');
+      return NextResponse.json({ error: 'Server misconfigured: missing Stripe key' }, { status: 500 });
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2026-02-25.clover' as any,
     });
 
     const body = await request.json();
-    const { priceId, userId, tierName } = body; 
+    const { priceId, userId, tierName } = body;
 
-    // Safety check: Make sure we know what they are buying and who they are!
-    if (!priceId || !userId) {
-      return NextResponse.json({ error: 'Missing requirements' }, { status: 400 });
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-
-    // 🛒 Create the secure Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription', // Because these are monthly recurring charges!
-      
-      // Where to send the user when they successfully pay
-      success_url: `${baseUrl}/?upgrade=success`,
-      
-      // Where to send them if they back out
-      cancel_url: `${baseUrl}/upgrade?canceled=true`,
-      
-      // 🔗 Attach the User ID so Stripe knows who is checking out
-      client_reference_id: userId, 
-      metadata: {
-        userId: userId,
-        tierName: tierName // Tells the webhook if they get the Verified badge or just VIM+
-      }
+    // Log what we received (visible in Vercel logs for debugging)
+    console.log('[api/checkout] received:', { 
+      priceId: priceId || '<EMPTY>', 
+      userId, 
+      tierName,
+      keyMode: process.env.STRIPE_SECRET_KEY.startsWith('sk_live') ? 'live' : 'test',
     });
 
-    // Send the secure checkout URL back to the frontend so it can open the window
+    if (!priceId || !userId) {
+      console.error('[api/checkout] missing requirements:', { hasPriceId: !!priceId, hasUserId: !!userId });
+      return NextResponse.json({ error: 'Missing priceId or userId' }, { status: 400 });
+    }
+
+    if (!priceId.startsWith('price_')) {
+      console.error('[api/checkout] invalid priceId format:', priceId);
+      return NextResponse.json({ error: `Invalid price ID format: "${priceId}". Check NEXT_PUBLIC_STRIPE_PRICE_* env vars.` }, { status: 400 });
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || 'https://www.vimciety.com';
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${baseUrl}/?upgrade=success`,
+      cancel_url: `${baseUrl}/upgrade?canceled=true`,
+      client_reference_id: userId,
+      metadata: { userId, tierName },
+    });
+
     return NextResponse.json({ url: session.url });
-    
+
   } catch (error: any) {
-    console.error('Stripe Checkout Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Log the full error to Vercel with structured context
+    console.error('[api/checkout] Stripe error:', {
+      type: error?.type,
+      code: error?.code,
+      message: error?.message,
+      statusCode: error?.statusCode,
+      raw: error?.raw?.message,
+    });
+    // Return the Stripe error message to the client so it actually shows up in the toast
+    return NextResponse.json({ 
+      error: error?.raw?.message || error?.message || 'Checkout session creation failed' 
+    }, { status: 500 });
   }
 }
