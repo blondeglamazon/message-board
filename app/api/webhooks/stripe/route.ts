@@ -39,10 +39,11 @@ export async function POST(req: Request) {
         const session = event.data.object as Stripe.Checkout.Session;
         const metadata = session.metadata || {};
 
-        // Subscription upgrade path (from /upgrade page)
+        // 1. Subscription upgrade path (from /upgrade page)
         if (metadata.userId && metadata.tierName) {
           console.log(`[webhook] Upgrading user ${metadata.userId} to ${metadata.tierName}`);
-          const { error } = await supabaseAdmin
+
+          const { error: upgradeError } = await supabaseAdmin
             .from('profiles')
             .update({
               is_premium: true,
@@ -50,9 +51,31 @@ export async function POST(req: Request) {
             })
             .eq('id', metadata.userId);
 
-          if (error) console.error('[webhook] profile upgrade failed:', error);
+          if (upgradeError) {
+            console.error('[webhook] profile upgrade failed:', upgradeError);
+          }
+
+          // STOREFRONT AFFILIATE COMMISSION: 25% of first-month subscription.
+          // The RPC enforces all rules (referrer exists + premium, 90-day window,
+          // one-shot per referred user) and credits creator_earnings if eligible.
+          if (session.amount_total && session.amount_total > 0) {
+            const { data: commissionId, error: commissionError } = await supabaseAdmin
+              .rpc('record_storefront_commission', {
+                p_referred_user_id: metadata.userId,
+                p_subscription_cents: session.amount_total,
+              });
+
+            if (commissionError) {
+              console.error('[webhook] record_storefront_commission failed:', commissionError);
+              // Don't fail the webhook — the upgrade itself succeeded.
+            } else if (commissionId) {
+              console.log(`[webhook] 🎉 25% commission recorded (id: ${commissionId})`);
+            } else {
+              console.log(`[webhook] no commission awarded (no eligible referrer / outside 90d / not premium / duplicate)`);
+            }
+          }
         }
-        // Product sale path (from BuyButton)
+        // 2. Product sale path (from BuyButton)
         else if (metadata.sellerId && metadata.itemName && session.amount_total) {
           console.log(`[webhook] Recording sale for seller ${metadata.sellerId}`);
           const { error } = await supabaseAdmin.from('sales').insert({
@@ -74,7 +97,7 @@ export async function POST(req: Request) {
           console.log(`[webhook] Seller account ${account.id} is ready`);
           const { error } = await supabaseAdmin
             .from('profiles')
-            .update({ is_seller_active: true })
+            .update({ is_merchant: true })
             .eq('stripe_account_id', account.id);
 
           if (error) console.error('[webhook] seller activation failed:', error);
