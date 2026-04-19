@@ -57,6 +57,7 @@ if (typeof window !== 'undefined' || typeof global !== 'undefined') {
 // ============================================================================
 const STYLES = {
   card: { backgroundColor: '#1f2937', borderRadius: '12px', padding: '20px', marginBottom: '30px', border: '1px solid #374151', color: 'white' },
+  cardNoPad: { backgroundColor: '#1f2937', borderRadius: '12px', marginBottom: '30px', border: '1px solid #374151', color: 'white', overflow: 'hidden' as const },
   input: { width: '100%', padding: '12px', marginBottom: '10px', borderRadius: '8px', border: 'none', color: 'white', backgroundColor: '#374151', minHeight: '44px', boxSizing: 'border-box' as const },
   btnPrimary: { backgroundColor: '#6366f1', color: 'white', fontWeight: 'bold' as const, border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', minHeight: '44px', display: 'inline-flex' as const, alignItems: 'center' as const, justifyContent: 'center' as const },
   btnSecondary: { backgroundColor: '#4b5563', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', minHeight: '44px', fontWeight: 'bold' as const },
@@ -66,7 +67,7 @@ const STYLES = {
 
 const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
 const POSTS_PER_PAGE = 20;
-const POST_COLLAPSE_CHARS = 280;
+const POST_COLLAPSE_CHARS = 150;
 const COMMENT_COLLAPSE_CHARS = 150;
 const MAX_MEDIA_ITEMS = 4;
 
@@ -109,17 +110,17 @@ function MediaCarousel({ media, currentUser, supabase, postUserId, postId }: {
 
   const renderItem = (item: { url: string; media_type: string }) => {
     if (item.media_type === 'video') {
-      return <video ref={videoRef} src={`${item.url}#t=0.001`} controls playsInline preload="metadata" onTimeUpdate={handleVideoTimeUpdate} style={{ width: '100%', display: 'block', maxHeight: '500px' }} />;
+      return <video ref={videoRef} src={`${item.url}#t=0.001`} controls playsInline preload="metadata" onTimeUpdate={handleVideoTimeUpdate} style={{ width: '100%', display: 'block' }} />;
     }
     if (item.media_type === 'audio') {
       return <div style={{ padding: '20px', backgroundColor: '#f3f4f6' }}><audio controls src={item.url} preload="metadata" style={{ width: '100%' }} /></div>;
     }
-    return <img src={item.url} alt="Post media" loading="lazy" style={{ width: '100%', display: 'block', objectFit: 'contain', maxHeight: '500px' }} />;
+    return <img src={item.url} alt="Post media" loading="lazy" style={{ width: '100%', display: 'block', objectFit: 'contain' }} />;
   };
 
   if (media.length === 1) {
     return (
-      <div style={{ marginTop: '10px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', maxWidth: '100%' }}>
+      <div style={{ maxWidth: '100%', backgroundColor: '#000' }}>
         {renderItem(media[0])}
       </div>
     );
@@ -136,7 +137,7 @@ function MediaCarousel({ media, currentUser, supabase, postUserId, postId }: {
   };
 
   return (
-    <div style={{ marginTop: '10px', position: 'relative', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000' }}>
+    <div style={{ position: 'relative', backgroundColor: '#000' }}>
       {renderItem(media[currentIndex])}
       <button onClick={goToPrev} aria-label="Previous" style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '20px', zIndex: 10 }}>‹</button>
       <button onClick={goToNext} aria-label="Next" style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '20px', zIndex: 10 }}>›</button>
@@ -1150,18 +1151,21 @@ function ProfileContent() {
                 </div>
               )}
 
+              {/* ============================================================ */}
+              {/* POST FEED — full-bleed media, text underneath               */}
+              {/* ============================================================ */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 {posts.map(post => {
                   const isLiked = currentUser && post.likes?.some((l: any) => l.user_id === currentUser.id);
                   const media = getMediaForPost(post);
                   return (
-                    <div key={post.id} style={STYLES.card}>
+                    <div key={post.id} style={STYLES.cardNoPad}>
 
                       <PostViewTracker postId={post.id} userId={currentUser?.id} supabase={supabase} />
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '12px', color: '#9ca3af' }}>
+                      {/* DATE + ACTIONS — padded */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px 8px 20px', fontSize: '12px', color: '#9ca3af' }}>
                         <span>{new Date(post.created_at).toLocaleString()}</span>
-
                         <div style={{ display: 'flex', gap: '15px' }}>
                           {isMyProfile ? (
                             <button onClick={() => handleDelete(post.id, true)} disabled={actionLoading[`delete-${post.id}`]} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', minHeight: '44px' }}>Delete</button>
@@ -1176,8 +1180,7 @@ function ProfileContent() {
                         </div>
                       </div>
 
-                      {renderPostContent(post)}
-
+                      {/* MEDIA — full bleed, no side padding, rendered ABOVE text */}
                       {media.length > 0 && (
                         <MediaCarousel
                           media={media}
@@ -1188,7 +1191,13 @@ function ProfileContent() {
                         />
                       )}
 
-                      <div style={{ marginTop: '15px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '15px' }}>
+                      {/* TEXT CONTENT — padded, below media */}
+                      <div style={{ padding: '12px 20px 4px 20px' }}>
+                        {renderPostContent(post)}
+                      </div>
+
+                      {/* LIKE / COMMENT / VIEW / SHARE — padded */}
+                      <div style={{ padding: '0 20px 16px 20px', marginTop: '8px', display: 'flex', gap: '15px', borderTop: '1px solid #374151', paddingTop: '12px' }}>
                         <button aria-label="Like Post" onClick={() => handleLike(post.id, !!isLiked)} style={{ ...STYLES.iconBtn, color: isLiked ? '#ef4444' : '#9ca3af' }}><span style={{ fontSize: '20px' }}>{isLiked ? '❤️' : '🤍'}</span> <span>{post.likes?.length || 0}</span></button>
                         <button aria-label="Comment on Post" onClick={() => toggleComments(post.id)} style={STYLES.iconBtn}><span style={{ fontSize: '20px' }}>💬</span> <span>{post.comments?.length || 0}</span></button>
 
@@ -1211,8 +1220,9 @@ function ProfileContent() {
                         <button aria-label="Share Post" onClick={() => handleShare(post.id)} style={{ ...STYLES.iconBtn, marginLeft: 'auto' }}><span style={{ fontSize: '20px' }}>↗️</span> <span>Share</span></button>
                       </div>
 
+                      {/* COMMENTS — padded */}
                       {openComments.has(post.id) && (
-                        <div style={{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #374151' }}>
+                        <div style={{ padding: '0 20px 20px 20px', borderTop: '1px solid #374151' }}>
 
                           {(post.comments || []).filter((c: any) => !c.parent_comment_id).map((c: any) => {
                             const commenter = profilesMap[c.user_id];
@@ -1221,7 +1231,7 @@ function ProfileContent() {
                             const replies = (post.comments || []).filter((r: any) => r.parent_comment_id === c.id);
 
                             return (
-                              <div key={c.id} style={{ marginBottom: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
+                              <div key={c.id} style={{ marginBottom: '16px', marginTop: '16px', fontSize: '14px', wordBreak: 'break-word' }}>
                                 <div>
                                   <span style={{ fontWeight: 'bold', color: isCommentDeleted ? '#6b7280' : '#d1d5db', marginRight: '4px', fontStyle: isCommentDeleted ? 'italic' : 'normal' }}>
                                     {isCommentDeleted ? 'Deleted User' : (commenter?.display_name || commenter?.username || 'User')}

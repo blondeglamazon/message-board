@@ -18,7 +18,7 @@ const MAX_IMAGE_SIZE_MB = 20;
 const MAX_VIDEO_AUDIO_SIZE_MB = 500;
 const PAGE_SIZE = 20;
 const DELETED_USER_ID = '00000000-0000-0000-0000-000000000000';
-const POST_COLLAPSE_CHARS = 280;
+const POST_COLLAPSE_CHARS = 150; // Dropped to 150 chars
 const COMMENT_COLLAPSE_CHARS = 150;
 const MAX_MEDIA_ITEMS = 4;
 
@@ -84,7 +84,7 @@ export const usePushNotifications = (userId: string | null, supabase: any) => {
 };
 
 // ============================================================================
-// MEDIA CAROUSEL
+// MEDIA CAROUSEL (Edge-to-Edge Upgrade)
 // ============================================================================
 function MediaCarousel({ media }: { media: Array<{ url: string; media_type: string }> }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -93,17 +93,17 @@ function MediaCarousel({ media }: { media: Array<{ url: string; media_type: stri
 
   const renderItem = (item: { url: string; media_type: string }) => {
     if (item.media_type === 'video') {
-      return <video src={`${item.url}#t=0.001`} controls playsInline preload="metadata" style={{ width: '100%', display: 'block', maxHeight: '500px' }} />;
+      return <video src={`${item.url}#t=0.001`} controls playsInline preload="metadata" style={{ width: '100%', display: 'block', maxHeight: '80vh', objectFit: 'contain' }} />;
     }
     if (item.media_type === 'audio') {
       return <div style={{ padding: '20px', backgroundColor: '#f3f4f6' }}><audio controls src={item.url} preload="metadata" style={{ width: '100%' }} /></div>;
     }
-    return <img src={item.url} alt="Post media" loading="lazy" style={{ width: '100%', display: 'block', objectFit: 'contain', maxHeight: '500px' }} />;
+    return <img src={item.url} alt="Post media" loading="lazy" style={{ width: '100%', display: 'block', objectFit: 'cover', maxHeight: '80vh' }} />;
   };
 
   if (media.length === 1) {
     return (
-      <div style={{ marginTop: '15px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
+      <div style={{ width: '100%', overflow: 'hidden', backgroundColor: '#000' }}>
         {renderItem(media[0])}
       </div>
     );
@@ -120,7 +120,7 @@ function MediaCarousel({ media }: { media: Array<{ url: string; media_type: stri
   };
 
   return (
-    <div style={{ marginTop: '15px', position: 'relative', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000' }}>
+    <div style={{ position: 'relative', width: '100%', overflow: 'hidden', backgroundColor: '#000' }}>
       {renderItem(media[currentIndex])}
       <button onClick={goToPrev} aria-label="Previous" style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '20px', zIndex: 10 }}>‹</button>
       <button onClick={goToNext} aria-label="Next" style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '20px', zIndex: 10 }}>›</button>
@@ -185,7 +185,7 @@ function PostViewTracker({ postId, userId, supabase }: { postId: string, userId:
 }
 
 // ============================================================================
-// CREATE POST BOX (multi-media, no char limit)
+// CREATE POST BOX (Parallel Uploads Upgrade)
 // ============================================================================
 function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSuccess, profilesMap }: any) {
   const [newMessage, setNewMessage] = useState('');
@@ -276,17 +276,18 @@ function CreatePostBox({ user, supabase, showToast, isCreate, router, onPostSucc
       }]).select().single();
       if (error) throw error;
 
-      const mediaRows = [];
-      for (let i = 0; i < mediaFiles.length; i++) {
-        const file = mediaFiles[i];
+      // 🚀 Performance Upgrade: Upload all files at the same time (Parallel Uploads)
+      const uploadPromises = mediaFiles.map(async (file, i) => {
         const type = mediaPreviews[i].type;
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.id}-${Date.now()}-${i}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('posts').upload(fileName, file);
         if (uploadError) throw uploadError;
         const { data: urlData } = supabase.storage.from('posts').getPublicUrl(fileName);
-        mediaRows.push({ post_id: newPost.id, url: urlData.publicUrl, media_type: type, display_order: i });
-      }
+        return { post_id: newPost.id, url: urlData.publicUrl, media_type: type, display_order: i };
+      });
+
+      const mediaRows = await Promise.all(uploadPromises);
 
       if (mediaRows.length > 0) {
         const { error: mediaError } = await supabase.from('post_media').insert(mediaRows);
@@ -440,6 +441,9 @@ function MessageBoardContent() {
       .limit(PAGE_SIZE)
 
     if (oldestDate) query = query.lt('created_at', oldestDate);
+    
+    // Note: If users can block thousands of people, this .not('in') query will become too large. 
+    // In the future, move block-filtering to a Supabase Postgres Function (RPC).
     if (blockedIdsRef.current.length > 0) query = query.not('user_id', 'in', `(${blockedIdsRef.current.join(',')})`)
 
     if (authUser && currentFeed === 'following') {
@@ -694,6 +698,9 @@ function MessageBoardContent() {
     return <div style={{ width: '100%', overflow: 'hidden', marginTop: '10px', borderRadius: '12px' }} dangerouslySetInnerHTML={{ __html: clean }} />
   }
 
+  // ============================================================================
+  // POST CONTENT RENDER (Edge-to-Edge Upgrade)
+  // ============================================================================
   const renderContent = (msg: any) => {
     if (msg.post_type === 'embed' || (typeof msg.content === 'string' && msg.content.trim().startsWith('<'))) {
       return <div style={{ marginTop: '10px', overflow: 'hidden', borderRadius: '8px' }}>{renderSafeHTML(msg.content)}</div>;
@@ -716,24 +723,34 @@ function MessageBoardContent() {
         : [];
 
     return (
-      <div>
-        <div style={{ lineHeight: '1.6', color: '#111827', fontSize: '16px' }}>
-          <div style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
-            <TruncatedText
-              text={msg.content || ''}
-              maxChars={POST_COLLAPSE_CHARS}
-              renderText={(t) => <span>{renderTextWithMentions(t, profilesMap, router)}</span>}
-            />
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        
+        {/* 1. MEDIA AT THE TOP (Bleeding edge-to-edge) */}
+        {media.length > 0 && (
+          <div style={{ margin: '15px -20px 5px -20px', width: 'calc(100% + 40px)' }}>
+            <MediaCarousel media={media} />
           </div>
+        )}
 
-          {firstUrl && (
-            <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
-              <Microlink url={firstUrl} size="large" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#ffffff', color: '#111827' }} />
+        {/* 2. TEXT UNDERNEATH (Truncated to 150 chars) */}
+        {msg.content && (
+          <div style={{ lineHeight: '1.6', color: '#111827', fontSize: '15px', marginTop: '10px' }}>
+            <div style={{ whiteSpace: 'pre-wrap', margin: 0, wordBreak: 'break-word', maxWidth: '100%' }}>
+              <TruncatedText
+                text={msg.content || ''}
+                maxChars={POST_COLLAPSE_CHARS}
+                renderText={(t) => <span>{renderTextWithMentions(t, profilesMap, router)}</span>}
+              />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {media.length > 0 && <MediaCarousel media={media} />}
+        {/* 3. URL PREVIEW */}
+        {firstUrl && (
+          <div style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', marginTop: '15px' }}>
+            <Microlink url={firstUrl} size="large" style={{ width: '100%', minWidth: 0, borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#ffffff', color: '#111827' }} />
+          </div>
+        )}
       </div>
     );
   }
